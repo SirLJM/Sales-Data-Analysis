@@ -4,3 +4,6 @@ include
 Lib
 output
 Scripts
+__pycache__
+*.pyc
+

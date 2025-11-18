@@ -12,14 +12,14 @@ class SalesAnalyzer:
 
         monthly_sales = self.data.groupby(['sku', 'year_month'], as_index=False)['ilosc'].sum()
 
-        sku_summary = monthly_sales('sku', as_index=False).agg({
+        sku_summary = monthly_sales.groupby('sku', as_index=False).agg({
             'year_month': 'nunique',
             'ilosc': ['sum', 'mean', 'std']
         })
 
-        sku_summary.columns = ['sku', 'months_count', 'total_quantity', 'avg_sales', 'std_dev']
+        sku_summary.columns = ['SKU', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD']
 
-        
+        sku_summary['CV'] = sku_summary['SD'] / sku_summary['AVERAGE SALES']
+        sku_summary['CV'] = sku_summary['CV'].fillna(0)
 
-        sku_summary.columns = ['sku', 'months_count', 'total_quantity']
-        return sku_summary.sort_values('total_quantity', ascending=False)
+        return sku_summary.sort_values('SKU', ascending=False)
