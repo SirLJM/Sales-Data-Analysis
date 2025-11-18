@@ -31,7 +31,7 @@ class SalesAnalyzer:
         return sku_summary.sort_values('SKU', ascending=False)
 
     @staticmethod
-    def classify_sku_type(sku_summary, cv_basic, cv_seasonal, months_new):
+    def classify_sku_type(sku_summary, cv_basic, cv_seasonal):
         df = sku_summary.copy()
 
         one_year_ago = datetime.today() - timedelta(days=365)
@@ -68,11 +68,11 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_safety_stock_and_rop(sku_summary, seasonal_data, lead_time, z_basic,
-                                       z_regular, z_seasonal_in, z_seasonal_out, z_new):
+                                       z_seasonal_in, z_seasonal_out, z_new):
         df = sku_summary.copy()
         z_score_map = {
             'basic': z_basic,
-            'regular': z_regular,
+            'regular': z_basic,
             'seasonal': z_seasonal_in, #default for seasonal, later overwritten
             'new': z_new
         }
@@ -86,7 +86,7 @@ class SalesAnalyzer:
         df['ROP'] = df['AVERAGE SALES'] * lead_time + df['SS']
 
         seasonal_mask = df['TYPE'] == 'seasonal'
-        if seasonal_mask.any():
+        if isinstance(seasonal_mask, pd.Series) and seasonal_mask.any():
             seasonal_skus = df[seasonal_mask]['SKU'].tolist()
             seasonal_current = seasonal_data[
                 (seasonal_data['SKU'].isin(seasonal_skus)) &
@@ -117,10 +117,13 @@ class SalesAnalyzer:
                 np.nan
             )
 
-            df.loc[seasonal_mask & df['is_in_season'].fillna(False), 'SS'] = df['SS_IN']
-            df.loc[seasonal_mask & df['is_in_season'].fillna(False), 'ROP'] = df['ROP_IN']
-            df.loc[seasonal_mask & ~df['is_in_season'].fillna(True), 'SS'] = df['SS_OUT']
-            df.loc[seasonal_mask & ~df['is_in_season'].fillna(True), 'ROP'] = df['ROP_OUT']
+            in_season_mask = (df['is_in_season'] == True)
+            out_season_mask = (df['is_in_season'] != True)
+
+            df.loc[seasonal_mask & in_season_mask, 'SS'] = df['SS_IN']
+            df.loc[seasonal_mask & in_season_mask, 'ROP'] = df['ROP_IN']
+            df.loc[seasonal_mask & out_season_mask, 'SS'] = df['SS_OUT']
+            df.loc[seasonal_mask & out_season_mask, 'ROP'] = df['ROP_OUT']
 
             df = df.drop(columns=['is_in_season'], errors='ignore')
 
