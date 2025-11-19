@@ -4,7 +4,6 @@ from pathlib import Path
 
 
 class DataValidator:
-
     SALES_COLUMNS = {'order_id', 'data', 'sku', 'ilosc', 'cena', 'razem'}
     STOCK_COLUMNS = {'sku', 'nazwa', 'cena_netto', 'cena_brutto', 'stock', 'available_stock', 'aktywny'}
 

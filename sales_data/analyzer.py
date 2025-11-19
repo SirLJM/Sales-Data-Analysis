@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
+
 class SalesAnalyzer:
     def __init__(self, data):
         self.data = data.copy()
@@ -68,12 +69,12 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_safety_stock_and_rop(sku_summary, seasonal_data, lead_time, z_basic,
-                                       z_seasonal_in, z_seasonal_out, z_new):
+                                       z_regular, z_seasonal_in, z_seasonal_out, z_new):
         df = sku_summary.copy()
         z_score_map = {
             'basic': z_basic,
-            'regular': z_basic,
-            'seasonal': z_seasonal_in, #default for seasonal, later overwritten
+            'regular': z_regular,
+            'seasonal': z_seasonal_in,  # default for seasonal, later overwritten
             'new': z_new
         }
         df['z_score'] = df['TYPE'].map(z_score_map)
@@ -91,7 +92,7 @@ class SalesAnalyzer:
             seasonal_current = seasonal_data[
                 (seasonal_data['SKU'].isin(seasonal_skus)) &
                 (seasonal_data['month'] == current_month)
-            ][['SKU', 'is_in_season']]
+                ][['SKU', 'is_in_season']]
 
             df = df.merge(seasonal_current, on='SKU', how='left')
 
@@ -136,6 +137,5 @@ class SalesAnalyzer:
             df['SS_OUT'] = df['SS_OUT'].round(2)
             df['ROP_IN'] = df['ROP_IN'].round(2)
             df['ROP_OUT'] = df['ROP_OUT'].round(2)
-
 
         return df[['SKU', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD', 'CV', 'TYPE', 'SS', 'ROP']]

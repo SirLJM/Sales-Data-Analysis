@@ -131,8 +131,7 @@ class SalesDataLoader:
 
         return df
 
-
-    def load_stock_file(self,file_path: Path) -> pd.DataFrame:
+    def load_stock_file(self, file_path: Path) -> pd.DataFrame:
         if file_path.suffix == '.csv':
             df = pd.read_csv(file_path)
         elif file_path.suffix == '.xlsx':

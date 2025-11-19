@@ -1,4 +1,5 @@
 import streamlit as st
+import pandas as pd
 
 from sales_data import SalesDataLoader, SalesAnalyzer
 
@@ -165,12 +166,14 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Stock Data")
 use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
 
-#-----------END OF SIDEBAR-------------
+
+# -----------END OF SIDEBAR-------------
 
 @st.cache_data
 def load_data():
     loader = SalesDataLoader()
     return loader.get_aggregated_data()
+
 
 @st.cache_data
 def load_stock():
@@ -179,6 +182,7 @@ def load_stock():
     if stock_file:
         return loader.load_stock_file(stock_file), stock_file.name
     return None, None
+
 
 df = load_data()
 analyzer = SalesAnalyzer(df)
@@ -198,6 +202,7 @@ sku_summary = analyzer.calculate_safety_stock_and_rop(
     seasonal_data,
     lead_time=lead_time,
     z_basic=z_score_basic,
+    z_regular=z_score_regular,
     z_seasonal_in=z_score_seasonal_1,
     z_seasonal_out=z_score_seasonal_2,
     z_new=z_score_new
@@ -225,8 +230,10 @@ if use_stock:
 
 if stock_loaded:
     column_order = ['SKU', 'TYPE', 'STOCK', 'ROP', 'DEFICIT', 'MONTHS', 'QUANTITY', 'SS', 'BELOW_ROP']
+
 else:
     column_order = ['SKU', 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SS', 'ROP']
+
 
 sku_summary = sku_summary[column_order]
 
@@ -300,15 +307,23 @@ col4.metric("New", type_counts.get('new', 0))
 
 if stock_loaded:
     st.subheader("Stock Status")
-    col1, col2, col3 = st.columns(3)
 
-    valid_stock = display_data[display_data['STOCK'].notna()]
-    below_rop_count = valid_stock['BELOW_ROP'].sum() if 'BELOW_ROP' in valid_stock.columns else 0
-    total_deficit = valid_stock['DEFICIT'].sum() if 'DEFICIT' in valid_stock.columns else 0
+    col1, col2, col3 = st.columns(3)
+    below_rop_count = 0
+    total_deficit = 0
+    valid_stock_count = 0
+
+    if 'STOCK' in display_data.columns and 'BELOW_ROP' in display_data.columns:
+        valid_stock = display_data[display_data['STOCK'].notna()]
+        valid_stock_count = len(valid_stock)
+        below_rop_count = (valid_stock['BELOW_ROP'] == True).sum()
+
+        items_below_rop = valid_stock[valid_stock['BELOW_ROP'] == True]
+        total_deficit = items_below_rop['DEFICIT'].sum() if len(items_below_rop) > 0 else 0
 
     col1.metric("Below ROP", int(below_rop_count), delta=None, delta_color="inverse")
     col2.metric("Total Deficit (units)", f"{total_deficit:,.0f}")
-    col3.metric("% Below ROP", f"{(below_rop_count / len(valid_stock) * 100):.1f}%" if len(valid_stock) > 0 else "0%")
+    col3.metric("% Below ROP", f"{(below_rop_count / valid_stock_count * 100):.1f}%" if valid_stock_count > 0 else "0%")
 
 col1, col2 = st.columns(2)
 col1.metric("Total SKUs", len(display_data))
@@ -320,4 +335,3 @@ st.download_button(
     "sku_summary.csv",
     "text/csv"
 )
-
