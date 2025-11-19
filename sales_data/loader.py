@@ -10,7 +10,6 @@ class SalesDataLoader:
     def __init__(self, paths_file: str = None):
         self.validator = DataValidator()
 
-        # Read paths from file if provided, otherwise use default
         if paths_file is None:
             paths_file = Path(__file__).parent / "paths_to_files.txt"
 
@@ -61,7 +60,6 @@ class SalesDataLoader:
         files_info = []
         seen_dates = set()
 
-        # Search in both archival and current sales directories
         search_dirs = [self.archival_sales_dir, self.current_sales_dir]
 
         for directory in search_dirs:
@@ -85,7 +83,6 @@ class SalesDataLoader:
         files_info = []
         seen_dates = set()
 
-        # Search in stock directory
         if self.stock_dir.exists():
             for file_path in list(self.stock_dir.glob("*.csv")) + list(self.stock_dir.glob("*.xlsx")):
                 file_date = self._parse_stock_filename(file_path.name)

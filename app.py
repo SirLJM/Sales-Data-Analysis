@@ -276,6 +276,9 @@ with col3:
 with col4:
     type_filter = st.multiselect("Filter by Type:", options=['basic', 'regular', 'seasonal', 'new'], default=[])
 
+overstock_threshold = 20
+show_overstocked = False
+
 if stock_loaded:
     st.markdown("**Overstocked Filter:**")
     col_over1, col_over2 = st.columns([1, 3])
@@ -284,11 +287,6 @@ if stock_loaded:
     with col_over2:
         if show_overstocked:
             overstock_threshold = st.slider("Overstocked by %:", min_value=0, max_value=200, value=20, step=5)
-        else:
-            overstock_threshold = 20
-else:
-    show_overstocked = False
-    overstock_threshold = 20
 
 filtered_summary = summary.copy()
 
@@ -365,7 +363,7 @@ if stock_loaded:
     if 'STOCK' in display_data.columns and 'BELOW_ROP' in display_data.columns:
         valid_stock = display_data[display_data['STOCK'].notna()]
         valid_stock_count = len(valid_stock)
-        below_rop_count = (valid_stock['BELOW_ROP'] == True).sum()
+        below_rop_count = int(valid_stock['BELOW_ROP'].sum())
 
         items_below_rop = valid_stock[valid_stock['BELOW_ROP'] == True]
         total_deficit = items_below_rop['DEFICIT'].sum() if len(items_below_rop) > 0 else 0

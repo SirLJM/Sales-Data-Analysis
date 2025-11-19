@@ -9,6 +9,7 @@ pyvenv.cfg
 # Data files
 data/
 output/
+sales_data/paths_to_files.txt
 
 # Python cache
 __pycache__/
