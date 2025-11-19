@@ -9,6 +9,9 @@ class SalesAnalyzer:
         if not pd.api.types.is_datetime64_any_dtype(self.data['data']):
             self.data['data'] = pd.to_datetime(self.data['data'])
 
+        # Extract model (first 5 characters of SKU)
+        self.data['model'] = self.data['sku'].astype(str).str[:5]
+
     def aggregate_by_sku(self):
         self.data['year_month'] = self.data['data'].dt.to_period('M')
 
@@ -30,6 +33,49 @@ class SalesAnalyzer:
         sku_summary = pd.merge(sku_summary, first_sale, on='SKU', how='left')
 
         return sku_summary.sort_values('SKU', ascending=False)
+
+    def aggregate_by_model(self):
+        self.data['year_month'] = self.data['data'].dt.to_period('M')
+
+        first_sale = self.data.groupby('model')['data'].min().reset_index()
+        first_sale.columns = ['MODEL', 'first_sale']
+
+        monthly_sales = self.data.groupby(['model', 'year_month'], as_index=False)['ilosc'].sum()
+
+        model_summary = monthly_sales.groupby('model', as_index=False).agg({
+            'year_month': 'nunique',
+            'ilosc': ['sum', 'mean', 'std']
+        })
+
+        model_summary.columns = ['MODEL', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD']
+
+        model_summary['CV'] = model_summary['SD'] / model_summary['AVERAGE SALES']
+        model_summary['CV'] = model_summary['CV'].fillna(0)
+
+        model_summary = pd.merge(model_summary, first_sale, on='MODEL', how='left')
+
+        return model_summary.sort_values('MODEL', ascending=False)
+
+    def calculate_current_year_avg_sales(self, by_model=False):
+        df = self.data.copy()
+
+        current_year = datetime.today().year
+        df_current_year = df[df['data'].dt.year == current_year].copy()
+
+        df_current_year['year_month'] = df_current_year['data'].dt.to_period('M')
+
+        if by_model:
+            monthly_sales = df_current_year.groupby(['model', 'year_month'], as_index=False)['ilosc'].sum()
+            avg_sales = monthly_sales.groupby('model', as_index=False)['ilosc'].mean()
+            avg_sales.columns = ['MODEL', 'CURRENT_YEAR_AVG']
+        else:
+            monthly_sales = df_current_year.groupby(['sku', 'year_month'], as_index=False)['ilosc'].sum()
+            avg_sales = monthly_sales.groupby('sku', as_index=False)['ilosc'].mean()
+            avg_sales.columns = ['SKU', 'CURRENT_YEAR_AVG']
+
+        avg_sales['CURRENT_YEAR_AVG'] = avg_sales['CURRENT_YEAR_AVG'].round(2)
+
+        return avg_sales
 
     @staticmethod
     def classify_sku_type(sku_summary, cv_basic, cv_seasonal):
@@ -71,6 +117,10 @@ class SalesAnalyzer:
     def calculate_safety_stock_and_rop(sku_summary, seasonal_data, lead_time, z_basic,
                                        z_regular, z_seasonal_in, z_seasonal_out, z_new):
         df = sku_summary.copy()
+
+        # Detect if we're working with SKU or MODEL
+        id_column = 'MODEL' if 'MODEL' in df.columns else 'SKU'
+
         z_score_map = {
             'basic': z_basic,
             'regular': z_regular,
@@ -88,13 +138,15 @@ class SalesAnalyzer:
 
         seasonal_mask = df['TYPE'] == 'seasonal'
         if isinstance(seasonal_mask, pd.Series) and seasonal_mask.any():
-            seasonal_skus = df[seasonal_mask]['SKU'].tolist()
+            seasonal_items = df[seasonal_mask][id_column].tolist()
             seasonal_current = seasonal_data[
-                (seasonal_data['SKU'].isin(seasonal_skus)) &
+                (seasonal_data['SKU'].isin(seasonal_items)) &
                 (seasonal_data['month'] == current_month)
                 ][['SKU', 'is_in_season']]
 
-            df = df.merge(seasonal_current, on='SKU', how='left')
+            df = df.merge(seasonal_current, left_on=id_column, right_on='SKU', how='left')
+            if id_column == 'MODEL':
+                df = df.drop(columns=['SKU'], errors='ignore')
 
             df['SS_IN'] = np.where(
                 seasonal_mask,
@@ -138,4 +190,6 @@ class SalesAnalyzer:
             df['ROP_IN'] = df['ROP_IN'].round(2)
             df['ROP_OUT'] = df['ROP_OUT'].round(2)
 
-        return df[['SKU', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD', 'CV', 'TYPE', 'SS', 'ROP']]
+        # Return appropriate columns based on id_column
+        base_cols = ['MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD', 'CV', 'TYPE', 'SS', 'ROP']
+        return df[[id_column] + base_cols]

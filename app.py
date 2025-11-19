@@ -163,6 +163,10 @@ st.sidebar.write(
 st.sidebar.write(f"New: months < {service_new} : Z-Score = {z_score_new}")
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("View Options")
+group_by_model = st.sidebar.checkbox("Group by Model (first 5 chars)", value=False)
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("Stock Data")
 use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
 
@@ -187,18 +191,24 @@ def load_stock():
 df = load_data()
 analyzer = SalesAnalyzer(df)
 
-sku_summary = analyzer.aggregate_by_sku()
+# Aggregate by SKU or Model
+if group_by_model:
+    summary = analyzer.aggregate_by_model()
+    id_column = 'MODEL'
+else:
+    summary = analyzer.aggregate_by_sku()
+    id_column = 'SKU'
 
-sku_summary = analyzer.classify_sku_type(
-    sku_summary,
+summary = analyzer.classify_sku_type(
+    summary,
     cv_basic=service_basic,
     cv_seasonal=service_seasonal
 )
 
 seasonal_data = analyzer.determine_seasonal_months()
 
-sku_summary = analyzer.calculate_safety_stock_and_rop(
-    sku_summary,
+summary = analyzer.calculate_safety_stock_and_rop(
+    summary,
     seasonal_data,
     lead_time=lead_time,
     z_basic=z_score_basic,
@@ -208,6 +218,11 @@ sku_summary = analyzer.calculate_safety_stock_and_rop(
     z_new=z_score_new
 )
 
+# Calculate current year average sales for bestsellers filter
+current_year_avg = analyzer.calculate_current_year_avg_sales(by_model=group_by_model)
+summary = summary.merge(current_year_avg, on=id_column, how='left')
+summary['CURRENT_YEAR_AVG'] = summary['CURRENT_YEAR_AVG'].fillna(0)
+
 stock_loaded = False
 if use_stock:
     stock_df, stock_filename = load_stock()
@@ -215,52 +230,88 @@ if use_stock:
     if stock_df is not None:
         stock_df = stock_df.rename(columns={
             'sku': 'SKU',
+            'nazwa': 'DESCRIPTION',
             'available_stock': 'STOCK'
         })
 
-        sku_summary = sku_summary.merge(stock_df, on='SKU', how='left')
+        # If grouping by model, aggregate stock data
+        if group_by_model:
+            stock_df['MODEL'] = stock_df['SKU'].astype(str).str[:5]
+            # Aggregate stock and keep first description
+            stock_agg = stock_df.groupby('MODEL', as_index=False).agg({
+                'STOCK': 'sum',
+                'DESCRIPTION': 'first'
+            })
+            summary = summary.merge(stock_agg, on='MODEL', how='left')
+        else:
+            summary = summary.merge(stock_df, on='SKU', how='left')
 
-        sku_summary['BELOW_ROP'] = sku_summary['STOCK'] < sku_summary['ROP']
-        sku_summary['DEFICIT'] = sku_summary['ROP'] - sku_summary['STOCK']
-        sku_summary['DEFICIT'] = sku_summary['DEFICIT'].apply(lambda x: max(0, x))
+        summary['BELOW_ROP'] = summary['STOCK'] < summary['ROP']
+        summary['DEFICIT'] = summary['ROP'] - summary['STOCK']
+        summary['DEFICIT'] = summary['DEFICIT'].apply(lambda x: max(0, x))
+        summary['OVERSTOCKED_%'] = ((summary['STOCK'] - summary['ROP']) / summary['ROP'] * 100).round(1)
 
         stock_loaded = True
     else:
         st.warning("No stock file found in data directory. Expected format: YYYYMMDD.csv or YYYYMMDD.xlsx")
 
 if stock_loaded:
-    column_order = ['SKU', 'TYPE', 'STOCK', 'ROP', 'DEFICIT', 'MONTHS', 'QUANTITY', 'SS', 'BELOW_ROP']
-
+    column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
 else:
-    column_order = ['SKU', 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SS', 'ROP']
+    column_order = [id_column, 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'ROP']
 
+summary = summary[column_order]
 
-sku_summary = sku_summary[column_order]
-
-col1, col2, col3 = st.columns([2, 1, 1])
+col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 with col1:
-    search_term = st.text_input("Search for SKU:", placeholder="Enter SKU or partial SKU...")
+    search_label = "Search for Model:" if group_by_model else "Search for SKU:"
+    search_placeholder = "Enter Model or partial Model..." if group_by_model else "Enter SKU or partial SKU..."
+    search_term = st.text_input(search_label, placeholder=search_placeholder)
 with col2:
     if stock_loaded:
         show_only_below_rop = st.checkbox("Show only below ROP", value=False)
     else:
         show_only_below_rop = False
 with col3:
+    show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
+with col4:
     type_filter = st.multiselect("Filter by Type:", options=['basic', 'regular', 'seasonal', 'new'], default=[])
 
-filtered_summary = sku_summary.copy()
+# Overstocked filter
+if stock_loaded:
+    st.markdown("**Overstocked Filter:**")
+    col_over1, col_over2 = st.columns([1, 3])
+    with col_over1:
+        show_overstocked = st.checkbox("Show overstocked items", value=False)
+    with col_over2:
+        if show_overstocked:
+            overstock_threshold = st.slider("Overstocked by %:", min_value=0, max_value=200, value=20, step=5)
+        else:
+            overstock_threshold = 20
+else:
+    show_overstocked = False
+    overstock_threshold = 20
+
+filtered_summary = summary.copy()
 
 if search_term:
     filtered_summary = filtered_summary[
-        filtered_summary['SKU'].astype(str).str.contains(search_term, case=False, na=False)]
+        filtered_summary[id_column].astype(str).str.contains(search_term, case=False, na=False)]
 
 if show_only_below_rop and 'BELOW_ROP' in filtered_summary.columns:
     filtered_summary = filtered_summary[filtered_summary['BELOW_ROP'] == True]
 
+if show_bestsellers:
+    filtered_summary = filtered_summary[filtered_summary['CURRENT_YEAR_AVG'] > 300]
+
+if stock_loaded and show_overstocked and 'OVERSTOCKED_%' in filtered_summary.columns:
+    filtered_summary = filtered_summary[filtered_summary['OVERSTOCKED_%'] >= overstock_threshold]
+
 if type_filter:
     filtered_summary = filtered_summary[filtered_summary['TYPE'].isin(type_filter)]
 
-st.write(f"Showing {len(filtered_summary)} of {len(sku_summary)} SKU(s)")
+item_label = "Model(s)" if group_by_model else "SKU(s)"
+st.write(f"Showing {len(filtered_summary)} of {len(summary)} {item_label}")
 
 st.markdown("""
     <style>
@@ -329,9 +380,11 @@ col1, col2 = st.columns(2)
 col1.metric("Total SKUs", len(display_data))
 col2.metric("Total Quantity", f"{display_data['QUANTITY'].sum():,.0f}")
 
+download_label = "Download Model Summary CSV" if group_by_model else "Download SKU Summary CSV"
+download_filename = "model_summary.csv" if group_by_model else "sku_summary.csv"
 st.download_button(
-    "Download SKU Summary CSV",
+    download_label,
     display_data.to_csv(index=False),
-    "sku_summary.csv",
+    download_filename,
     "text/csv"
 )
