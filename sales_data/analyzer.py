@@ -9,7 +9,6 @@ class SalesAnalyzer:
         if not pd.api.types.is_datetime64_any_dtype(self.data['data']):
             self.data['data'] = pd.to_datetime(self.data['data'])
 
-        # Extract model (first 5 characters of SKU)
         self.data['model'] = self.data['sku'].astype(str).str[:5]
 
     def aggregate_by_sku(self):
@@ -118,7 +117,6 @@ class SalesAnalyzer:
                                        z_regular, z_seasonal_in, z_seasonal_out, z_new):
         df = sku_summary.copy()
 
-        # Detect if we're working with SKU or MODEL
         id_column = 'MODEL' if 'MODEL' in df.columns else 'SKU'
 
         z_score_map = {
@@ -190,6 +188,5 @@ class SalesAnalyzer:
             df['ROP_IN'] = df['ROP_IN'].round(2)
             df['ROP_OUT'] = df['ROP_OUT'].round(2)
 
-        # Return appropriate columns based on id_column
         base_cols = ['MONTHS', 'QUANTITY', 'AVERAGE SALES', 'SD', 'CV', 'TYPE', 'SS', 'ROP']
         return df[[id_column] + base_cols]

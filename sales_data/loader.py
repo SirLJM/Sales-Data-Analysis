@@ -7,10 +7,24 @@ from .validator import DataValidator
 
 
 class SalesDataLoader:
-    def __init__(self, data_directory: str = "data"):
-        self.data_directory = Path(data_directory)
-        self.data_directory.mkdir(parents=True, exist_ok=True)
+    def __init__(self, paths_file: str = None):
         self.validator = DataValidator()
+
+        # Read paths from file if provided, otherwise use default
+        if paths_file is None:
+            paths_file = Path(__file__).parent / "paths_to_files.txt"
+
+        if Path(paths_file).exists():
+            with open(paths_file, 'r', encoding='utf-8') as f:
+                lines = [line.strip().strip("'\"") for line in f.readlines()]
+                self.archival_sales_dir = Path(lines[0]) if len(lines) > 0 else Path("data")
+                self.current_sales_dir = Path(lines[1]) if len(lines) > 1 else Path("data")
+                self.stock_dir = Path(lines[2]) if len(lines) > 2 else Path("data")
+        else:
+            # Fallback to default data directory
+            self.archival_sales_dir = Path("data")
+            self.current_sales_dir = Path("data")
+            self.stock_dir = Path("data")
 
     @staticmethod
     def _parse_filename(filename: str) -> Optional[tuple]:
@@ -44,17 +58,23 @@ class SalesDataLoader:
         return None
 
     def find_data_files(self) -> List[tuple]:
-
         files_info = []
         seen_dates = set()
 
-        for file_path in list(self.data_directory.glob("*.csv")) + list(self.data_directory.glob("*.xlsx")):
-            date_range = self._parse_filename(file_path.name)
-            if date_range is not None:
-                date_key = (date_range[0], date_range[1])
-                if date_key not in seen_dates:
-                    files_info.append((file_path, date_range[0], date_range[1]))
-                    seen_dates.add(date_key)
+        # Search in both archival and current sales directories
+        search_dirs = [self.archival_sales_dir, self.current_sales_dir]
+
+        for directory in search_dirs:
+            if not directory.exists():
+                continue
+
+            for file_path in list(directory.glob("*.csv")) + list(directory.glob("*.xlsx")):
+                date_range = self._parse_filename(file_path.name)
+                if date_range is not None:
+                    date_key = (date_range[0], date_range[1])
+                    if date_key not in seen_dates:
+                        files_info.append((file_path, date_range[0], date_range[1]))
+                        seen_dates.add(date_key)
 
         # Sort by start date
         files_info.sort(key=lambda x: x[1])
@@ -62,18 +82,18 @@ class SalesDataLoader:
         return files_info
 
     def find_stock_files(self) -> List[tuple]:
-
         files_info = []
         seen_dates = set()
 
-        for file_path in list(self.data_directory.glob("*.csv")) + list(self.data_directory.glob("*.xlsx")):
-            file_date = self._parse_stock_filename(file_path.name)
-            if file_date is not None:
-                if file_date not in seen_dates:
-                    files_info.append((file_path, file_date))
-                    seen_dates.add(file_date)
+        # Search in stock directory
+        if self.stock_dir.exists():
+            for file_path in list(self.stock_dir.glob("*.csv")) + list(self.stock_dir.glob("*.xlsx")):
+                file_date = self._parse_stock_filename(file_path.name)
+                if file_date is not None:
+                    if file_date not in seen_dates:
+                        files_info.append((file_path, file_date))
+                        seen_dates.add(file_date)
 
-        # Sort by date
         files_info.sort(key=lambda x: x[1])
 
         return files_info
@@ -91,10 +111,11 @@ class SalesDataLoader:
         current_year = datetime.now().year
         current_year_files = []
 
-        for file_path in list(self.data_directory.glob("*.csv")) + list(self.data_directory.glob("*.xlsx")):
-            date_range = self._parse_filename(file_path.name)
-            if date_range and date_range[0].year == current_year:
-                current_year_files.append((file_path, date_range[1]))
+        if self.current_sales_dir.exists():
+            for file_path in list(self.current_sales_dir.glob("*.csv")) + list(self.current_sales_dir.glob("*.xlsx")):
+                date_range = self._parse_filename(file_path.name)
+                if date_range and date_range[0].year == current_year:
+                    current_year_files.append((file_path, date_range[1]))
 
         if not current_year_files:
             return None
@@ -157,7 +178,7 @@ class SalesDataLoader:
         files_info = self.find_data_files()
 
         if not files_info:
-            raise ValueError(f"No data files found in {self.data_directory}")
+            raise ValueError(f"No data files found in {self.archival_sales_dir} or {self.current_sales_dir}")
 
         print(f"Found {len(files_info)} data file(s):")
         for file_path, start_date, end_date in files_info:

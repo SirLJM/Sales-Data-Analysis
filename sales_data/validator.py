@@ -101,7 +101,6 @@ class DataValidator:
             if 'data' in df.columns and len(df) > 0:
                 min_date = df['data'].min().str
                 max_date = df['data'].max()
-                # Convert to string to avoid type issues
                 summary['date_range'] = f"{min_date} to {max_date}"
 
         elif data_type == "stock":

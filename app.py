@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 
 from sales_data import SalesDataLoader, SalesAnalyzer
 
@@ -170,7 +169,6 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Stock Data")
 use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
 
-
 # -----------END OF SIDEBAR-------------
 
 @st.cache_data
@@ -191,7 +189,6 @@ def load_stock():
 df = load_data()
 analyzer = SalesAnalyzer(df)
 
-# Aggregate by SKU or Model
 if group_by_model:
     summary = analyzer.aggregate_by_model()
     id_column = 'MODEL'
@@ -218,7 +215,6 @@ summary = analyzer.calculate_safety_stock_and_rop(
     z_new=z_score_new
 )
 
-# Calculate current year average sales for bestsellers filter
 current_year_avg = analyzer.calculate_current_year_avg_sales(by_model=group_by_model)
 summary = summary.merge(current_year_avg, on=id_column, how='left')
 summary['CURRENT_YEAR_AVG'] = summary['CURRENT_YEAR_AVG'].fillna(0)
@@ -234,10 +230,8 @@ if use_stock:
             'available_stock': 'STOCK'
         })
 
-        # If grouping by model, aggregate stock data
         if group_by_model:
             stock_df['MODEL'] = stock_df['SKU'].astype(str).str[:5]
-            # Aggregate stock and keep first description
             stock_agg = stock_df.groupby('MODEL', as_index=False).agg({
                 'STOCK': 'sum',
                 'DESCRIPTION': 'first'
@@ -256,7 +250,8 @@ if use_stock:
         st.warning("No stock file found in data directory. Expected format: YYYYMMDD.csv or YYYYMMDD.xlsx")
 
 if stock_loaded:
-    column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
+    column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
+                    'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
 else:
     column_order = [id_column, 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'ROP']
 
@@ -281,7 +276,6 @@ with col3:
 with col4:
     type_filter = st.multiselect("Filter by Type:", options=['basic', 'regular', 'seasonal', 'new'], default=[])
 
-# Overstocked filter
 if stock_loaded:
     st.markdown("**Overstocked Filter:**")
     col_over1, col_over2 = st.columns([1, 3])
