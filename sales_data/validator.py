@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from pathlib import Path
 
 
@@ -85,9 +85,9 @@ class DataValidator:
         return DataValidator.find_sheet_by_columns(file_path, DataValidator.STOCK_COLUMNS, "stock")
 
     @staticmethod
-    def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> dict:
+    def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> Dict[str, Any]:
 
-        summary = {
+        summary: Dict[str, Any] = {
             'rows': len(df),
             'columns': len(df.columns),
             'column_names': df.columns.tolist()
@@ -99,8 +99,8 @@ class DataValidator:
             if 'order_id' in df.columns:
                 summary['unique_orders'] = df['order_id'].nunique()
             if 'data' in df.columns and len(df) > 0:
-                min_date = df['data'].min().str
-                max_date = df['data'].max()
+                min_date = str(df['data'].min())
+                max_date = str(df['data'].max())
                 summary['date_range'] = f"{min_date} to {max_date}"
 
         elif data_type == "stock":

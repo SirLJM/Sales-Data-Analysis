@@ -250,8 +250,12 @@ if use_stock:
         st.warning("No stock file found in data directory. Expected format: YYYYMMDD.csv or YYYYMMDD.xlsx")
 
 if stock_loaded:
-    column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
-                    'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
+    if group_by_model:
+        column_order = [id_column, 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
+                        'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
+    else:
+        column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
+                        'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
 else:
     column_order = [id_column, 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'ROP']
 
