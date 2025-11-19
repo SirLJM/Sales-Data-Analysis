@@ -60,19 +60,29 @@ class SalesDataLoader:
         files_info = []
         seen_dates = set()
 
-        search_dirs = [self.archival_sales_dir, self.current_sales_dir]
-
-        for directory in search_dirs:
-            if not directory.exists():
-                continue
-
-            for file_path in list(directory.glob("*.csv")) + list(directory.glob("*.xlsx")):
+        if self.archival_sales_dir.exists():
+            for file_path in list(self.archival_sales_dir.glob("*.csv")) + list(self.archival_sales_dir.glob("*.xlsx")):
                 date_range = self._parse_filename(file_path.name)
                 if date_range is not None:
                     date_key = (date_range[0], date_range[1])
                     if date_key not in seen_dates:
                         files_info.append((file_path, date_range[0], date_range[1]))
                         seen_dates.add(date_key)
+
+        if self.current_sales_dir.exists():
+            current_files = []
+            for file_path in list(self.current_sales_dir.glob("*.csv")) + list(self.current_sales_dir.glob("*.xlsx")):
+                date_range = self._parse_filename(file_path.name)
+                if date_range is not None:
+                    current_files.append((file_path, date_range[0], date_range[1]))
+
+            if current_files:
+                current_files.sort(key=lambda x: x[2], reverse=True)
+                latest_file = current_files[0]
+                date_key = (latest_file[1], latest_file[2])
+                if date_key not in seen_dates:
+                    files_info.append(latest_file)
+                    seen_dates.add(date_key)
 
         # Sort by start date
         files_info.sort(key=lambda x: x[1])
