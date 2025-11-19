@@ -1,9 +1,38 @@
-.venv
-data
-include
-Lib
-output
-Scripts
-__pycache__
+# Virtual environment
+.venv/
+venv/
+Include/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# Data files
+data/
+output/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
 *.pyc
 
+# Streamlit
+.streamlit/
+
+# Test files
+test_*.py
+check_*.py
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Logs
+*.log
+.claude

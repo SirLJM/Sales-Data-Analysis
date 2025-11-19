@@ -273,7 +273,11 @@ with col2:
     else:
         show_only_below_rop = False
 with col3:
-    show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
+    if group_by_model:
+        show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
+    else:
+        show_bestsellers = False
+        st.write("_Bestsellers (model view only)_")
 with col4:
     type_filter = st.multiselect("Filter by Type:", options=['basic', 'regular', 'seasonal', 'new'], default=[])
 
