@@ -55,30 +55,30 @@ class SalesAnalyzer:
 
         return model_summary.sort_values('MODEL', ascending=False)
 
-    def calculate_current_year_avg_sales(self, by_model=False):
+    def calculate_last_two_years_avg_sales(self, by_model=False):
         df = self.data.copy()
 
-        current_year = datetime.today().year
-        df_current_year = df[df['data'].dt.year == current_year].copy()
+        two_years_ago = datetime.today() - timedelta(days=730)
+        df_last_2_years = df[df['data'] >= two_years_ago].copy()
 
-        df_current_year['year_month'] = df_current_year['data'].dt.to_period('M')
+        df_last_2_years['year_month'] = df_last_2_years['data'].dt.to_period('M')
 
         if by_model:
-            monthly_sales = df_current_year.groupby(['model', 'year_month'], as_index=False)['ilosc'].sum()
+            monthly_sales = df_last_2_years.groupby(['model', 'year_month'], as_index=False)['ilosc'].sum()
             avg_sales = monthly_sales.groupby('model', as_index=False)['ilosc'].mean()
-            avg_sales.columns = ['MODEL', 'CURRENT_YEAR_AVG']
+            avg_sales.columns = ['MODEL', 'LAST_2_YEARS_AVG']
         else:
-            monthly_sales = df_current_year.groupby(['sku', 'year_month'], as_index=False)['ilosc'].sum()
+            monthly_sales = df_last_2_years.groupby(['sku', 'year_month'], as_index=False)['ilosc'].sum()
             avg_sales = monthly_sales.groupby('sku', as_index=False)['ilosc'].mean()
-            avg_sales.columns = ['SKU', 'CURRENT_YEAR_AVG']
+            avg_sales.columns = ['SKU', 'LAST_2_YEARS_AVG']
 
-        avg_sales['CURRENT_YEAR_AVG'] = avg_sales['CURRENT_YEAR_AVG'].round(2)
+        avg_sales['LAST_2_YEARS_AVG'] = avg_sales['LAST_2_YEARS_AVG'].round(2)
 
         return avg_sales
 
     @staticmethod
     def classify_sku_type(sku_summary, cv_basic, cv_seasonal):
-        df = sku_summary.copy()
+        df = (sku_summary.copy())
 
         one_year_ago = datetime.today() - timedelta(days=365)
 

@@ -177,7 +177,7 @@ class SalesDataLoader:
 
         df = df[df['aktywny'] == 1]
 
-        df = df[['sku', 'nazwa', 'available_stock']].copy()
+        df = df[['sku', 'nazwa', 'cena_netto', 'available_stock']].copy()
 
         return df
 

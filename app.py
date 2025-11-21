@@ -1,4 +1,5 @@
 import streamlit as st
+import plotly.express as px
 
 from sales_data import SalesDataLoader, SalesAnalyzer
 
@@ -215,11 +216,12 @@ summary = analyzer.calculate_safety_stock_and_rop(
     z_new=z_score_new
 )
 
-current_year_avg = analyzer.calculate_current_year_avg_sales(by_model=group_by_model)
-summary = summary.merge(current_year_avg, on=id_column, how='left')
-summary['CURRENT_YEAR_AVG'] = summary['CURRENT_YEAR_AVG'].fillna(0)
+last_two_years_avg = analyzer.calculate_last_two_years_avg_sales(by_model=group_by_model)
+summary = summary.merge(last_two_years_avg, on=id_column, how='left')
+summary['LAST_2_YEARS_AVG'] = summary['LAST_2_YEARS_AVG'].fillna(0)
 
 stock_loaded = False
+stock_df = None
 if use_stock:
     stock_df, stock_filename = load_stock()
 
@@ -227,18 +229,22 @@ if use_stock:
         stock_df = stock_df.rename(columns={
             'sku': 'SKU',
             'nazwa': 'DESCRIPTION',
-            'available_stock': 'STOCK'
+            'available_stock': 'STOCK',
+            'cena_netto': 'PRICE'
         })
+
+        stock_df['VALUE'] = stock_df['STOCK'] * stock_df['PRICE']
 
         if group_by_model:
             stock_df['MODEL'] = stock_df['SKU'].astype(str).str[:5]
             stock_agg = stock_df.groupby('MODEL', as_index=False).agg({
                 'STOCK': 'sum',
+                'VALUE': 'sum',
                 'DESCRIPTION': 'first'
             })
             summary = summary.merge(stock_agg, on='MODEL', how='left')
         else:
-            summary = summary.merge(stock_df, on='SKU', how='left')
+            summary = summary.merge(stock_df[['SKU', 'DESCRIPTION', 'STOCK', 'VALUE']], on='SKU', how='left')
 
         summary['BELOW_ROP'] = summary['STOCK'] < summary['ROP']
         summary['DEFICIT'] = summary['ROP'] - summary['STOCK']
@@ -251,13 +257,13 @@ if use_stock:
 
 if stock_loaded:
     if group_by_model:
-        column_order = [id_column, 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
-                        'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
+        column_order = [id_column, 'TYPE', 'STOCK', 'VALUE', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
+                        'AVERAGE SALES', 'LAST_2_YEARS_AVG', 'SS', 'BELOW_ROP']
     else:
-        column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
-                        'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'BELOW_ROP']
+        column_order = [id_column, 'DESCRIPTION', 'TYPE', 'STOCK', 'VALUE', 'ROP', 'OVERSTOCKED_%', 'DEFICIT', 'MONTHS', 'QUANTITY',
+                        'AVERAGE SALES', 'LAST_2_YEARS_AVG', 'SS', 'BELOW_ROP']
 else:
-    column_order = [id_column, 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'CURRENT_YEAR_AVG', 'SS', 'ROP']
+    column_order = [id_column, 'TYPE', 'MONTHS', 'QUANTITY', 'AVERAGE SALES', 'LAST_2_YEARS_AVG', 'SS', 'ROP']
 
 summary = summary[column_order]
 
@@ -302,7 +308,7 @@ if show_only_below_rop and 'BELOW_ROP' in filtered_summary.columns:
     filtered_summary = filtered_summary[filtered_summary['BELOW_ROP'] == True]
 
 if show_bestsellers:
-    filtered_summary = filtered_summary[filtered_summary['CURRENT_YEAR_AVG'] > 300]
+    filtered_summary = filtered_summary[filtered_summary['LAST_2_YEARS_AVG'] > 300]
 
 if stock_loaded and show_overstocked and 'OVERSTOCKED_%' in filtered_summary.columns:
     filtered_summary = filtered_summary[filtered_summary['OVERSTOCKED_%'] >= overstock_threshold]
@@ -372,13 +378,44 @@ if stock_loaded:
         items_below_rop = valid_stock[valid_stock['BELOW_ROP'] == True]
         total_deficit = items_below_rop['DEFICIT'].sum() if len(items_below_rop) > 0 else 0
 
-    col1.metric("Below ROP", int(below_rop_count), delta=None, delta_color="inverse")
-    col2.metric("Total Deficit (units)", f"{total_deficit:,.0f}")
-    col3.metric("% Below ROP", f"{(below_rop_count / valid_stock_count * 100):.1f}%" if valid_stock_count > 0 else "0%")
+        col1.metric("Below ROP", int(below_rop_count), delta=None, delta_color="inverse")
+        col2.metric("Total Deficit (units)", f"{total_deficit:,.0f}")
+        col3.metric("% Below ROP", f"{(below_rop_count / valid_stock_count * 100):.1f}%" if valid_stock_count > 0 else "0%")
 
-col1, col2 = st.columns(2)
-col1.metric("Total SKUs", len(display_data))
-col2.metric("Total Quantity", f"{display_data['QUANTITY'].sum():,.0f}")
+        overstocked_count = int((valid_stock['OVERSTOCKED_%'] >= overstock_threshold).sum())
+        normal_count = valid_stock_count - below_rop_count - overstocked_count
+
+        pie_data = {
+            'Status': ['Below ROP', 'Overstocked', 'Normal'],
+            'Count': [below_rop_count, overstocked_count, normal_count]
+        }
+
+        fig = px.pie(
+            pie_data,
+            values='Count',
+            names='Status',
+            title=f'Stock Status Distribution (Overstock threshold: {overstock_threshold}%)',
+            color='Status',
+            color_discrete_map={
+                'Below ROP': '#ff4b4b',
+                'Overstocked': '#ffa500',
+                'Normal': '#00cc00'
+            }
+        )
+        fig.update_traces(textposition='inside', textinfo='percent+label+value')
+        st.plotly_chart(fig, width="stretch")
+
+if stock_loaded and stock_df is not None:
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total SKUs", len(display_data))
+    total_stock = stock_df['STOCK'].sum()
+    total_value = stock_df['VALUE'].sum()
+    col2.metric("Total STOCK", f"{total_stock:,.0f}")
+    col3.metric("Total Stock Value", f"{total_value:,.2f}")
+else:
+    col1, col2 = st.columns(2)
+    col1.metric("Total SKUs", len(display_data))
+    col2.metric("Total Quantity", f"{display_data['QUANTITY'].sum():,.0f}")
 
 download_label = "Download Model Summary CSV" if group_by_model else "Download SKU Summary CSV"
 download_filename = "model_summary.csv" if group_by_model else "sku_summary.csv"
