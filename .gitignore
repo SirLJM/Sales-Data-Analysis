@@ -36,4 +36,9 @@ nul
 
 # Logs
 *.log
+
 .claude
+bak/
+.flake8
+saved_pattern_sets.json
+
