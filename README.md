@@ -1,29 +1,28 @@
-# Sales Data Analysis Dashboard
+## Project Overview
 
-A Streamlit-based inventory management and sales analytics application that calculates Safety Stock (SS) and Reorder Points (ROP) based on historical sales data and current stock levels.
+This is a comprehensive Streamlit-based inventory management and sales analytics application with three main features:
 
-## Features
+1. **Sales & Inventory Analysis**: Statistical analysis of sales data with Safety Stock (SS) and Reorder Point (ROP) calculations
+2. **Size Pattern Optimizer**: Cutting pattern optimization for manufacturing/ordering
+3. **Order Recommendations**: Automated priority-based ordering system that integrates with pattern matching
 
-- **Inventory Management**: Calculate Safety Stock and Reorder Points using statistical methods
-- **Product Classification**: Automatically classify products as Basic, Regular, Seasonal, or New
-- **Multi-View Analysis**: Toggle between SKU-level and Model-level (first five characters) analysis
-- **Stock Monitoring**: Track items below ROP, identify deficits, and find overstocked items
-- **Bestseller Filtering**: Identify top-performing products (>300 units/month average)
-- **Flexible Data Loading**: Configure custom paths for archival sales, current sales, and stock data
-- **Interactive Filters**: Search, filter by type, stock status, and more
+The application uses statistical methods to analyze historical sales, forecast future demand, and optimize ordering decisions to maximize sales while minimizing stockouts and excess inventory.
 
-## Installation
 
-### Prerequisites
+### Running the Application
 
-- Python 3.9 or higher
-- pip (Python package installer)
+**On macOS/Linux:**
+```bash
+python3 -m streamlit run app.py
+```
 
-### Step 1: Clone or Download the Project
+**On Windows:**
+```cmd
+cd src
+py V:3.13 -m streamlit run app.py
+```
 
-Download the project files to your local machine.
-
-### Step 2: Set Up Virtual Environment (Recommended)
+### Environment Setup
 
 **On macOS/Linux:**
 ```bash
@@ -33,244 +32,131 @@ source venv/bin/activate
 
 **On Windows:**
 ```cmd
-python -m venv venv
+py V:3.13 -m venv venv
 venv\Scripts\activate
 ```
 
-### Step 3: Install Dependencies
-
+**Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-## Configuration
+## Application Structure
 
-### Setting Up Data Paths
+The application has three main tabs:
 
-The application reads data from three directories specified in `sales_data/paths_to_files.txt`:
+### Tab 1: 📊 Sales & Inventory Analysis
 
-1. **Line 1**: Path to archival sales folder (historical data from previous years)
-2. **Line 2**: Path to current year sales folder (current year data)
-3. **Line 3**: Path to current stock folder (latest stock inventory)
+Main analytics dashboard showing:
+- **Data Table**: SKU/Model-level inventory data with filtering (search, below ROP, bestsellers, product type, overstock)
+- **Stock Projection Chart**: Time-series visualization showing when individual SKUs will reach ROP and zero stock based on forecast
+- **Statistics**: Product type distribution, stock status metrics, pie charts
+- **Configurable Parameters** (sidebar):
+    - Lead time (months)
+    - CV thresholds for product classification
+    - Z-scores for each product type (basic, regular, seasonal, new)
+    - View options (SKU vs. Model grouping)
 
-**Example for macOS:**
-```
-/Users/username/Data/Sales/2017-2024
-/Users/username/Data/Sales/2025
-/Users/username/Data/Stock/2025
-```
+**Key Features**:
+- Enter a SKU to see projected stock depletion over time
+- Visual indicators for when the stock crosses ROP and reaches zero
+- Warnings with specific dates for critical events
+- Download CSV export of analysis
 
-**Example for Windows:**
-```
-C:\Data\Sales\2017-2024
-C:\Data\Sales\2025
-C:\Data\Stock\2025
-```
+### Tab 2: 📦 Size Pattern Optimizer
 
-**To configure your paths:**
-1. Open `sales_data/paths_to_files.txt` in a text editor
-2. Replace each line with the absolute path to your data directories
-3. Save the file
+Standalone cutting pattern optimization tool:
+- **Pattern Sets**: Create and manage multiple pattern sets (e.g., "adults", "kids")
+- **Size Definitions**: Define which sizes exist in each pattern set (XL, L, M, S, XS, etc.)
+- **Cutting Patterns**: Define how sizes can be cut together (e.g., "XL + L", "M + M")
+- **Optimization**: Input desired quantities by size, get optimal pattern allocation
+- **Constraints**: Minimum order quantities per pattern
+- **Results**: Shows which patterns to order, excess production, and coverage status
 
-### Data File Requirements
+**Pattern Sets** are stored in `saved_pattern_sets.json` and can be:
+- Created, edited, and deleted through the UI
+- Reused across different order scenarios
+- Associated with specific product models in Tab 3
 
-#### Sales Data Files
+### Tab 3: 🎯 Order Recommendations
 
-Sales data files should be named with the format: `YYYYMMDD-YYYYMMDD.csv` or `YYYYMMDD-YYYYMMDD.xlsx`
+**Most Important Feature**: Automated priority-based ordering system that determines what to order first and how much.
 
-Example: `20240101-20240131.csv` (data from Jan 1-31, 2024)
+#### How It Works:
 
-**Required columns:**
-- `order_id`: Order identifier
-- `data`: Date of sale (YYYY-MM-DD format)
-- `sku`: Product SKU
-- `ilosc`: Quantity sold
-- `cena`: Unit price
-- `razem`: Total amount
+1. **Click "Generate Recommendations"**: Analyzes all SKUs considering:
+    - Current stock vs ROP (Reorder Point)
+    - Forecast demand during lead time
+    - Product type urgency (new, seasonal, basic, regular)
+    - Revenue at risk (forecast × price)
 
-#### Stock Data Files
+2. **Priority Scoring Algorithm**:
+   ```
+   Priority Score = (Stockout Risk × 0.5) + (Revenue Impact × 0.3) + (Demand × 0.2) × Type Multiplier
 
-Stock data files should be named with the format: `YYYYMMDD.csv` or `YYYYMMDD.xlsx`
+   Where:
+   - Stockout Risk: 100 if stock = 0 with forecast > 0; 0-80 if below ROP (proportional to deficit)
+   - Revenue Impact: Normalized forecast revenue (forecast × price)
+   - Demand: Forecast quantity during lead time (capped at 100)
+   - Type Multiplier: Seasonal=1.3, New=1.2, Regular=1.0, Basic=0.9
+   ```
 
-Example: `20250115.csv` (stock snapshot from Jan 15, 2025)
+3. **Model-First Grouping**: Results are grouped by **MODEL** (first five chars of SKU), then broken down by **COLOR** (chars 6–7)
 
-**Required columns:**
-- `sku`: Product SKU
-- `nazwa`: Product description/name
-- `cena_netto`: Net price
-- `cena_brutto`: Gross price
-- `stock`: Total stock
-- `available_stock`: Available stock
-- `aktywny`: Active status (1 = active, 0 = inactive)
+4. **Pattern Set Selection**: For each model, select the appropriate pattern set (adults/kids/etc.)
 
-**Note:** The app will automatically detect the correct sheet in Excel files.
+5. **Size Analysis**: For each color, shows ALL sizes from the selected pattern set, including:
+    - Sizes that exist in inventory (with the calculated deficit)
+    - Sizes that don't exist yet (shown as zero quantity)
+    - This ensures complete size runs can be ordered
 
-## Running the Application
+6. **Pattern Optimization**: Click "🎯 Optimize Cutting Patterns" to:
+    - Automatically run the pattern matcher
+    - See which cutting patterns to order and how many
+    - View production vs. required breakdown
+    - Identify excess and coverage gaps
 
-### Start the App
-
-**From the project directory:**
-```bash
-streamlit run app.py
-```
-
-The app will open in your default web browser at `http://localhost:8501`
-
-### Stopping the App
-
-Press `Ctrl+C` in the terminal where Streamlit is running.
-
-## Usage Guide
-
-### Sidebar Parameters
-
-#### Lead Time
-- **Lead time in months**: Time between placing and receiving an order (default: 1.36 months)
-
-#### Service Levels
-
-Configure Z-scores and CV thresholds for different product types:
-
-- **Basic Products**: Low variability items (CV < 0.6)
-  - Z-Score: 2.05 (default) - Higher service level for stable products
-
-- **Regular Products**: Moderate variability items (0.6 ≤ CV ≤ 1.0)
-  - Z-Score: 1.645 (default)
-
-- **Seasonal Products**: High variability items (CV > 1.0)
-  - Z-Score IN season: 1.75 (default)
-  - Z-Score OUT of season: 1.6 (default)
-
-- **New Products**: Items with less than 12 months of history
-  - Months threshold: 12 (default)
-  - Z-Score: 1.8 (default)
-
-#### View Options
-
-- **Group by Model**: Toggle between SKU-level and Model-level analysis
-  - Model groups products by the first five characters of SKU
-  - Aggregates sales and stock data at the model level
-
-#### Stock Data
-
-- **Load stock data**: Enable/disable loading of stock data from a configured directory
-
-### Main Interface
-
-#### Search and Filters
-
-- **Search**: Find a specific SKU or Model (partial matches supported)
-- **Show only below ROP**: Filter to items that need reordering
-- **Bestsellers**: Show items with >300 units/month average (Model view only)
-- **Filter by Type**: Select one or more product types (basic, regular, seasonal, new)
-- **Overstocked Filter**: Find items exceeding ROP by a specified percentage
-
-#### Data Table Columns
-
-- **SKU/MODEL**: Product identifier
-- **DESCRIPTION**: Product name (from a stock file)
-- **TYPE**: Classification (basic/regular/seasonal/new)
-- **STOCK**: Current available stock
-- **ROP**: Reorder Point - when to reorder
-- **OVERSTOCKED_%**: Percentage above/below ROP
-- **DEFICIT**: Units needed to reach ROP (if below)
-- **MONTHS**: Number of months with sales data
-- **QUANTITY**: Total quantity sold
-- **AVERAGE SALES**: Average monthly sales
-- **CURRENT_YEAR_AVG**: Average monthly sales for the current year only
-- **SS**: Safety Stock - buffer inventory
-
-#### Summary Statistics
-
-- **TYPE Distribution**: Count of products in each classification
-- **Stock Status**:
-  - Below ROP count and percentage
-  - Total deficit in units
-- **Total SKUs**: Number of products displayed
-- **Total Quantity**: Total units sold across all products
-
-#### Export
-
-- **Download CSV**: Export filtered data to CSV file
-
-## Formulas and Calculations
-
-### Safety Stock (SS)
-```
-SS = Z-score × SD × √(Lead Time)
-```
-
-### Reorder Point (ROP)
-```
-ROP = (Average Sales × Lead Time) + SS
-```
-
-### Coefficient of Variation (CV)
-```
-CV = Standard Deviation / Average Sales
-```
-
-### Product Classification Logic
-
-1. **New**: Products with first sale < 12 months ago (configurable)
-2. **Basic**: CV < 0.6 (configurable) and not new
-3. **Seasonal**: CV > 1.0 (configurable) and not new
-4. **Regular**: All other products
-
-### Seasonal Detection
-
-Products are in-season when their average sales for the current month (based on last 2 years) exceed the overall average by 20% or more (seasonal index > 1.2).
-
-## Troubleshooting
-
-### "No data files found" Error
-
-- Verify paths in `sales_data/paths_to_files.txt` are correct and absolute
-- Check that directories exist and contain properly named files
-- Ensure file naming follows the required format (YYYYMMDD-YYYYMMDD for sales, YYYYMMDD for stock)
-
-### "Invalid sales/stock data" Error
-
-- Verify all required columns are present in your data files
-- Check that numeric columns (ilosc, cena, stock, etc.) contain numeric values
-- For Excel files, ensure data is in a worksheet (app will auto-detect)
-
-### Import Errors
-
-- Ensure virtual environment is activated
-- Reinstall dependencies: `pip install -r requirements.txt`
-
-### Port Already in Use
-
-- If port 8501 is busy, Streamlit will automatically try 8502, 8503, etc.
-- Or specify a different port: `streamlit run app.py --server.port 8504`
-
-## Project Structure
+#### Order Recommendations Workflow:
 
 ```
-src/
-    app.py                                 # Main Streamlit application
-    requirements.txt                       # Python dependencies
-    README.md                              # This file
-    sales_data/                            # Data processing package
-        __init__.py                        # Package initialization
-        paths_to_files.txt                 # Data directory configuration
-        loader.py                          # Data loading and validation
-        analyzer.py                        # Sales analysis and calculations
-        validator.py                       # Data validation utilities
+1. Load Data (Tab 1) → Ensure stock + forecast data are loaded
+2. Go to Tab 3
+3. Click "Generate Recommendations" → System calculates priorities
+4. Review top priority models (sorted by urgency score)
+5. For each model:
+   a. Select pattern set (adults/kids)
+   b. Review colors within that model
+   c. For each color:
+      - Review size quantities needed
+      - Click "Optimize Cutting Patterns"
+      - See optimal pattern allocation
+      - Make ordering decision
+6. Download full priority report (CSV) for records
 ```
 
-## Tips for Best Results
+### Key Design Patterns
 
-1. **Data Quality**: Ensure consistent date formats and no missing required columns
-2. **Historical Data**: More historical data leads to better statistical accuracy
-3. **Regular Updates**: Update stock files regularly for accurate ROP calculations
-4. **Parameter Tuning**: Adjust Z-scores based on your business's service level requirements
-5. **Model View**: Use Model view for high-level analysis and SKU view for detailed tracking
+**Product Classification System**: Products are classified into four types based on statistical properties:
+1. **New**: Products with first sale within the last 12 months (configurable)
+2. **Basic**: Low variability (CV < 0.6, configurable)—stable demand
+3. **Seasonal**: High variability (CV > 1.0, configurable)—seasonal patterns
+4. **Regular**: Everything else - moderate variability
 
-## Support
+The classification is sequential: new items are classified first, then basic/seasonal, with regular as the fallback.
 
-For issues or questions, please check:
-- Data file format requirements
-- Configuration in `paths_to_files.txt`
-- Console output for detailed error messages
+### Statistical Calculations
+
+**Safety Stock Formula**:
+```
+SS = Z-score × Standard_Deviation × √(Lead_Time)
+```
+
+**Reorder Point Formula**:
+```
+ROP = (Average_Sales × Lead_Time) + Safety_Stock
+```
+
+**Seasonal Detection**: The `determine_seasonal_months()` method calculates a seasonal index by comparing monthly average sales (last 2 years) to overall average. Months with index > 1.2 are considered "in season". Seasonal items use different Z-scores depending on whether the current month is in-season or out-of-season.
+
+**Z-Score Application**: Each product type has a different Z-score representing different service levels. Seasonal items use two Z-scores (in-season and out-of-season), dynamically selected based on the current month.
+

@@ -290,3 +290,187 @@ class SalesAnalyzer:
         projection_df["safety_stock"] = safety_stock
 
         return projection_df
+
+    @staticmethod
+    def parse_sku_components(sku: str) -> dict:
+        sku_str = str(sku)
+        return {
+            "model": sku_str[:5] if len(sku_str) >= 5 else sku_str,
+            "color": sku_str[5:7] if len(sku_str) >= 7 else "",
+            "size": sku_str[7:9] if len(sku_str) >= 9 else "",
+        }
+
+    @staticmethod
+    def calculate_order_priority(
+        summary_df: pd.DataFrame,
+        forecast_df: pd.DataFrame,
+        forecast_date: datetime,
+        lead_time_months: float = 1.36,
+    ) -> pd.DataFrame:
+        df = summary_df.copy()
+
+        required_cols = ["SKU", "STOCK", "ROP", "TYPE"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+
+        if not forecast_df.empty:
+            lead_time_days = int(lead_time_months * 30.44)
+            lead_time_end = forecast_date + pd.Timedelta(days=lead_time_days)
+            forecast_window = forecast_df[
+                (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
+            ]
+            forecast_sum = (
+                forecast_window.groupby("sku")["forecast"].sum().reset_index()
+            )
+            forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
+            df = df.merge(forecast_sum, on="SKU", how="left")
+            df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
+        else:
+            df["FORECAST_LEADTIME"] = 0
+
+        sku_components = df["SKU"].apply(SalesAnalyzer.parse_sku_components)
+        df["MODEL"] = sku_components.apply(lambda x: x["model"])
+        df["COLOR"] = sku_components.apply(lambda x: x["color"])
+        df["SIZE"] = sku_components.apply(lambda x: x["size"])
+
+        df["PRIORITY_SCORE"] = 0.0
+
+        df["STOCKOUT_RISK"] = 0.0
+        zero_stock_mask = (df["STOCK"] <= 0) & (df["FORECAST_LEADTIME"] > 0)
+        df.loc[zero_stock_mask, "STOCKOUT_RISK"] = 100
+
+        below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
+        df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
+            (df["ROP"] - df["STOCK"]) / df["ROP"] * 80
+        )
+
+        if "PRICE" in df.columns:
+            df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
+            if df["REVENUE_AT_RISK"].max() > 0:
+                df["REVENUE_IMPACT"] = (
+                    df["REVENUE_AT_RISK"] / df["REVENUE_AT_RISK"].max() * 100
+                )
+            else:
+                df["REVENUE_IMPACT"] = 0
+        else:
+            if df["FORECAST_LEADTIME"].max() > 0:
+                df["REVENUE_IMPACT"] = (
+                    df["FORECAST_LEADTIME"] / df["FORECAST_LEADTIME"].max() * 100
+                )
+            else:
+                df["REVENUE_IMPACT"] = 0
+
+        type_multiplier = {
+            "new": 1.2,
+            "seasonal": 1.3,
+            "regular": 1.0,
+            "basic": 0.9,
+        }
+        df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_multiplier).fillna(1.0)
+
+        df["DEFICIT"] = (df["ROP"] - df["STOCK"]).clip(lower=0)
+
+        df["PRIORITY_SCORE"] = (
+            (df["STOCKOUT_RISK"] * 0.5)
+            + (df["REVENUE_IMPACT"] * 0.3)
+            + (df["FORECAST_LEADTIME"].clip(upper=100) * 0.2)
+        ) * df["TYPE_MULTIPLIER"]
+
+        df["URGENT"] = (df["STOCK"] <= 0) | (
+            (df["STOCK"] < df["ROP"]) & (df["FORECAST_LEADTIME"] > df["STOCK"])
+        )
+
+        df = df.sort_values("PRIORITY_SCORE", ascending=False)
+
+        return df
+
+    @staticmethod
+    def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
+        agg_dict = {
+            "PRIORITY_SCORE": "mean",
+            "DEFICIT": "sum",
+            "FORECAST_LEADTIME": "sum",
+            "STOCK": "sum",
+            "ROP": "sum",
+            "URGENT": "any",
+        }
+
+        if "REVENUE_AT_RISK" in priority_df.columns:
+            agg_dict["REVENUE_AT_RISK"] = "sum"
+
+        grouped = (
+            priority_df.groupby(["MODEL", "COLOR"], as_index=False)
+            .agg(agg_dict)
+            .sort_values("PRIORITY_SCORE", ascending=False)
+        )
+
+        grouped["COVERAGE_GAP"] = grouped["FORECAST_LEADTIME"] - grouped["STOCK"]
+        grouped["COVERAGE_GAP"] = grouped["COVERAGE_GAP"].clip(lower=0)
+
+        return grouped
+
+    @staticmethod
+    def prepare_pattern_matching_input(
+        priority_df: pd.DataFrame, model: str, color: str, pattern_sizes: list = None
+    ) -> dict:
+        filtered = priority_df[
+            (priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)
+        ]
+
+        size_quantities = {}
+
+        if pattern_sizes:
+            for size in pattern_sizes:
+                size_quantities[size] = 0
+
+        for _, row in filtered.iterrows():
+            size = row["SIZE"]
+            qty_needed = max(row.get("DEFICIT", 0), row.get("FORECAST_LEADTIME", 0))
+            if size:
+                size_quantities[size] = int(qty_needed)
+
+        return size_quantities
+
+    @staticmethod
+    def generate_order_recommendations(
+        summary_df: pd.DataFrame,
+        forecast_df: pd.DataFrame,
+        forecast_date: datetime,
+        lead_time_months: float = 1.36,
+        top_n: int = 10,
+    ) -> dict:
+        priority_df = SalesAnalyzer.calculate_order_priority(
+            summary_df, forecast_df, forecast_date, lead_time_months
+        )
+
+        model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_df)
+
+        top_model_colors = model_color_summary.head(top_n)
+
+        top_recommendations = []
+        for _, row in top_model_colors.iterrows():
+            model = row["MODEL"]
+            color = row["COLOR"]
+            size_breakdown = SalesAnalyzer.prepare_pattern_matching_input(
+                priority_df, model, color
+            )
+
+            top_recommendations.append(
+                {
+                    "model": model,
+                    "color": color,
+                    "priority_score": row["PRIORITY_SCORE"],
+                    "total_deficit": row["DEFICIT"],
+                    "forecast_demand": row["FORECAST_LEADTIME"],
+                    "coverage_gap": row["COVERAGE_GAP"],
+                    "urgent": row["URGENT"],
+                    "size_quantities": size_breakdown,
+                }
+            )
+
+        return {
+            "priority_skus": priority_df,
+            "model_color_summary": model_color_summary,
+            "top_recommendations": top_recommendations,
+        }

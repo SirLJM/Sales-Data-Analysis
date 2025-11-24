@@ -1,3 +1,4 @@
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -13,11 +14,14 @@ from sales_data import SalesAnalyzer, SalesDataLoader
 
 st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊", layout="wide")
 
-tab1, tab2 = st.tabs(["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer"])
+tab1, tab2, tab3 = st.tabs(
+    ["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer", "🎯 Order Recommendations"]
+)
 
 # ========================================
 # TAB 1: SALES & INVENTORY ANALYSIS
 # ========================================
+
 with tab1:
     st.markdown(
         """
@@ -542,10 +546,6 @@ with tab1:
     st.download_button(
         download_label, display_data.to_csv(index=False), download_filename, "text/csv"
     )
-
-    # ========================================
-    # STOCK PROJECTION CHART
-    # ========================================
 
     if stock_loaded and use_forecast and forecast_df is not None and not group_by_model:
         st.markdown("---")
@@ -1163,3 +1163,253 @@ with tab2:
                     )
 
                     st.dataframe(production_data, width="content", hide_index=True)
+
+# ========================================
+# TAB 3: ORDER RECOMMENDATIONS
+# ========================================
+
+with tab3:
+    st.title("🎯 Order Recommendations")
+    st.write(
+        "Automatically prioritize which models and colors to order based on stock levels, forecasts, and ROP thresholds."
+    )
+
+    if "recommendations_data" not in st.session_state:
+        st.session_state.recommendations_data = None
+    if "recommendations_top_n" not in st.session_state:
+        st.session_state.recommendations_top_n = 10
+
+    if not stock_loaded or not use_forecast or forecast_df is None:
+        st.warning("⚠️ Please load both stock and forecast data in Tab 1 to use this feature.")
+    else:
+        col_top_n, col_calc, col_clear = st.columns([3, 1, 1])
+        with col_top_n:
+            top_n_recommendations = st.slider(
+                "Number of top priority models to show:",
+                min_value=5,
+                max_value=50,
+                value=st.session_state.recommendations_top_n,
+                step=5,
+            )
+            st.session_state.recommendations_top_n = top_n_recommendations
+        with col_calc:
+            st.write("")
+            st.write("")
+            calculate_recommendations = st.button("Generate Recommendations", type="primary")
+        with col_clear:
+            st.write("")
+            st.write("")
+            if st.button("Clear", type="secondary"):
+                st.session_state.recommendations_data = None
+                st.rerun()
+
+        if calculate_recommendations:
+            with st.spinner("Calculating order priorities..."):
+                try:
+                    recommendations = SalesAnalyzer.generate_order_recommendations(
+                        summary_df=summary,
+                        forecast_df=forecast_df,
+                        forecast_date=forecast_date,
+                        lead_time_months=lead_time,
+                        top_n=top_n_recommendations,
+                    )
+
+                    st.session_state.recommendations_data = recommendations
+
+                    st.success(f"✅ Analyzed {len(recommendations['priority_skus'])} SKUs - scroll down to view results")
+
+                except Exception as e:
+                    st.error(f"Error generating recommendations: {e}")
+                    import traceback
+
+                    st.code(traceback.format_exc())
+
+        if st.session_state.recommendations_data is not None:
+            recommendations = st.session_state.recommendations_data
+
+            pattern_sets_data = load_pattern_sets()
+            pattern_set_options = {ps.name: ps.size_names for ps in pattern_sets_data}
+
+            priority_by_model = (
+                recommendations["model_color_summary"]  # type: ignore
+                .groupby("MODEL")
+                .agg({"PRIORITY_SCORE": "mean", "DEFICIT": "sum", "URGENT": "any"})
+                .sort_values("PRIORITY_SCORE", ascending=False)
+                .head(st.session_state.recommendations_top_n)
+            )
+
+            st.subheader("Top Priority Models")
+            st.write(
+                "For each model, select the appropriate pattern set, then optimize patterns for each color."
+            )
+
+            for model_idx, (model, model_row) in enumerate(priority_by_model.iterrows(), 1):
+                urgent_badge = "🚨 URGENT" if model_row["URGENT"] else ""
+                with st.expander(
+                    f"#{model_idx} - Model: {model} | Score: {model_row['PRIORITY_SCORE']:.1f} {urgent_badge}",
+                    expanded=(model_idx <= 2),
+                ):
+                    selected_pattern = st.selectbox(
+                        "Select pattern set for this model:",
+                        options=list(pattern_set_options.keys()),
+                        key=f"pattern_{model}",
+                    )
+
+                    pattern_sizes = pattern_set_options[selected_pattern]
+
+                    model_colors = recommendations["model_color_summary"][  # type: ignore
+                        recommendations["model_color_summary"]["MODEL"] == model  # type: ignore
+                    ]
+
+                    st.write(f"**{len(model_colors)} color(s) in model {model}:**")  # type: ignore
+
+                    for color_idx, (_, color_row) in enumerate(model_colors.iterrows()):  # type: ignore
+                        color = color_row["COLOR"]
+                        st.markdown(f"### Color: {color}")
+
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Priority Score", f"{color_row['PRIORITY_SCORE']:.1f}")
+                        with col2:
+                            st.metric("Deficit", f"{color_row['DEFICIT']:.0f}")
+                        with col3:
+                            st.metric(
+                                "Forecast Demand",
+                                f"{color_row['FORECAST_LEADTIME']:.0f}",
+                            )
+
+                        size_quantities = SalesAnalyzer.prepare_pattern_matching_input(
+                            recommendations["priority_skus"],  # type: ignore
+                            model,
+                            color,
+                            pattern_sizes,
+                        )
+
+                        st.write("**Size Quantities Needed (All pattern sizes):**")
+                        size_df = pd.DataFrame(
+                            [
+                                {"Size": size, "Quantity": qty}
+                                for size, qty in size_quantities.items()
+                            ]
+                        )
+                        st.dataframe(size_df, hide_index=True, width="content")
+
+                        if st.button(
+                            "🎯 Optimize Cutting Patterns",
+                            key=f"optimize_{model}_{color}",
+                        ):
+                            active_pattern_set = next(
+                                ps for ps in pattern_sets_data if ps.name == selected_pattern
+                            )
+
+                            result = optimize_patterns(
+                                size_quantities,
+                                active_pattern_set.patterns,
+                                MIN_ORDER_PER_PATTERN,
+                            )
+
+                            result_key = f"opt_result_{model}_{color}"
+                            if "optimization_results" not in st.session_state:
+                                st.session_state.optimization_results = {}
+                            st.session_state.optimization_results[result_key] = result
+
+                        result_key = f"opt_result_{model}_{color}"
+                        if (
+                            "optimization_results" in st.session_state
+                            and result_key in st.session_state.optimization_results
+                        ):
+                            result = st.session_state.optimization_results[result_key]
+
+                            st.write("### Pattern Optimization Result")
+                            met_col1, met_col2, met_col3 = st.columns(3)
+                            with met_col1:
+                                st.metric("Total Patterns", result["total_patterns"])
+                            with met_col2:
+                                st.metric("Total Excess", result["total_excess"])
+                            with met_col3:
+                                coverage_icon = "✅" if result["all_covered"] else "❌"
+                                st.metric("Coverage", coverage_icon)
+
+                            if result["allocation"]:
+                                st.write("**Cutting Patterns to Order:**")
+                                allocation_data = []
+                                active_pattern_set = next(
+                                    ps
+                                    for ps in pattern_sets_data
+                                    if ps.name == selected_pattern
+                                )
+                                for pattern in active_pattern_set.patterns:
+                                    count = result["allocation"].get(pattern.id, 0)
+                                    if count > 0:
+                                        sizes_str = " + ".join(
+                                            [
+                                                f"{c}×{s}"
+                                                for s, c in pattern.sizes.items()
+                                            ]
+                                        )
+                                        allocation_data.append(
+                                            {
+                                                "Pattern": pattern.name,
+                                                "Count": count,
+                                                "Composition": sizes_str,
+                                            }
+                                        )
+                                if allocation_data:
+                                    st.dataframe(
+                                        allocation_data,
+                                        hide_index=True,
+                                        width="content",
+                                    )
+                            else:
+                                st.info("No patterns allocated.")
+
+                            st.write("**Production vs Required:**")
+                            production_data = []
+                            for size in pattern_sizes:
+                                required = size_quantities.get(size, 0)
+                                produced = result["produced"].get(size, 0)
+                                excess = result["excess"].get(size, 0)
+                                status = "✅" if produced >= required else "❌"
+                                production_data.append(
+                                    {
+                                        "Size": size,
+                                        "Required": required,
+                                        "Produced": produced,
+                                        "Excess": f"{excess:+d}",
+                                        "Status": status,
+                                    }
+                                )
+                            st.dataframe(
+                                production_data, hide_index=True, width="content"
+                            )
+
+                        st.markdown("---")
+
+            st.markdown("---")
+            st.subheader("Full Model+Color Priority Summary")
+            display_cols = [
+                "MODEL",
+                "COLOR",
+                "PRIORITY_SCORE",
+                "DEFICIT",
+                "FORECAST_LEADTIME",
+                "COVERAGE_GAP",
+                "URGENT",
+            ]
+            available_cols = [
+                col
+                for col in display_cols
+                if col in recommendations["model_color_summary"].columns  # type: ignore
+            ]
+            st.dataframe(
+                recommendations["model_color_summary"][available_cols],  # type: ignore
+                hide_index=True,
+                height=400,
+            )
+
+            st.download_button(
+                "📥 Download Full Priority Report (SKU level)",
+                recommendations["priority_skus"].to_csv(index=False),  # type: ignore
+                "order_priority_report.csv",
+                "text/csv",
+            )
