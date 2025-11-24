@@ -191,3 +191,42 @@ class SalesAnalyzer:
 
         base_cols = ["MONTHS", "QUANTITY", "AVERAGE SALES", "SD", "CV", "TYPE", "SS", "ROP"]
         return df[[id_column] + base_cols]
+
+    @staticmethod
+    def calculate_forecast_metrics(
+        forecast_df: pd.DataFrame, file_date: datetime
+    ) -> pd.DataFrame:
+
+        if forecast_df.empty:
+            return pd.DataFrame(columns=["sku", "FORECAST_8W", "FORECAST_16W"])
+
+        forecast_df["data"] = pd.to_datetime(forecast_df["data"])
+
+        weeks_8_end = file_date + pd.Timedelta(weeks=8)
+        weeks_16_end = file_date + pd.Timedelta(weeks=16)
+
+        forecast_8w = forecast_df[
+            (forecast_df["data"] >= file_date) & (forecast_df["data"] < weeks_8_end)
+        ]
+
+        forecast_16w = forecast_df[
+            (forecast_df["data"] >= file_date) & (forecast_df["data"] < weeks_16_end)
+        ]
+
+        forecast_8w_sum = (
+            forecast_8w.groupby("sku")["forecast"].sum().reset_index().rename(columns={"forecast": "FORECAST_8W"})
+        )
+
+        forecast_16w_sum = (
+            forecast_16w.groupby("sku")["forecast"]
+            .sum()
+            .reset_index()
+            .rename(columns={"forecast": "FORECAST_16W"})
+        )
+
+        result = forecast_8w_sum.merge(forecast_16w_sum, on="sku", how="outer")
+
+        result["FORECAST_8W"] = result["FORECAST_8W"].fillna(0).round(2)
+        result["FORECAST_16W"] = result["FORECAST_16W"].fillna(0).round(2)
+
+        return result

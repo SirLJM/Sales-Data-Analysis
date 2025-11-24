@@ -191,8 +191,9 @@ with tab1:
     group_by_model = st.sidebar.checkbox("Group by Model (first 5 chars)", value=False)
 
     st.sidebar.markdown("---")
-    st.sidebar.subheader("Stock Data")
+    st.sidebar.subheader("Load additional data")
     use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
+    use_forecast = st.sidebar.checkbox("Load forecast data from data directory", value=True)
 
     # -----------END OF SIDEBAR-------------
 
@@ -208,6 +209,16 @@ with tab1:
         if stock_file:
             return loader.load_stock_file(stock_file), stock_file.name
         return None, None
+
+    @st.cache_data
+    def load_forecast():
+        loader = SalesDataLoader()
+        forecast_result = loader.get_latest_forecast_file()
+        if forecast_result:
+            forecast_file, file_date = forecast_result
+            df_forecast = loader.load_forecast_file(forecast_file)
+            return df_forecast, file_date, forecast_file.name
+        return None, None, None
 
     df = load_data()
     analyzer = SalesAnalyzer(df)
@@ -277,9 +288,35 @@ with tab1:
 
             stock_loaded = True
         else:
-            st.warning(
-                "No stock file found in data directory. Expected format: YYYYMMDD.csv or YYYYMMDD.xlsx"
-            )
+            st.info("ℹ️ No stock file found. Stock-related columns will not be available.")
+
+    if use_forecast:
+        forecast_df, forecast_date, forecast_filename = load_forecast()
+        if forecast_df is not None:
+            try:
+                forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(forecast_df, forecast_date)
+
+                if group_by_model:
+                    forecast_metrics["MODEL"] = forecast_metrics["sku"].astype(str).str[:5]
+                    forecast_agg = (
+                        forecast_metrics.groupby("MODEL")
+                        .agg({"FORECAST_8W": "sum", "FORECAST_16W": "sum"})
+                        .reset_index()
+                    )
+                    summary = summary.merge(forecast_agg, on="MODEL", how="left")
+                else:
+                    forecast_metrics = forecast_metrics.rename(columns={"sku": "SKU"})
+                    summary = summary.merge(
+                        forecast_metrics[["SKU", "FORECAST_8W", "FORECAST_16W"]], on="SKU", how="left"
+                    )
+
+                summary["FORECAST_8W"] = summary["FORECAST_8W"].fillna(0)
+                summary["FORECAST_16W"] = summary["FORECAST_16W"].fillna(0)
+
+            except Exception as e:
+                st.error(f"❌ Error processing forecast data: {e}")
+        else:
+            st.info("ℹ️ No forecast file found. Forecast columns will not be available.")
 
     if stock_loaded:
         if group_by_model:
@@ -287,15 +324,18 @@ with tab1:
                 id_column,
                 "TYPE",
                 "STOCK",
-                "VALUE",
                 "ROP",
+                "FORECAST_8W",
+                "FORECAST_16W",
                 "OVERSTOCKED_%",
                 "DEFICIT",
                 "MONTHS",
                 "QUANTITY",
                 "AVERAGE SALES",
                 "LAST_2_YEARS_AVG",
+                "CV",
                 "SS",
+                "VALUE",
                 "BELOW_ROP",
             ]
         else:
@@ -304,15 +344,18 @@ with tab1:
                 "DESCRIPTION",
                 "TYPE",
                 "STOCK",
-                "VALUE",
                 "ROP",
+                "FORECAST_8W",
+                "FORECAST_16W",
                 "OVERSTOCKED_%",
                 "DEFICIT",
                 "MONTHS",
                 "QUANTITY",
                 "AVERAGE SALES",
                 "LAST_2_YEARS_AVG",
+                "CV",
                 "SS",
+                "VALUE",
                 "BELOW_ROP",
             ]
     else:
@@ -324,9 +367,13 @@ with tab1:
             "AVERAGE SALES",
             "LAST_2_YEARS_AVG",
             "SS",
+            "CV",
             "ROP",
+            "FORECAST_8W",
+            "FORECAST_16W",
         ]
 
+    column_order = [col for col in column_order if col in summary.columns]
     summary = summary[column_order]
 
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
@@ -524,7 +571,6 @@ with tab2:
     if "num_sizes" not in st.session_state:
         st.session_state.num_sizes = 5
 
-    # Custom CSS
     st.markdown(
         """
     <style>

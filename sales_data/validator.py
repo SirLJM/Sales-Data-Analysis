@@ -15,6 +15,7 @@ class DataValidator:
         "available_stock",
         "aktywny",
     }
+    FORECAST_COLUMNS = {"data", "sku", "forecast"}
 
     @staticmethod
     def validate_sales_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
@@ -67,6 +68,24 @@ class DataValidator:
         return is_valid, errors
 
     @staticmethod
+    def validate_forecast_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+
+        errors = []
+
+        missing_columns = DataValidator.FORECAST_COLUMNS - set(df.columns)
+        if missing_columns:
+            errors.append(f"Missing required columns: {', '.join(missing_columns)}")
+
+        if len(df) == 0:
+            errors.append("DataFrame is empty")
+
+        if "forecast" in df.columns and not pd.api.types.is_numeric_dtype(df["forecast"]):
+            errors.append("Column 'forecast' must be numeric")
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
+
+    @staticmethod
     def find_sheet_by_columns(
         file_path: Path, required_columns: set, data_type: str = "data"
     ) -> Optional[str]:
@@ -96,6 +115,10 @@ class DataValidator:
     @staticmethod
     def find_stock_sheet(file_path: Path) -> Optional[str]:
         return DataValidator.find_sheet_by_columns(file_path, DataValidator.STOCK_COLUMNS, "stock")
+
+    @staticmethod
+    def find_forecast_sheet(file_path: Path) -> Optional[str]:
+        return DataValidator.find_sheet_by_columns(file_path, DataValidator.FORECAST_COLUMNS, "data")
 
     @staticmethod
     def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> Dict[str, Any]:

@@ -23,13 +23,15 @@ class SalesDataLoader:
                 self.archival_sales_dir = Path(lines[0]) if len(lines) > 0 else Path("data")
                 self.current_sales_dir = Path(lines[1]) if len(lines) > 1 else Path("data")
                 self.stock_dir = Path(lines[2]) if len(lines) > 2 else Path("data")
+                self.forecast_dir = Path(lines[3]) if len(lines) > 3 else Path("data")
         else:
             self.archival_sales_dir = Path("data")
             self.current_sales_dir = Path("data")
             self.stock_dir = Path("data")
+            self.forecast_dir = Path("data")
 
     @staticmethod
-    def _parse_filename(filename: str) -> Optional[tuple]:
+    def _parse_sales_filename(filename: str) -> Optional[tuple]:
 
         pattern = r"(\d{8})[_-](\d{8})\.(csv|xlsx)$"
         match = re.match(pattern, filename)
@@ -59,6 +61,20 @@ class SalesDataLoader:
                 return None
         return None
 
+    @staticmethod
+    def _parse_forecast_filename(filename: str) -> Optional[datetime]:
+        pattern = r"^forecast_\d{4}_\d{2}_\d{2}_generated_(\d{4})_(\d{2})_(\d{2})\.(csv|xlsx)$"
+        match = re.match(pattern, filename)
+
+        if match:
+            year, month, day, _ = match.groups()
+            try:
+                file_date = datetime(int(year), int(month), int(day))
+                return file_date
+            except ValueError:
+                return None
+        return None
+
     def find_data_files(self) -> List[tuple]:
         files_info = []
         seen_dates = set()
@@ -67,7 +83,7 @@ class SalesDataLoader:
             for file_path in list(self.archival_sales_dir.glob("*.csv")) + list(
                 self.archival_sales_dir.glob("*.xlsx")
             ):
-                date_range = self._parse_filename(file_path.name)
+                date_range = self._parse_sales_filename(file_path.name)
                 if date_range is not None:
                     date_key = (date_range[0], date_range[1])
                     if date_key not in seen_dates:
@@ -79,7 +95,7 @@ class SalesDataLoader:
             for file_path in list(self.current_sales_dir.glob("*.csv")) + list(
                 self.current_sales_dir.glob("*.xlsx")
             ):
-                date_range = self._parse_filename(file_path.name)
+                date_range = self._parse_sales_filename(file_path.name)
                 if date_range is not None:
                     current_files.append((file_path, date_range[0], date_range[1]))
 
@@ -114,6 +130,29 @@ class SalesDataLoader:
 
         return files_info
 
+    def find_forecast_files(self) -> List[Tuple[Path, datetime]]:
+        files_info = []
+        seen_dates = {}
+
+        if self.forecast_dir.exists():
+            all_files = list(self.forecast_dir.glob("forecast_*.csv")) + list(
+                self.forecast_dir.glob("forecast_*.xlsx")
+            )
+
+            for file_path in all_files:
+                file_date = self._parse_forecast_filename(file_path.name)
+                if file_date is not None:
+                    if file_date not in seen_dates:
+                        seen_dates[file_date] = file_path
+                    elif file_path.suffix == ".xlsx" and seen_dates[file_date].suffix == ".csv":
+                        seen_dates[file_date] = file_path
+
+            files_info = [(path, date) for date, path in seen_dates.items()]
+
+        files_info.sort(key=lambda x: x[1])
+
+        return files_info
+
     def get_latest_stock_file(self) -> Optional[Path]:
 
         stock_files = self.find_stock_files()
@@ -131,7 +170,7 @@ class SalesDataLoader:
             for file_path in list(self.current_sales_dir.glob("*.csv")) + list(
                 self.current_sales_dir.glob("*.xlsx")
             ):
-                date_range = self._parse_filename(file_path.name)
+                date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:
                     current_year_files.append((file_path, date_range[1]))
 
@@ -140,6 +179,14 @@ class SalesDataLoader:
 
         current_year_files.sort(key=lambda x: x[1], reverse=True)
         return current_year_files[0][0]
+
+    def get_latest_forecast_file(self) -> Optional[Tuple[Path, datetime]]:
+        forecast_files = self.find_forecast_files()
+
+        if not forecast_files:
+            return None
+
+        return forecast_files[-1]
 
     def load_sales_file(self, file_path: Path) -> pd.DataFrame:
 
@@ -162,7 +209,7 @@ class SalesDataLoader:
 
         df = df.dropna(how="all")
 
-        date_range = self._parse_filename(file_path.name)
+        date_range = self._parse_sales_filename(file_path.name)
         if date_range:
             df["file_start_date"] = date_range[0]
             df["file_end_date"] = date_range[1]
@@ -189,6 +236,33 @@ class SalesDataLoader:
         df = df[df["aktywny"] == 1]
 
         df = df[["sku", "nazwa", "cena_netto", "available_stock"]].copy()
+
+        return df
+
+    def load_forecast_file(self, file_path: Path) -> pd.DataFrame:
+        if file_path.suffix == ".csv":
+            df = pd.read_csv(file_path)
+        elif file_path.suffix == ".xlsx":
+            sheet_name = self.validator.find_forecast_sheet(file_path)
+            if sheet_name:
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+            else:
+                df = pd.read_excel(file_path, sheet_name="Sheet1")
+        else:
+            raise ValueError(f"Unsupported file format: {file_path.suffix}")
+
+        is_valid, errors = self.validator.validate_forecast_data(df)
+        if not is_valid:
+            raise ValueError(f"Invalid forecast data: {errors}")
+
+        required_cols = ["data", "sku", "forecast"]
+        if "model" in df.columns:
+            required_cols.append("model")
+
+        df = df[required_cols].copy()
+
+        if "data" in df.columns:
+            df["data"] = pd.to_datetime(df["data"])
 
         return df
 
