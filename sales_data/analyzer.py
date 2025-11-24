@@ -230,3 +230,63 @@ class SalesAnalyzer:
         result["FORECAST_16W"] = result["FORECAST_16W"].fillna(0).round(2)
 
         return result
+
+    @staticmethod
+    def calculate_stock_projection(
+        sku: str,
+        current_stock: float,
+        rop: float,
+        safety_stock: float,
+        forecast_df: pd.DataFrame,
+        start_date: datetime,
+        projection_months: int = 12,
+    ) -> pd.DataFrame:
+        if forecast_df.empty:
+            return pd.DataFrame(
+                columns=["date", "projected_stock", "rop_reached", "zero_reached"]
+            )
+
+        sku_forecast = forecast_df[forecast_df["sku"] == sku].copy()
+
+        if sku_forecast.empty:
+            return pd.DataFrame(
+                columns=["date", "projected_stock", "rop_reached", "zero_reached"]
+            )
+
+        sku_forecast["data"] = pd.to_datetime(sku_forecast["data"])
+
+        end_date = start_date + pd.DateOffset(months=projection_months)
+        sku_forecast = sku_forecast[
+            (sku_forecast["data"] >= start_date) & (sku_forecast["data"] <= end_date)
+        ]
+
+        # noinspection PyArgumentList
+        sku_forecast = sku_forecast.sort_values("data")
+
+        projection = [{
+            "date": start_date,
+            "projected_stock": current_stock,
+            "rop_reached": current_stock <= rop,
+            "zero_reached": current_stock <= 0,
+        }]
+
+        running_stock = current_stock
+
+        for _, row in sku_forecast.iterrows():
+            running_stock -= row["forecast"]
+
+            projection.append(
+                {
+                    "date": row["data"],
+                    "projected_stock": running_stock,
+                    "rop_reached": running_stock <= rop,
+                    "zero_reached": running_stock <= 0,
+                }
+            )
+
+        projection_df = pd.DataFrame(projection)
+
+        projection_df["rop"] = rop
+        projection_df["safety_stock"] = safety_stock
+
+        return projection_df

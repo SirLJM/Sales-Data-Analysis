@@ -384,6 +384,7 @@ with tab1:
         )
         search_term = st.text_input(search_label, placeholder=search_placeholder)
     with col2:
+        st.space("small")
         if stock_loaded:
             show_only_below_rop = st.checkbox("Show only below ROP", value=False)
         else:
@@ -393,7 +394,6 @@ with tab1:
             show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
         else:
             show_bestsellers = False
-            st.write("_Bestsellers (model view only)_")
     with col4:
         type_filter = st.multiselect(
             "Filter by Type:", options=["basic", "regular", "seasonal", "new"], default=[]
@@ -543,6 +543,198 @@ with tab1:
         download_label, display_data.to_csv(index=False), download_filename, "text/csv"
     )
 
+    # ========================================
+    # STOCK PROJECTION CHART
+    # ========================================
+
+    if stock_loaded and use_forecast and forecast_df is not None and not group_by_model:
+        st.markdown("---")
+        st.subheader("📈 Stock Projection Analysis")
+
+        available_skus = sorted(
+            summary[
+                (summary["STOCK"].notna())
+                & (summary["ROP"].notna())
+                & (summary[id_column].isin(forecast_df["sku"].unique()))
+            ][id_column].unique()
+        )
+
+        if len(available_skus) > 0:
+            col_sku, col_months = st.columns([3, 1])
+
+            with col_sku:
+                selected_sku = st.text_input(
+                    "Enter SKU to analyze:",
+                    placeholder="Type SKU...",
+                    help="Enter a SKU with both stock and forecast data available",
+                )
+
+            with col_months:
+                projection_months = st.slider(
+                    "Projection months:", min_value=1, max_value=12, value=6, step=1
+                )
+
+            st.caption(f"📦 {len(available_skus)} SKUs available with complete data")
+
+            if selected_sku:
+                if selected_sku not in available_skus:
+                    st.warning(
+                        f"⚠️ SKU '{selected_sku}' not found or missing stock/forecast data."
+                    )
+                else:
+                    sku_data = summary[summary[id_column] == selected_sku].iloc[0]
+                    current_stock = sku_data["STOCK"]
+                    rop = sku_data["ROP"]
+                    safety_stock = sku_data["SS"]
+                    avg_sales = sku_data["AVERAGE SALES"]
+
+                    projection_df = SalesAnalyzer.calculate_stock_projection(
+                        sku=selected_sku,
+                        current_stock=current_stock,
+                        rop=rop,
+                        safety_stock=safety_stock,
+                        forecast_df=forecast_df,
+                        start_date=forecast_date,
+                        projection_months=projection_months,
+                    )
+
+                    if not projection_df.empty:
+                        import plotly.graph_objects as go
+
+                        fig = go.Figure()
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=projection_df["date"],
+                                y=projection_df["projected_stock"],
+                                mode="lines+markers",
+                                name="Projected Stock",
+                                line={"color": "blue", "width": 3},
+                                marker={"size": 6},
+                            )
+                        )
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=projection_df["date"],
+                                y=projection_df["rop"],
+                                mode="lines",
+                                name=f"ROP ({rop:.0f})",
+                                line={"color": "orange", "width": 2, "dash": "dash"},
+                            )
+                        )
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=projection_df["date"],
+                                y=projection_df["safety_stock"],
+                                mode="lines",
+                                name=f"Safety Stock ({safety_stock:.0f})",
+                                line={"color": "yellow", "width": 2, "dash": "dot"},
+                            )
+                        )
+
+                        fig.add_trace(
+                            go.Scatter(
+                                x=projection_df["date"],
+                                y=[0] * len(projection_df),
+                                mode="lines",
+                                name="Zero Stock",
+                                line={"color": "red", "width": 2, "dash": "dash"},
+                            )
+                        )
+
+                        rop_cross = projection_df[
+                            (projection_df["rop_reached"])
+                            & (~projection_df["rop_reached"].shift(1, fill_value=False))
+                        ]
+                        zero_cross = projection_df[
+                            (projection_df["zero_reached"])
+                            & (~projection_df["zero_reached"].shift(1, fill_value=False))
+                        ]
+
+                        if not rop_cross.empty:
+                            first_rop = rop_cross.iloc[0]
+                            fig.add_annotation(
+                                x=first_rop["date"],
+                                y=first_rop["projected_stock"],
+                                text="ROP Reached",
+                                showarrow=True,
+                                arrowhead=2,
+                                arrowcolor="orange",
+                                ax=0,
+                                ay=-40,
+                                bgcolor="orange",
+                                font={"color": "white"},
+                            )
+
+                        if not zero_cross.empty:
+                            first_zero = zero_cross.iloc[0]
+                            fig.add_annotation(
+                                x=first_zero["date"],
+                                y=first_zero["projected_stock"],
+                                text="Stockout!",
+                                showarrow=True,
+                                arrowhead=2,
+                                arrowcolor="red",
+                                ax=0,
+                                ay=-40,
+                                bgcolor="red",
+                                font={"color": "white"},
+                            )
+
+                        fig.update_layout(
+                            title=f"Stock Projection for {selected_sku}",
+                            xaxis_title="Date",
+                            yaxis_title="Quantity",
+                            hovermode="x unified",
+                            height=500,
+                            showlegend=True,
+                            legend={
+                                "orientation": "h",
+                                "yanchor": "bottom",
+                                "y": 1.02,
+                                "xanchor": "right",
+                                "x": 1,
+                            },
+                        )
+
+                        st.plotly_chart(fig, width="stretch")
+
+                        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                        with metric_col1:
+                            st.metric("Current Stock", f"{current_stock:.0f}")
+                        with metric_col2:
+                            st.metric("ROP", f"{rop:.0f}")
+                        with metric_col3:
+                            st.metric("Safety Stock", f"{safety_stock:.0f}")
+                        with metric_col4:
+                            st.metric("Avg Monthly Sales", f"{avg_sales:.0f}")
+
+                        if not rop_cross.empty:
+                            days_to_rop = (rop_cross.iloc[0]["date"] - forecast_date).days
+                            if days_to_rop <= 30:
+                                st.error(
+                                    f"⚠️ Stock will reach ROP in {days_to_rop} days ({rop_cross.iloc[0]['date'].strftime('%Y-%m-%d')})"
+                                )
+                            else:
+                                st.warning(
+                                    f"Stock will reach ROP in {days_to_rop} days ({rop_cross.iloc[0]['date'].strftime('%Y-%m-%d')})"
+                                )
+
+                        if not zero_cross.empty:
+                            days_to_zero = (zero_cross.iloc[0]["date"] - forecast_date).days
+                            st.error(
+                                f"🚨 Stockout predicted in {days_to_zero} days ({zero_cross.iloc[0]['date'].strftime('%Y-%m-%d')})"
+                            )
+
+                    else:
+                        st.info("No forecast data available for this SKU in the projection window.")
+        else:
+            st.info(
+                "No SKUs have both stock and forecast data available. Load both datasets to use this feature."
+            )
+
 # ========================================
 # TAB 2: SIZE PATTERN OPTIMIZER
 # ========================================
@@ -550,7 +742,6 @@ with tab1:
 with tab2:
     st.title("Size Pattern Optimizer")
 
-    # Initialize session state
     if "pattern_sets" not in st.session_state:
         st.session_state.pattern_sets = load_pattern_sets()
 
