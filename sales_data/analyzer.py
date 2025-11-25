@@ -432,18 +432,18 @@ class SalesAnalyzer:
         return grouped
 
     @staticmethod
-    def prepare_pattern_matching_input(
-        priority_df: pd.DataFrame, model: str, color: str, pattern_sizes: list = None
+    def get_size_quantities_for_model_color(
+        priority_df: pd.DataFrame, model: str, color: str
     ) -> dict:
+        """Get size quantities needed for a specific model and color.
+
+        Returns dict mapping size to quantity needed (based on deficit or forecast).
+        """
         filtered = priority_df[
             (priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)
         ]
 
         size_quantities = {}
-
-        if pattern_sizes:
-            for size in pattern_sizes:
-                size_quantities[size] = 0
 
         for _, row in filtered.iterrows():
             size = row["SIZE"]
@@ -479,7 +479,7 @@ class SalesAnalyzer:
         for _, row in top_model_colors.iterrows():
             model = row["MODEL"]
             color = row["COLOR"]
-            size_breakdown = SalesAnalyzer.prepare_pattern_matching_input(
+            size_breakdown = SalesAnalyzer.get_size_quantities_for_model_color(
                 priority_df, model, color
             )
 
