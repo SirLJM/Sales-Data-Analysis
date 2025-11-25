@@ -447,7 +447,12 @@ class SalesAnalyzer:
 
         for _, row in filtered.iterrows():
             size = row["SIZE"]
-            qty_needed = max(row.get("DEFICIT", 0), row.get("FORECAST_LEADTIME", 0))
+            # Handle NaN values from DataFrame
+            deficit = row.get("DEFICIT", 0)
+            forecast = row.get("FORECAST_LEADTIME", 0)
+            deficit = 0 if pd.isna(deficit) else deficit
+            forecast = 0 if pd.isna(forecast) else forecast
+            qty_needed = max(deficit, forecast)
             if size:
                 size_quantities[size] = int(qty_needed)
 

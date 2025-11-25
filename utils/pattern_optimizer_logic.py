@@ -45,8 +45,8 @@ class PatternSet:
         )
 
 
-PATTERN_SETS_FILE = "../saved_pattern_sets.json"
-OPTIMIZER_PATTERN_SETS_FILE = "./optimizer_pattern_sets.json"
+PATTERN_SETS_FILE = "./saved_pattern_sets.json"
+OPTIMIZER_PATTERN_SETS_FILE = "./utils/optimizer_pattern_sets.json"
 
 
 def get_min_order_per_pattern() -> int:

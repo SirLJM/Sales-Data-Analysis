@@ -1279,7 +1279,7 @@ with tab3:
 
             st.subheader("Top Priority Models")
             st.write(
-                "For each model, select the appropriate pattern set, then optimize patterns for each color."
+                "Pattern sets are automatically matched to each model. Optimize cutting patterns for each color."
             )
 
             for model_idx, (model, model_row) in enumerate(priority_by_model.iterrows(), 1):
@@ -1288,11 +1288,18 @@ with tab3:
                     f"#{model_idx} - Model: {model} | Score: {model_row['PRIORITY_SCORE']:.1f} {urgent_badge}",
                     expanded=(model_idx <= 2),
                 ):
-                    selected_pattern = st.selectbox(
-                        "Select pattern set for this model:",
-                        options=list(pattern_set_options.keys()),
-                        key=f"pattern_{model}",
-                    )
+                    # Auto-match pattern set to model code
+                    if model in pattern_set_options:
+                        selected_pattern = model
+                        st.success(f"✓ Using pattern set: **{selected_pattern}**")
+                    else:
+                        st.warning(f"⚠️ No pattern set found for model **{model}**")
+                        st.info("Please add this model to `optimizer_pattern_sets.json` or select an existing pattern set:")
+                        selected_pattern = st.selectbox(
+                            "Select pattern set:",
+                            options=list(pattern_set_options.keys()),
+                            key=f"pattern_{model}",
+                        )
 
                     pattern_sizes = pattern_set_options[selected_pattern]
 
