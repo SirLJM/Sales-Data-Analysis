@@ -2,17 +2,41 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from pattern_optimizer_logic import (
-    MIN_ORDER_PER_PATTERN,
+from utils.pattern_optimizer_logic import (
     Pattern,
     PatternSet,
+    get_min_order_per_pattern,
     load_pattern_sets,
     optimize_patterns,
     save_pattern_sets,
+    OPTIMIZER_PATTERN_SETS_FILE,
 )
+
 from sales_data import SalesAnalyzer, SalesDataLoader
+from utils.settings_manager import load_settings, save_settings, reset_settings
+
+BELOW_ROP = "Below ROP"
+
+AVERAGE_SALES = "AVERAGE SALES"
+
+OVERSTOCKED__ = "OVERSTOCKED_%"
 
 st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊", layout="wide")
+
+if "settings" not in st.session_state:
+    st.session_state.settings = load_settings()
+
+
+def display_optimization_metrics(optimization_result: dict):
+    met_col1, met_col2, met_col3 = st.columns(3)
+    with met_col1:
+        st.metric("Total Patterns", optimization_result["total_patterns"])
+    with met_col2:
+        st.metric("Total Excess", optimization_result["total_excess"])
+    with met_col3:
+        coverage_icon = "✅" if optimization_result["all_covered"] else "❌"
+        st.metric("Coverage", coverage_icon)
+
 
 tab1, tab2, tab3 = st.tabs(
     ["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer", "🎯 Order Recommendations"]
@@ -41,16 +65,30 @@ with tab1:
 
     st.sidebar.header("Parameters")
 
+    col_save, col_reset = st.sidebar.columns(2)
+    with col_save:
+        if st.button("💾 Save", key="save_settings", help="Save current parameters to settings.json"):
+            if save_settings(st.session_state.settings):
+                st.success("✅ Saved!")
+            else:
+                st.error("❌ Save failed")
+    with col_reset:
+        if st.button("🔄 Reset", key="reset_settings", help="Reset to default values"):
+            st.session_state.settings = reset_settings()
+            st.rerun()
+
     st.sidebar.subheader("Lead Time")
     lead_time = st.sidebar.number_input(
         "Lead time in months",
         label_visibility="collapsed",
         min_value=0.0,
         max_value=100.0,
-        value=1.36,
+        value=st.session_state.settings["lead_time"],
         step=0.01,
         format="%.2f",
+        key="lead_time_input",
     )
+    st.session_state.settings["lead_time"] = lead_time
 
     st.sidebar.subheader("Service Levels")
     header_cols = st.sidebar.columns([2, 1.5, 1.5, 1.5])
@@ -72,22 +110,24 @@ with tab1:
             label_visibility="collapsed",
             min_value=0.0,
             max_value=1.0,
-            value=0.6,
+            value=st.session_state.settings["cv_thresholds"]["basic"],
             step=0.1,
             format="%.1f",
             key="basic_cv",
         )
+        st.session_state.settings["cv_thresholds"]["basic"] = service_basic
     with basic_cols[2]:
         z_score_basic = st.number_input(
             "Z-Score",
             label_visibility="collapsed",
             min_value=0.0,
             max_value=10.0,
-            value=2.05,
+            value=st.session_state.settings["z_scores"]["basic"],
             step=0.001,
             format="%.3f",
             key="basic_z",
         )
+        st.session_state.settings["z_scores"]["basic"] = z_score_basic
     with basic_cols[3]:
         st.write("-")
 
@@ -102,10 +142,11 @@ with tab1:
             label_visibility="collapsed",
             min_value=0.0,
             max_value=10.0,
-            value=1.645,
+            value=st.session_state.settings["z_scores"]["regular"],
             step=0.001,
             format="%.3f",
         )
+        st.session_state.settings["z_scores"]["regular"] = z_score_regular
     with regular_cols[3]:
         st.write("-")
 
@@ -118,35 +159,38 @@ with tab1:
             label_visibility="collapsed",
             min_value=service_basic,
             max_value=10.0,
-            value=1.0,
+            value=st.session_state.settings["cv_thresholds"]["seasonal"],
             step=0.1,
             format="%.1f",
             key="seasonal_cv",
         )
+        st.session_state.settings["cv_thresholds"]["seasonal"] = service_seasonal
     with seasonal_cols[2]:
         z_score_seasonal_1 = st.number_input(
             "Z-Score IN season",
             label_visibility="collapsed",
             min_value=0.0,
             max_value=10.0,
-            value=1.75,
+            value=st.session_state.settings["z_scores"]["seasonal_in"],
             step=0.001,
             format="%.3f",
             key="seasonal_z1",
             placeholder="IN season",
         )
+        st.session_state.settings["z_scores"]["seasonal_in"] = z_score_seasonal_1
     with seasonal_cols[3]:
         z_score_seasonal_2 = st.number_input(
             "Z-Score OUT of season",
             label_visibility="collapsed",
             min_value=0.0,
             max_value=10.0,
-            value=1.6,
+            value=st.session_state.settings["z_scores"]["seasonal_out"],
             step=0.001,
             format="%.3f",
             key="seasonal_z2",
             placeholder="OUT of season",
         )
+        st.session_state.settings["z_scores"]["seasonal_out"] = z_score_seasonal_2
 
     service_regular_min = service_basic
     service_regular_max = service_seasonal
@@ -160,21 +204,23 @@ with tab1:
             label_visibility="collapsed",
             min_value=12,
             max_value=24,
-            value=12,
+            value=st.session_state.settings["new_product_threshold_months"],
             step=1,
             key="new_cv",
         )
+        st.session_state.settings["new_product_threshold_months"] = service_new
     with new_cols[2]:
         z_score_new = st.number_input(
             "Z-Score",
             label_visibility="collapsed",
             min_value=0.0,
             max_value=10.0,
-            value=1.8,
+            value=st.session_state.settings["z_scores"]["new"],
             step=0.001,
             format="%.3f",
             key="new_z",
         )
+        st.session_state.settings["z_scores"]["new"] = z_score_new
     with new_cols[3]:
         st.write("-")
 
@@ -286,7 +332,7 @@ with tab1:
             summary["BELOW_ROP"] = summary["STOCK"] < summary["ROP"]
             summary["DEFICIT"] = summary["ROP"] - summary["STOCK"]
             summary["DEFICIT"] = summary["DEFICIT"].apply(lambda x: max(0, x))
-            summary["OVERSTOCKED_%"] = (
+            summary[OVERSTOCKED__] = (
                 (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
             ).round(1)
 
@@ -331,11 +377,11 @@ with tab1:
                 "ROP",
                 "FORECAST_8W",
                 "FORECAST_16W",
-                "OVERSTOCKED_%",
+                OVERSTOCKED__,
                 "DEFICIT",
                 "MONTHS",
                 "QUANTITY",
-                "AVERAGE SALES",
+                AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
                 "SS",
@@ -351,11 +397,11 @@ with tab1:
                 "ROP",
                 "FORECAST_8W",
                 "FORECAST_16W",
-                "OVERSTOCKED_%",
+                OVERSTOCKED__,
                 "DEFICIT",
                 "MONTHS",
                 "QUANTITY",
-                "AVERAGE SALES",
+                AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
                 "SS",
@@ -368,7 +414,7 @@ with tab1:
             "TYPE",
             "MONTHS",
             "QUANTITY",
-            "AVERAGE SALES",
+            AVERAGE_SALES,
             "LAST_2_YEARS_AVG",
             "SS",
             "CV",
@@ -430,10 +476,10 @@ with tab1:
     if show_bestsellers:
         filtered_summary = filtered_summary[filtered_summary["LAST_2_YEARS_AVG"] > 300]
 
-    if stock_loaded and show_overstocked and "OVERSTOCKED_%" in filtered_summary.columns:
+    if stock_loaded and show_overstocked and OVERSTOCKED__ in filtered_summary.columns:
         filtered_summary = filtered_summary[
-            filtered_summary["OVERSTOCKED_%"] >= overstock_threshold
-        ]
+            filtered_summary[OVERSTOCKED__] >= overstock_threshold
+            ]
 
     if type_filter:
         filtered_summary = filtered_summary[filtered_summary["TYPE"].isin(type_filter)]
@@ -464,10 +510,7 @@ with tab1:
         unsafe_allow_html=True,
     )
 
-    if stock_loaded:
-        st.dataframe(filtered_summary, width="stretch", height=600)
-    else:
-        st.dataframe(filtered_summary, width="stretch", height=600)
+    st.dataframe(filtered_summary, width="stretch", height=600)
 
     st.subheader("TYPE")
     display_data = filtered_summary
@@ -495,7 +538,7 @@ with tab1:
             items_below_rop = valid_stock[valid_stock["BELOW_ROP"]]
             total_deficit = items_below_rop["DEFICIT"].sum() if len(items_below_rop) > 0 else 0
 
-            col1.metric("Below ROP", int(below_rop_count), delta=None, delta_color="inverse")
+            col1.metric(BELOW_ROP, int(below_rop_count), delta=None, delta_color="inverse")
             col2.metric("Total Deficit (units)", f"{total_deficit:,.0f}")
             col3.metric(
                 "% Below ROP",
@@ -506,11 +549,11 @@ with tab1:
                 ),
             )
 
-            overstocked_count = int((valid_stock["OVERSTOCKED_%"] >= overstock_threshold).sum())
+            overstocked_count = int((valid_stock[OVERSTOCKED__] >= overstock_threshold).sum())
             normal_count = valid_stock_count - below_rop_count - overstocked_count
 
             pie_data = {
-                "Status": ["Below ROP", "Overstocked", "Normal"],
+                "Status": [BELOW_ROP, "Overstocked", "Normal"],
                 "Count": [below_rop_count, overstocked_count, normal_count],
             }
 
@@ -521,7 +564,7 @@ with tab1:
                 title=f"Stock Status Distribution (Overstock threshold: {overstock_threshold}%)",
                 color="Status",
                 color_discrete_map={
-                    "Below ROP": "#ff4b4b",
+                    BELOW_ROP: "#ff4b4b",
                     "Overstocked": "#ffa500",
                     "Normal": "#00cc00",
                 },
@@ -586,7 +629,7 @@ with tab1:
                     current_stock = sku_data["STOCK"]
                     rop = sku_data["ROP"]
                     safety_stock = sku_data["SS"]
-                    avg_sales = sku_data["AVERAGE SALES"]
+                    avg_sales = sku_data[AVERAGE_SALES]
 
                     projection_df = SalesAnalyzer.calculate_stock_projection(
                         sku=selected_sku,
@@ -797,6 +840,7 @@ with tab2:
         unsafe_allow_html=True,
     )
 
+    MIN_ORDER_PER_PATTERN = get_min_order_per_pattern()
     st.markdown(
         f'<div class="info-box">Minimum order per pattern: {MIN_ORDER_PER_PATTERN} units</div>',
         unsafe_allow_html=True,
@@ -1081,14 +1125,7 @@ with tab2:
                         quantities, active_set.patterns, MIN_ORDER_PER_PATTERN
                     )
 
-                    met_col1, met_col2, met_col3 = st.columns(3)
-                    with met_col1:
-                        st.metric("Total Patterns", result["total_patterns"])
-                    with met_col2:
-                        st.metric("Total Excess", result["total_excess"])
-                    with met_col3:
-                        coverage_icon = "✅" if result["all_covered"] else "❌"
-                        st.metric("Coverage", coverage_icon)
+                    display_optimization_metrics(result)
 
                     has_violations = len(result["min_order_violations"]) > 0
 
@@ -1212,6 +1249,7 @@ with tab3:
                         forecast_date=forecast_date,
                         lead_time_months=lead_time,
                         top_n=top_n_recommendations,
+                        settings=st.session_state.settings,
                     )
 
                     st.session_state.recommendations_data = recommendations
@@ -1227,7 +1265,8 @@ with tab3:
         if st.session_state.recommendations_data is not None:
             recommendations = st.session_state.recommendations_data
 
-            pattern_sets_data = load_pattern_sets()
+            # Load patterns from optimizer_pattern_sets.json (separate from Tab 2)
+            pattern_sets_data = load_pattern_sets(file_path=OPTIMIZER_PATTERN_SETS_FILE)
             pattern_set_options = {ps.name: ps.size_names for ps in pattern_sets_data}
 
             priority_by_model = (
@@ -1305,7 +1344,6 @@ with tab3:
                             result = optimize_patterns(
                                 size_quantities,
                                 active_pattern_set.patterns,
-                                MIN_ORDER_PER_PATTERN,
                             )
 
                             result_key = f"opt_result_{model}_{color}"
@@ -1321,14 +1359,7 @@ with tab3:
                             result = st.session_state.optimization_results[result_key]
 
                             st.write("### Pattern Optimization Result")
-                            met_col1, met_col2, met_col3 = st.columns(3)
-                            with met_col1:
-                                st.metric("Total Patterns", result["total_patterns"])
-                            with met_col2:
-                                st.metric("Total Excess", result["total_excess"])
-                            with met_col3:
-                                coverage_icon = "✅" if result["all_covered"] else "❌"
-                                st.metric("Coverage", coverage_icon)
+                            display_optimization_metrics(result)
 
                             if result["allocation"]:
                                 st.write("**Cutting Patterns to Order:**")

@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+AVERAGE_SALES = "AVERAGE SALES"
+
 
 class SalesAnalyzer:
     def __init__(self, data):
@@ -24,9 +26,9 @@ class SalesAnalyzer:
             {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}
         )
 
-        sku_summary.columns = ["SKU", "MONTHS", "QUANTITY", "AVERAGE SALES", "SD"]
+        sku_summary.columns = ["SKU", "MONTHS", "QUANTITY", AVERAGE_SALES, "SD"]
 
-        sku_summary["CV"] = sku_summary["SD"] / sku_summary["AVERAGE SALES"]
+        sku_summary["CV"] = sku_summary["SD"] / sku_summary[AVERAGE_SALES]
         sku_summary["CV"] = sku_summary["CV"].fillna(0)
 
         sku_summary = pd.merge(sku_summary, first_sale, on="SKU", how="left")
@@ -45,9 +47,9 @@ class SalesAnalyzer:
             {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}
         )
 
-        model_summary.columns = ["MODEL", "MONTHS", "QUANTITY", "AVERAGE SALES", "SD"]
+        model_summary.columns = ["MODEL", "MONTHS", "QUANTITY", AVERAGE_SALES, "SD"]
 
-        model_summary["CV"] = model_summary["SD"] / model_summary["AVERAGE SALES"]
+        model_summary["CV"] = model_summary["SD"] / model_summary[AVERAGE_SALES]
         model_summary["CV"] = model_summary["CV"].fillna(0)
 
         model_summary = pd.merge(model_summary, first_sale, on="MODEL", how="left")
@@ -143,7 +145,7 @@ class SalesAnalyzer:
         sqrt_lead_time = np.sqrt(lead_time)
 
         df["SS"] = df["z_score"] * df["SD"] * sqrt_lead_time
-        df["ROP"] = df["AVERAGE SALES"] * lead_time + df["SS"]
+        df["ROP"] = df[AVERAGE_SALES] * lead_time + df["SS"]
 
         seasonal_mask = df["TYPE"] == "seasonal"
         if isinstance(seasonal_mask, pd.Series) and seasonal_mask.any():
@@ -159,14 +161,14 @@ class SalesAnalyzer:
 
             df["SS_IN"] = np.where(seasonal_mask, z_seasonal_in * df["SD"] * sqrt_lead_time, np.nan)
             df["ROP_IN"] = np.where(
-                seasonal_mask, df["AVERAGE SALES"] * lead_time + df["SS_IN"], np.nan
+                seasonal_mask, df[AVERAGE_SALES] * lead_time + df["SS_IN"], np.nan
             )
 
             df["SS_OUT"] = np.where(
                 seasonal_mask, z_seasonal_out * df["SD"] * sqrt_lead_time, np.nan
             )
             df["ROP_OUT"] = np.where(
-                seasonal_mask, df["AVERAGE SALES"] * lead_time + df["SS_OUT"], np.nan
+                seasonal_mask, df[AVERAGE_SALES] * lead_time + df["SS_OUT"], np.nan
             )
 
             in_season_mask = df["is_in_season"]
@@ -189,7 +191,7 @@ class SalesAnalyzer:
             df["ROP_IN"] = df["ROP_IN"].round(2)
             df["ROP_OUT"] = df["ROP_OUT"].round(2)
 
-        base_cols = ["MONTHS", "QUANTITY", "AVERAGE SALES", "SD", "CV", "TYPE", "SS", "ROP"]
+        base_cols = ["MONTHS", "QUANTITY", AVERAGE_SALES, "SD", "CV", "TYPE", "SS", "ROP"]
         return df[[id_column] + base_cols]
 
     @staticmethod
@@ -306,7 +308,25 @@ class SalesAnalyzer:
         forecast_df: pd.DataFrame,
         forecast_date: datetime,
         lead_time_months: float = 1.36,
+        settings: dict = None,
     ) -> pd.DataFrame:
+        if settings is None:
+            from utils.settings_manager import load_settings
+
+            settings = load_settings()
+
+        rec_settings = settings.get("order_recommendations", {})
+        stockout_cfg = rec_settings.get("stockout_risk", {})
+        weights = rec_settings.get("priority_weights", {})
+        type_multipliers = rec_settings.get("type_multipliers", {})
+        demand_cap = rec_settings.get("demand_cap", 100)
+
+        zero_stock_penalty = stockout_cfg.get("zero_stock_penalty", 100)
+        below_rop_max = stockout_cfg.get("below_rop_max_penalty", 80)
+        weight_stockout = weights.get("stockout_risk", 0.5)
+        weight_revenue = weights.get("revenue_impact", 0.3)
+        weight_demand = weights.get("demand_forecast", 0.2)
+
         df = summary_df.copy()
 
         required_cols = ["SKU", "STOCK", "ROP", "TYPE"]
@@ -338,11 +358,11 @@ class SalesAnalyzer:
 
         df["STOCKOUT_RISK"] = 0.0
         zero_stock_mask = (df["STOCK"] <= 0) & (df["FORECAST_LEADTIME"] > 0)
-        df.loc[zero_stock_mask, "STOCKOUT_RISK"] = 100
+        df.loc[zero_stock_mask, "STOCKOUT_RISK"] = zero_stock_penalty
 
         below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
         df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
-            (df["ROP"] - df["STOCK"]) / df["ROP"] * 80
+            (df["ROP"] - df["STOCK"]) / df["ROP"] * below_rop_max
         )
 
         if "PRICE" in df.columns:
@@ -361,20 +381,21 @@ class SalesAnalyzer:
             else:
                 df["REVENUE_IMPACT"] = 0
 
-        type_multiplier = {
+        default_type_mult = {
             "new": 1.2,
             "seasonal": 1.3,
             "regular": 1.0,
             "basic": 0.9,
         }
-        df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_multiplier).fillna(1.0)
+        type_mult = {k: type_multipliers.get(k, v) for k, v in default_type_mult.items()}
+        df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_mult).fillna(1.0)
 
         df["DEFICIT"] = (df["ROP"] - df["STOCK"]).clip(lower=0)
 
         df["PRIORITY_SCORE"] = (
-            (df["STOCKOUT_RISK"] * 0.5)
-            + (df["REVENUE_IMPACT"] * 0.3)
-            + (df["FORECAST_LEADTIME"].clip(upper=100) * 0.2)
+            (df["STOCKOUT_RISK"] * weight_stockout)
+            + (df["REVENUE_IMPACT"] * weight_revenue)
+            + (df["FORECAST_LEADTIME"].clip(upper=demand_cap) * weight_demand)
         ) * df["TYPE_MULTIPLIER"]
 
         df["URGENT"] = (df["STOCK"] <= 0) | (
@@ -439,9 +460,10 @@ class SalesAnalyzer:
         forecast_date: datetime,
         lead_time_months: float = 1.36,
         top_n: int = 10,
+        settings: dict = None,
     ) -> dict:
         priority_df = SalesAnalyzer.calculate_order_priority(
-            summary_df, forecast_df, forecast_date, lead_time_months
+            summary_df, forecast_df, forecast_date, lead_time_months, settings
         )
 
         model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_df)

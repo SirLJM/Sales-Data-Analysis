@@ -3,6 +3,8 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Optional
 
+from utils.settings_manager import load_settings
+
 
 @dataclass
 class Pattern:
@@ -43,17 +45,25 @@ class PatternSet:
         )
 
 
-PATTERN_SETS_FILE = "saved_pattern_sets.json"
-MIN_ORDER_PER_PATTERN = 5
+PATTERN_SETS_FILE = "../saved_pattern_sets.json"
+OPTIMIZER_PATTERN_SETS_FILE = "../optimizer_pattern_sets.json"
 
 
-def load_pattern_sets() -> List[PatternSet]:
-    if os.path.exists(PATTERN_SETS_FILE):
+def get_min_order_per_pattern() -> int:
+    settings = load_settings()
+    return settings.get("optimizer", {}).get("min_order_per_pattern", 5)
+
+
+def load_pattern_sets(file_path: str = None) -> List[PatternSet]:
+    if file_path is None:
+        file_path = PATTERN_SETS_FILE
+
+    if os.path.exists(file_path):
         try:
-            with open(PATTERN_SETS_FILE, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return [PatternSet.from_dict(ps) for ps in data]
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (KeyError, ValueError):
             pass
     return [
         PatternSet(
@@ -72,21 +82,24 @@ def load_pattern_sets() -> List[PatternSet]:
     ]
 
 
-def save_pattern_sets(pattern_sets: List[PatternSet]):
-    with open(PATTERN_SETS_FILE, "w", encoding="utf-8") as f:
+def save_pattern_sets(pattern_sets: List[PatternSet], file_path: str = None):
+    if file_path is None:
+        file_path = PATTERN_SETS_FILE
+
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump([ps.to_dict() for ps in pattern_sets], f, indent=2)
 
 
 def optimize_patterns(
     quantities: Dict[str, int],
     patterns: List[Pattern],
-    min_per_pattern: int = MIN_ORDER_PER_PATTERN,
+    min_per_pattern: int = get_min_order_per_pattern(),
 ) -> Dict:
     if not patterns or not any(quantities.values()):
         return {
             "allocation": {},
-            "produced": {size: 0 for size in quantities},
-            "excess": {size: 0 for size in quantities},
+            "produced": dict.fromkeys(quantities, 0),
+            "excess": dict.fromkeys(quantities, 0),
             "total_patterns": 0,
             "total_excess": 0,
             "all_covered": False,
@@ -118,7 +131,7 @@ def optimize_patterns(
         best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
 
     allocation: Dict[int, int] = best_solution
-    produced: Dict[str, int] = {size: 0 for size in quantities}
+    produced: Dict[str, int] = dict.fromkeys(quantities, 0)
 
     for pattern in patterns:
         count = allocation.get(pattern.id, 0)
@@ -149,7 +162,7 @@ def optimize_patterns(
 def find_allocation_for_total(
     quantities: Dict[str, int], patterns: List[Pattern], total: int, min_per_pattern: int
 ) -> Optional[Dict[int, int]]:
-    allocation = {p.id: 0 for p in patterns}
+    allocation = dict.fromkeys((p.id for p in patterns), 0)
     remaining = quantities.copy()
     patterns_used = 0
 
@@ -195,7 +208,7 @@ def find_allocation_for_total(
 def greedy_overshoot(
     quantities: Dict[str, int], patterns: List[Pattern], min_per_pattern: int
 ) -> Dict[int, int]:
-    allocation = {p.id: 0 for p in patterns}
+    allocation = dict.fromkeys((p.id for p in patterns), 0)
     remaining = quantities.copy()
 
     max_iterations = 200
@@ -237,7 +250,7 @@ def greedy_overshoot(
 def calculate_total_excess(
     quantities: Dict[str, int], allocation: Dict[int, int], patterns: List[Pattern]
 ) -> int:
-    produced = {size: 0 for size in quantities}
+    produced = dict.fromkeys(quantities, 0)
 
     for pattern in patterns:
         count = allocation[pattern.id]

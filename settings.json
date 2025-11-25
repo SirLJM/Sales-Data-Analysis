@@ -1,0 +1,36 @@
+{
+  "lead_time": 1.36,
+  "cv_thresholds": {
+    "basic": 0.6,
+    "seasonal": 1.0
+  },
+  "z_scores": {
+    "basic": 2.5,
+    "regular": 1.645,
+    "seasonal_in": 1.85,
+    "seasonal_out": 1.5,
+    "new": 1.8
+  },
+  "new_product_threshold_months": 12,
+  "optimizer": {
+    "min_order_per_pattern": 5
+  },
+  "order_recommendations": {
+    "stockout_risk": {
+      "zero_stock_penalty": 100,
+      "below_rop_max_penalty": 80
+    },
+    "priority_weights": {
+      "stockout_risk": 0.5,
+      "revenue_impact": 0.3,
+      "demand_forecast": 0.2
+    },
+    "type_multipliers": {
+      "new": 1.2,
+      "seasonal": 1.3,
+      "regular": 1.0,
+      "basic": 0.9
+    },
+    "demand_cap": 100
+  }
+}
