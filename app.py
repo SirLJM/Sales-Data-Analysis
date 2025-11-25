@@ -1218,11 +1218,9 @@ with tab3:
     if not stock_loaded or not use_forecast or forecast_df is None:
         st.warning("⚠️ Please load both stock and forecast data in Tab 1 to use this feature.")
     else:
-        # Parameter controls in expander
         with st.expander("⚙️ Recommendation Parameters", expanded=False):
             st.caption("Adjust these parameters to tune the priority scoring algorithm")
 
-            # Priority Weights
             st.write("**Priority Weights** (contribution to final score)")
             w_col1, w_col2, w_col3 = st.columns(3)
             with w_col1:
@@ -1255,7 +1253,6 @@ with tab3:
 
             st.caption(f"Current weights sum: {weight_stockout + weight_revenue + weight_demand:.2f} (ideally 1.0)")
 
-            # Type Multipliers
             st.write("**Type Multipliers** (priority boost by product type)")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             with m_col1:
@@ -1295,7 +1292,6 @@ with tab3:
                     help="Multiplier for basic products (stable demand, CV < 0.6). Lower values reduce priority for consistently available items."
                 )
 
-            # Stockout Risk & Other
             st.write("**Stockout Risk & Other Parameters**")
             o_col1, o_col2, o_col3 = st.columns(3)
             with o_col1:
@@ -1326,7 +1322,6 @@ with tab3:
                     help="Maximum forecast value used in priority calculation. Prevents extremely high forecasts from dominating the score. Values are clipped to this maximum."
                 )
 
-            # Update settings
             st.session_state.settings["order_recommendations"]["priority_weights"]["stockout_risk"] = weight_stockout
             st.session_state.settings["order_recommendations"]["priority_weights"]["revenue_impact"] = weight_revenue
             st.session_state.settings["order_recommendations"]["priority_weights"]["demand_forecast"] = weight_demand
@@ -1384,7 +1379,6 @@ with tab3:
         if st.session_state.recommendations_data is not None:
             recommendations = st.session_state.recommendations_data
 
-            # Get top priority MODEL+COLOR combinations (not all colors for top models)
             top_model_colors = (
                 recommendations["model_color_summary"]  # type: ignore
                 .sort_values("PRIORITY_SCORE", ascending=False)
@@ -1394,7 +1388,6 @@ with tab3:
             st.subheader("Top Priority Items to Order")
             st.caption(f"Showing top {len(top_model_colors)} MODEL+COLOR combinations by priority")
 
-            # Build compact table with size breakdown
             order_list = []
             for idx, (_, row) in enumerate(top_model_colors.iterrows(), 1):
                 model = row["MODEL"]
@@ -1406,7 +1399,6 @@ with tab3:
                     color,
                 )
 
-                # Format sizes compactly: "08:15, 12:25, 13:30"
                 sizes_str = ", ".join(
                     [f"{size}:{qty}" for size, qty in sorted(size_quantities.items())]
                 ) if size_quantities else "No data"
@@ -1420,11 +1412,9 @@ with tab3:
                     "Priority": f"{row['PRIORITY_SCORE']:.1f}",
                     "Deficit": int(row["DEFICIT"]),
                     "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
-                    "Sizes (Size:Qty)": sizes_str,
-                    # "⚠️": urgent_mark,
+                    "Sizes (Size:Qty)": sizes_str
                 })
 
-            # Display as compact table
             order_df = pd.DataFrame(order_list)
             st.dataframe(
                 order_df,
