@@ -46,7 +46,7 @@ class PatternSet:
 
 
 PATTERN_SETS_FILE = "../saved_pattern_sets.json"
-OPTIMIZER_PATTERN_SETS_FILE = "../optimizer_pattern_sets.json"
+OPTIMIZER_PATTERN_SETS_FILE = "./optimizer_pattern_sets.json"
 
 
 def get_min_order_per_pattern() -> int:
@@ -90,25 +90,25 @@ def save_pattern_sets(pattern_sets: List[PatternSet], file_path: str = None):
         json.dump([ps.to_dict() for ps in pattern_sets], f, indent=2)
 
 
-def optimize_patterns(
+def _get_empty_result(quantities: Dict[str, int]) -> Dict:
+    return {
+        "allocation": {},
+        "produced": dict.fromkeys(quantities, 0),
+        "excess": dict.fromkeys(quantities, 0),
+        "total_patterns": 0,
+        "total_excess": 0,
+        "all_covered": False,
+        "min_order_violations": [],
+    }
+
+
+def _find_best_solution(
     quantities: Dict[str, int],
     patterns: List[Pattern],
-    min_per_pattern: int = get_min_order_per_pattern(),
-) -> Dict:
-    if not patterns or not any(quantities.values()):
-        return {
-            "allocation": {},
-            "produced": dict.fromkeys(quantities, 0),
-            "excess": dict.fromkeys(quantities, 0),
-            "total_patterns": 0,
-            "total_excess": 0,
-            "all_covered": False,
-            "min_order_violations": [],
-        }
-
+    min_per_pattern: int
+) -> Optional[Dict[int, int]]:
     best_solution = None
     best_excess = float("inf")
-
     max_total = sum(quantities.values()) * 2
     min_patterns = max(quantities.values()) // 2
 
@@ -127,36 +127,119 @@ def optimize_patterns(
         if best_solution and total_patterns > min_patterns + 50:
             break
 
-    if not best_solution:
-        best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
+    return best_solution
 
-    allocation: Dict[int, int] = best_solution
-    produced: Dict[str, int] = dict.fromkeys(quantities, 0)
 
+def _calculate_production(
+    allocation: Dict[int, int],
+    patterns: List[Pattern],
+    quantities: Dict[str, int]
+) -> Dict[str, int]:
+    produced = dict.fromkeys(quantities, 0)
     for pattern in patterns:
         count = allocation.get(pattern.id, 0)
         for size, size_count in pattern.sizes.items():
             produced[size] = produced.get(size, 0) + (count * size_count)
+    return produced
 
-    excess = {size: produced[size] - quantities[size] for size in quantities}
-    total_patterns = sum(allocation.values())
-    total_excess = sum(excess.values())
 
-    min_violations: List[tuple] = []
+def _find_violations(
+    allocation: Dict[int, int],
+    patterns: List[Pattern],
+    min_per_pattern: int
+) -> List[tuple]:
+    violations = []
     for pattern in patterns:
         count = allocation.get(pattern.id, 0)
         if 0 < count < min_per_pattern:
-            min_violations.append((pattern.name, count))
+            violations.append((pattern.name, count))
+    return violations
+
+
+def optimize_patterns(
+    quantities: Dict[str, int],
+    patterns: List[Pattern],
+    min_per_pattern: int = get_min_order_per_pattern(),
+) -> Dict:
+    if not patterns or not any(quantities.values()):
+        return _get_empty_result(quantities)
+
+    best_solution = _find_best_solution(quantities, patterns, min_per_pattern)
+    if not best_solution:
+        best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
+
+    produced = _calculate_production(best_solution, patterns, quantities)
+    excess = {size: produced[size] - quantities[size] for size in quantities}
+    min_violations = _find_violations(best_solution, patterns, min_per_pattern)
 
     return {
-        "allocation": allocation,
+        "allocation": best_solution,
         "produced": produced,
         "excess": excess,
-        "total_patterns": total_patterns,
-        "total_excess": total_excess,
+        "total_patterns": sum(best_solution.values()),
+        "total_excess": sum(excess.values()),
         "all_covered": all(produced[size] >= quantities[size] for size in quantities),
         "min_order_violations": min_violations,
     }
+
+
+def _calculate_pattern_score(pattern: Pattern, remaining: Dict[str, int]) -> int:
+    score = 0
+    for size, count in pattern.sizes.items():
+        if remaining.get(size, 0) > 0:
+            score += min(count, remaining[size]) * 10
+        else:
+            score -= count
+    return score
+
+
+def _calculate_greedy_score(pattern: Pattern, remaining: Dict[str, int]) -> float:
+    score = 0.0
+    for size, count in pattern.sizes.items():
+        if remaining.get(size, 0) > 0:
+            score += min(count, remaining[size]) * 100
+            score += remaining[size] * 10
+        else:
+            score -= count * 1
+    return score
+
+
+def _find_best_pattern_by_score(
+    patterns: List[Pattern],
+    remaining: Dict[str, int],
+    score_func
+) -> Optional[Pattern]:
+    best_pattern = None
+    best_score = -float("inf")
+
+    for pattern in patterns:
+        score = score_func(pattern, remaining)
+        if score > best_score:
+            best_score = score
+            best_pattern = pattern
+
+    return best_pattern
+
+
+def _can_allocate_pattern(
+    pattern: Pattern,
+    allocation: Dict[int, int],
+    patterns_used: int,
+    total: int,
+    min_per_pattern: int
+) -> bool:
+    if patterns_used + min_per_pattern > total:
+        return allocation[pattern.id] > 0
+    return True
+
+
+def _update_remaining(
+    remaining: Dict[str, int],
+    pattern: Pattern,
+    quantity: int
+):
+    for size, count in pattern.sizes.items():
+        remaining[size] = remaining.get(size, 0) - (count * quantity)
 
 
 def find_allocation_for_total(
@@ -167,42 +250,44 @@ def find_allocation_for_total(
     patterns_used = 0
 
     while patterns_used < total:
-        best_pattern = None
-        best_score = -float("inf")
+        valid_patterns = [
+            p for p in patterns
+            if _can_allocate_pattern(p, allocation, patterns_used, total, min_per_pattern)
+        ]
 
-        for pattern in patterns:
-            if patterns_used + min_per_pattern > total:
-                if allocation[pattern.id] == 0:
-                    continue
-
-            score = 0
-            for size, count in pattern.sizes.items():
-                if remaining.get(size, 0) > 0:
-                    score += min(count, remaining[size]) * 10
-                else:
-                    score -= count
-
-            if score > best_score:
-                best_score = score
-                best_pattern = pattern
-
-        if best_pattern:
-            to_allocate = min(min_per_pattern, total - patterns_used)
-            if allocation[best_pattern.id] > 0:
-                to_allocate = 1
-
-            allocation[best_pattern.id] += to_allocate
-            patterns_used += to_allocate
-
-            for size, count in best_pattern.sizes.items():
-                remaining[size] = remaining.get(size, 0) - (count * to_allocate)
-        else:
+        if not valid_patterns:
             break
+
+        best_pattern = _find_best_pattern_by_score(valid_patterns, remaining, _calculate_pattern_score)
+        if not best_pattern:
+            break
+
+        to_allocate = min(min_per_pattern, total - patterns_used)
+        if allocation[best_pattern.id] > 0:
+            to_allocate = 1
+
+        allocation[best_pattern.id] += to_allocate
+        patterns_used += to_allocate
+        _update_remaining(remaining, best_pattern, to_allocate)
 
     if all(remaining.get(size, 0) <= 0 for size in quantities):
         return allocation
 
     return None
+
+
+def _has_remaining_demand(remaining: Dict[str, int]) -> bool:
+    return any(remaining[size] > 0 for size in remaining)
+
+
+def _determine_allocation_quantity(
+    allocation: Dict[int, int],
+    pattern_id: int,
+    min_per_pattern: int
+) -> int:
+    if allocation[pattern_id] == 0:
+        return min_per_pattern
+    return 1
 
 
 def greedy_overshoot(
@@ -214,35 +299,16 @@ def greedy_overshoot(
     max_iterations = 200
     iteration = 0
 
-    while any(remaining[size] > 0 for size in remaining) and iteration < max_iterations:
+    while _has_remaining_demand(remaining) and iteration < max_iterations:
         iteration += 1
-        best_pattern = None
-        best_score = -float("inf")
 
-        for pattern in patterns:
-            score = 0
-            for size, count in pattern.sizes.items():
-                if remaining.get(size, 0) > 0:
-                    score += min(count, remaining[size]) * 100
-                    score += remaining[size] * 10
-                else:
-                    score -= count * 1
-
-            if score > best_score:
-                best_score = score
-                best_pattern = pattern
-
-        if best_pattern:
-            if allocation[best_pattern.id] == 0:
-                to_add = min_per_pattern
-            else:
-                to_add = 1
-
-            allocation[best_pattern.id] += to_add
-            for size, count in best_pattern.sizes.items():
-                remaining[size] = remaining.get(size, 0) - (count * to_add)
-        else:
+        best_pattern = _find_best_pattern_by_score(patterns, remaining, _calculate_greedy_score)
+        if not best_pattern:
             break
+
+        to_add = _determine_allocation_quantity(allocation, best_pattern.id, min_per_pattern)
+        allocation[best_pattern.id] += to_add
+        _update_remaining(remaining, best_pattern, to_add)
 
     return allocation
 
