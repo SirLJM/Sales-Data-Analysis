@@ -1419,7 +1419,7 @@ with tab3:
             st.dataframe(
                 order_df,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 height=min(600, len(order_list) * 35 + 38),
             )
 
