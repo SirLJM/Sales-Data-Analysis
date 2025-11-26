@@ -14,6 +14,12 @@ from utils.pattern_optimizer_logic import (
 from sales_data import SalesAnalyzer, SalesDataLoader
 from utils.settings_manager import load_settings, save_settings, reset_settings
 
+MODEL_COLOR = "MODEL+COLOR"
+
+LAST_WEEK = "Last Week"
+
+TEXT_CSV = "text/csv"
+
 MATERIAL = "RODZAJ MATERIAŁU"
 
 SZWALNIA_D = "SZWALNIA DRUGA"
@@ -43,8 +49,33 @@ def display_optimization_metrics(optimization_result: dict):
         st.metric("Coverage", coverage_icon)
 
 
-tab1, tab2, tab3 = st.tabs(
-    ["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer", "🎯 Order Recommendations"]
+def display_star_product(star: dict, stock_data: pd.DataFrame, is_rising: bool):
+    product_model = star["model"]
+
+    desc = ""
+    if stock_data is not None:
+        stock_df_copy = stock_data.copy()
+        stock_df_copy["model"] = stock_df_copy["sku"].astype(str).str[:5]
+        model_desc = stock_df_copy[stock_df_copy["model"] == product_model]
+        if not model_desc.empty:
+            desc = model_desc.iloc[0]["nazwa"]
+
+    st.markdown(f"**Model:** {product_model}")
+    if desc:
+        st.caption(desc)
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric(LAST_WEEK, f"{int(star['current_week_sales']):,}")
+    with m2:
+        st.metric("Last Year", f"{int(star['prev_year_sales']):,}")
+    with m3:
+        sign = "+" if is_rising else ""
+        st.metric("Change", f"{sign}{int(star['difference']):,}", delta=f"{sign}{star['percent_change']:.1f}%")
+
+
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer", "🎯 Order Recommendations", "📅 Weekly Analysis"]
 )
 
 # ========================================
@@ -597,7 +628,7 @@ with tab1:
     download_label = "Download Model Summary CSV" if group_by_model else "Download SKU Summary CSV"
     download_filename = "model_summary.csv" if group_by_model else "sku_summary.csv"
     st.download_button(
-        download_label, display_data.to_csv(index=False), download_filename, "text/csv"
+        download_label, display_data.to_csv(index=False), download_filename, TEXT_CSV
     )
 
     if stock_loaded and use_forecast and forecast_df is not None and not group_by_model:
@@ -1486,5 +1517,187 @@ with tab3:
                 "📥 Download Full Priority Report (SKU level)",
                 recommendations["priority_skus"].to_csv(index=False),  # type: ignore
                 "order_priority_report.csv",
-                "text/csv",
+                TEXT_CSV,
             )
+
+# ========================================
+# TAB 4: WEEKLY ANALYSIS
+# ========================================
+
+with tab4:
+    st.title("📅 Weekly Analysis")
+
+    if st.button("Refresh Analysis", type="primary"):
+        st.cache_data.clear()
+        st.rerun()
+
+    df = load_data()
+    stock_df = None
+    if stock_loaded:
+        stock_df, _ = load_stock()
+
+    st.markdown("---")
+    st.header("⭐ Top Sales Report")
+    st.caption("Compare previous week's sales to same week last year (Monday-Sunday)")
+
+    try:
+        from datetime import datetime
+
+        top_sales = SalesAnalyzer.calculate_top_sales_report(
+            sales_df=df,
+            reference_date=datetime.today()
+        )
+
+        col_dates1, col_dates2 = st.columns(2)
+        with col_dates1:
+            st.metric(
+                LAST_WEEK,
+                f"{top_sales['last_week_start'].strftime('%d-%m-%Y')} - {top_sales['last_week_end'].strftime('%d-%m-%Y')}"
+            )
+        with col_dates2:
+            st.metric(
+                "Same Week Last Year",
+                f"{top_sales['prev_year_start'].strftime('%d-%m-%Y')} - {top_sales['prev_year_end'].strftime('%d-%m-%Y')}"
+            )
+
+        col_rising, col_falling = st.columns(2)
+
+        with col_rising:
+            st.subheader("🚀 RISING STAR")
+            if top_sales["rising_star"] is not None:
+                display_star_product(top_sales["rising_star"], stock_df, is_rising=True)
+            else:
+                st.info("No rising products found")
+
+        with col_falling:
+            st.subheader("📉 FALLING STAR")
+            if top_sales["falling_star"] is not None:
+                display_star_product(top_sales["falling_star"], stock_df, is_rising=False)
+            else:
+                st.info("No falling products found")
+
+    except Exception as e:
+        st.error(f"❌ Error generating TOP SALES REPORT: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+
+    st.markdown("---")
+    st.header("🏆 Top 5 Products by Type")
+    st.caption("Best sellers from last week by product category")
+
+    try:
+        cv_basic = st.session_state.settings["cv_thresholds"]["basic"]
+        cv_seasonal = st.session_state.settings["cv_thresholds"]["seasonal"]
+
+        top_products = SalesAnalyzer.calculate_top_products_by_type(
+            sales_df=df,
+            cv_basic=cv_basic,
+            cv_seasonal=cv_seasonal,
+            reference_date=datetime.today()
+        )
+
+        col_new, col_seasonal = st.columns(2)
+        col_regular, col_basic = st.columns(2)
+
+        def display_top_5(column, type_name, emoji, df_top):
+            with column:
+                st.subheader(f"{emoji} {type_name.upper()}")
+                if not df_top.empty:
+                    top_products_df = df_top.copy()
+                    top_products_df[MODEL_COLOR] = top_products_df["model"] + top_products_df["color"]
+
+                    if stock_df is not None:
+                        stock_df_copy = stock_df.copy()
+                        stock_df_copy["model"] = stock_df_copy["sku"].astype(str).str[:5]
+                        stock_df_copy["color"] = stock_df_copy["sku"].astype(str).str[5:7]
+                        descriptions = stock_df_copy.groupby(["model", "color"])["nazwa"].first().reset_index()
+                        top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
+                        top_products_df["nazwa"] = top_products_df["nazwa"].fillna("")
+                        final_cols = [MODEL_COLOR, "nazwa", "color", "sales"]
+                        col_names = {"nazwa": "DESCRIPTION", "color": "COLOR", "sales": "SALES"}
+                    else:
+                        final_cols = [MODEL_COLOR, "color", "sales"]
+                        col_names = {"color": "COLOR", "sales": "SALES"}
+
+                    top_products_df = top_products_df[final_cols].rename(columns=col_names)
+
+                    st.dataframe(top_products_df, hide_index=True, width="stretch")
+                else:
+                    st.info(f"No {type_name} products found")
+
+        display_top_5(col_new, "New", "🆕", top_products["top_by_type"]["new"])
+        display_top_5(col_seasonal, "Seasonal", "🌸", top_products["top_by_type"]["seasonal"])
+        display_top_5(col_regular, "Regular", "📦", top_products["top_by_type"]["regular"])
+        display_top_5(col_basic, "Basic", "⚙️", top_products["top_by_type"]["basic"])
+
+    except Exception as e:
+        st.error(f"❌ Error generating Top 5 by Type: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+
+    st.markdown("---")
+    st.header("📊 New Products Launch Monitoring")
+    st.caption("Track weekly sales for products launched in the last 2 months (Weeks aligned to calendar Wednesdays)")
+
+    lookback_days = st.session_state.settings.get("weekly_analysis", {}).get("lookback_days", 60)
+
+    with st.spinner("Generating weekly analysis..."):
+        try:
+            from datetime import datetime
+
+            weekly_df = SalesAnalyzer.generate_weekly_new_products_analysis(
+                sales_df=df,
+                stock_df=stock_df,
+                lookback_days=lookback_days,
+                reference_date=datetime.today()
+            )
+
+            if weekly_df.empty:
+                st.info(f"ℹ️ No new products found with first sale in the last {lookback_days} days")
+            else:
+                col1, col2, col3 = st.columns(3)
+                week_cols = [col for col in weekly_df.columns
+                            if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
+
+                with col1:
+                    st.metric("New Products", len(weekly_df))
+                with col2:
+                    st.metric("Weeks Tracked", len(week_cols))
+                with col3:
+                    total_sales = weekly_df[week_cols].sum().sum() if week_cols else 0
+                    st.metric("Total Sales", f"{int(total_sales):,}")
+
+                st.subheader("Weekly Sales by Model")
+                st.dataframe(
+                    weekly_df,
+                    hide_index=True,
+                    height=600,
+                    width="stretch"
+                )
+
+                csv = weekly_df.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Weekly Analysis (CSV)",
+                    csv,
+                    f"weekly_new_products_{datetime.today().strftime('%Y%m%d')}.csv",
+                    TEXT_CSV
+                )
+
+                weekly_df["TOTAL_SALES"] = weekly_df[week_cols].sum(axis=1)
+                zero_sales = weekly_df[weekly_df["TOTAL_SALES"] == 0]
+
+                if not zero_sales.empty:
+                    st.warning(f"⚠️ {len(zero_sales)} product(s) with ZERO sales in tracked period")
+                    with st.expander("View zero-sales products", expanded=False):
+                        display_cols = ["SALES_START_DATE", "MODEL"]
+                        if "DESCRIPTION" in zero_sales.columns:
+                            display_cols.append("DESCRIPTION")
+                        st.dataframe(
+                            zero_sales[display_cols],
+                            hide_index=True
+                        )
+
+        except Exception as e:
+            st.error(f"❌ Error generating weekly analysis: {e}")
+            import traceback
+            st.code(traceback.format_exc())

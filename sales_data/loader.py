@@ -7,9 +7,13 @@ import pandas as pd
 
 from .validator import DataValidator
 
-XLSX = "*.xlsx"
+CSV = ".csv"
 
-CSV = "*.csv"
+XLSX = ".xlsx"
+
+ANY_XLSX = "*.xlsx"
+
+ANY_CSV = "*.csv"
 
 
 class SalesDataLoader:
@@ -83,7 +87,7 @@ class SalesDataLoader:
 
     def _collect_files_from_directory(self, directory: Path) -> List[tuple]:
         collected_files = []
-        for file_path in list(directory.glob(CSV)) + list(directory.glob(XLSX)):
+        for file_path in list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)):
             date_range = self._parse_sales_filename(file_path.name)
             if date_range is not None:
                 collected_files.append((file_path, date_range[0], date_range[1]))
@@ -130,8 +134,8 @@ class SalesDataLoader:
         seen_dates = set()
 
         if self.stock_dir.exists():
-            for file_path in list(self.stock_dir.glob(CSV)) + list(
-                self.stock_dir.glob(XLSX)
+            for file_path in list(self.stock_dir.glob(ANY_CSV)) + list(
+                self.stock_dir.glob(ANY_XLSX)
             ):
                 file_date = self._parse_stock_filename(file_path.name)
                 if file_date is not None and file_date not in seen_dates:
@@ -144,7 +148,7 @@ class SalesDataLoader:
 
     @staticmethod
     def _should_replace_forecast_file(new_file: Path, existing_file: Path) -> bool:
-        return new_file.suffix == ".xlsx" and existing_file.suffix == ".csv"
+        return new_file.suffix == XLSX and existing_file.suffix == CSV
 
     def find_forecast_files(self) -> List[Tuple[Path, datetime]]:
         files_info = []
@@ -183,8 +187,8 @@ class SalesDataLoader:
         current_year_files = []
 
         if self.current_sales_dir.exists():
-            for file_path in list(self.current_sales_dir.glob(CSV)) + list(
-                self.current_sales_dir.glob(XLSX)
+            for file_path in list(self.current_sales_dir.glob(ANY_CSV)) + list(
+                self.current_sales_dir.glob(ANY_XLSX)
             ):
                 date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:
@@ -332,7 +336,7 @@ class SalesDataLoader:
 
         data_dir = Path(__file__).parent.parent / "data"
         if data_dir.exists():
-            for file_path in data_dir.glob(XLSX):
+            for file_path in data_dir.glob(ANY_XLSX):
                 if "MODELE" in file_path.name.upper() and "KOLORY" in file_path.name.upper():
                     print("(Using fallback: found in data/ folder)")
                     return file_path
@@ -355,9 +359,9 @@ class SalesDataLoader:
                 sheet_name = self.validator.find_model_metadata_sheet(file_path)
                 if sheet_name:
                     print(f"  Using sheet: {sheet_name}")
-                    df = pd.read_excel(file_path, sheet_name=sheet_name)
+                    df = pd.read_excel(file_path, sheet_name=sheet_name, engine='openpyxl')
                 else:
-                    print("Could not find valid sheet with metadata columns")
+                    print("  Could not find valid sheet with metadata columns")
                     return None
             else:
                 return None
@@ -376,6 +380,9 @@ class SalesDataLoader:
 
             return df
 
+        except PermissionError:
+            print("Warning: File is locked/open. Please close the Excel file and restart the app.")
+            return None
         except Exception as e:
             print(f"  Warning: Could not load model metadata: {e}")
             return None
