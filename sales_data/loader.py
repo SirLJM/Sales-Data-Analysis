@@ -7,6 +7,10 @@ import pandas as pd
 
 from .validator import DataValidator
 
+XLSX = "*.xlsx"
+
+CSV = "*.csv"
+
 
 class SalesDataLoader:
     def __init__(self, paths_file: Optional[str] = None):
@@ -24,11 +28,13 @@ class SalesDataLoader:
                 self.current_sales_dir = Path(lines[1]) if len(lines) > 1 else Path("data")
                 self.stock_dir = Path(lines[2]) if len(lines) > 2 else Path("data")
                 self.forecast_dir = Path(lines[3]) if len(lines) > 3 else Path("data")
+                self.model_metadata_path = Path(lines[4]) if len(lines) > 4 else None
         else:
             self.archival_sales_dir = Path("data")
             self.current_sales_dir = Path("data")
             self.stock_dir = Path("data")
             self.forecast_dir = Path("data")
+            self.model_metadata_path = None
 
     @staticmethod
     def _parse_sales_filename(filename: str) -> Optional[tuple]:
@@ -75,39 +81,46 @@ class SalesDataLoader:
                 return None
         return None
 
+    def _collect_files_from_directory(self, directory: Path) -> List[tuple]:
+        collected_files = []
+        for file_path in list(directory.glob(CSV)) + list(directory.glob(XLSX)):
+            date_range = self._parse_sales_filename(file_path.name)
+            if date_range is not None:
+                collected_files.append((file_path, date_range[0], date_range[1]))
+        return collected_files
+
+    def _add_archival_files(self, files_info: List[tuple], seen_dates: set) -> None:
+        if not self.archival_sales_dir.exists():
+            return
+
+        for file_path, start_date, end_date in self._collect_files_from_directory(self.archival_sales_dir):
+            date_key = (start_date, end_date)
+            if date_key not in seen_dates:
+                files_info.append((file_path, start_date, end_date))
+                seen_dates.add(date_key)
+
+    def _add_latest_current_file(self, files_info: List[tuple], seen_dates: set) -> None:
+        if not self.current_sales_dir.exists():
+            return
+
+        current_files = self._collect_files_from_directory(self.current_sales_dir)
+        if not current_files:
+            return
+
+        current_files.sort(key=lambda x: x[2], reverse=True)
+        latest_file = current_files[0]
+        date_key = (latest_file[1], latest_file[2])
+        if date_key not in seen_dates:
+            files_info.append(latest_file)
+            seen_dates.add(date_key)
+
     def find_data_files(self) -> List[tuple]:
         files_info = []
         seen_dates = set()
 
-        if self.archival_sales_dir.exists():
-            for file_path in list(self.archival_sales_dir.glob("*.csv")) + list(
-                self.archival_sales_dir.glob("*.xlsx")
-            ):
-                date_range = self._parse_sales_filename(file_path.name)
-                if date_range is not None:
-                    date_key = (date_range[0], date_range[1])
-                    if date_key not in seen_dates:
-                        files_info.append((file_path, date_range[0], date_range[1]))
-                        seen_dates.add(date_key)
+        self._add_archival_files(files_info, seen_dates)
+        self._add_latest_current_file(files_info, seen_dates)
 
-        if self.current_sales_dir.exists():
-            current_files = []
-            for file_path in list(self.current_sales_dir.glob("*.csv")) + list(
-                self.current_sales_dir.glob("*.xlsx")
-            ):
-                date_range = self._parse_sales_filename(file_path.name)
-                if date_range is not None:
-                    current_files.append((file_path, date_range[0], date_range[1]))
-
-            if current_files:
-                current_files.sort(key=lambda x: x[2], reverse=True)
-                latest_file = current_files[0]
-                date_key = (latest_file[1], latest_file[2])
-                if date_key not in seen_dates:
-                    files_info.append(latest_file)
-                    seen_dates.add(date_key)
-
-        # Sort by start date
         files_info.sort(key=lambda x: x[1])
 
         return files_info
@@ -117,18 +130,21 @@ class SalesDataLoader:
         seen_dates = set()
 
         if self.stock_dir.exists():
-            for file_path in list(self.stock_dir.glob("*.csv")) + list(
-                self.stock_dir.glob("*.xlsx")
+            for file_path in list(self.stock_dir.glob(CSV)) + list(
+                self.stock_dir.glob(XLSX)
             ):
                 file_date = self._parse_stock_filename(file_path.name)
-                if file_date is not None:
-                    if file_date not in seen_dates:
-                        files_info.append((file_path, file_date))
-                        seen_dates.add(file_date)
+                if file_date is not None and file_date not in seen_dates:
+                    files_info.append((file_path, file_date))
+                    seen_dates.add(file_date)
 
         files_info.sort(key=lambda x: x[1])
 
         return files_info
+
+    @staticmethod
+    def _should_replace_forecast_file(new_file: Path, existing_file: Path) -> bool:
+        return new_file.suffix == ".xlsx" and existing_file.suffix == ".csv"
 
     def find_forecast_files(self) -> List[Tuple[Path, datetime]]:
         files_info = []
@@ -141,11 +157,11 @@ class SalesDataLoader:
 
             for file_path in all_files:
                 file_date = self._parse_forecast_filename(file_path.name)
-                if file_date is not None:
-                    if file_date not in seen_dates:
-                        seen_dates[file_date] = file_path
-                    elif file_path.suffix == ".xlsx" and seen_dates[file_date].suffix == ".csv":
-                        seen_dates[file_date] = file_path
+                if file_date is None:
+                    continue
+
+                if file_date not in seen_dates or self._should_replace_forecast_file(file_path, seen_dates[file_date]):
+                    seen_dates[file_date] = file_path
 
             files_info = [(path, date) for date, path in seen_dates.items()]
 
@@ -167,8 +183,8 @@ class SalesDataLoader:
         current_year_files = []
 
         if self.current_sales_dir.exists():
-            for file_path in list(self.current_sales_dir.glob("*.csv")) + list(
-                self.current_sales_dir.glob("*.xlsx")
+            for file_path in list(self.current_sales_dir.glob(CSV)) + list(
+                self.current_sales_dir.glob(XLSX)
             ):
                 date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:
@@ -190,9 +206,9 @@ class SalesDataLoader:
 
     def load_sales_file(self, file_path: Path) -> pd.DataFrame:
 
-        if file_path.suffix == ".csv":
+        if file_path.suffix == CSV:
             df = pd.read_csv(file_path)
-        elif file_path.suffix == ".xlsx":
+        elif file_path.suffix == XLSX:
             sheet_name = self.validator.find_sales_sheet(file_path)
             if sheet_name:
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
@@ -218,13 +234,17 @@ class SalesDataLoader:
         return df
 
     def load_stock_file(self, file_path: Path) -> pd.DataFrame:
-        if file_path.suffix == ".csv":
+        print(f"\nLoading stock file: {file_path.name}")
+
+        if file_path.suffix == CSV:
             df = pd.read_csv(file_path)
-        elif file_path.suffix == ".xlsx":
+        elif file_path.suffix == XLSX:
             sheet_name = self.validator.find_stock_sheet(file_path)
             if sheet_name:
+                print(f"  Using sheet: {sheet_name}")
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
             else:
+                print("Using default sheet: Sheet1")
                 df = pd.read_excel(file_path, sheet_name="Sheet1")
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
@@ -237,16 +257,22 @@ class SalesDataLoader:
 
         df = df[["sku", "nazwa", "cena_netto", "available_stock"]].copy()
 
+        print(f"  Loaded {len(df):,} active SKUs")
+
         return df
 
     def load_forecast_file(self, file_path: Path) -> pd.DataFrame:
-        if file_path.suffix == ".csv":
+        print(f"\nLoading forecast file: {file_path.name}")
+
+        if file_path.suffix == CSV:
             df = pd.read_csv(file_path)
-        elif file_path.suffix == ".xlsx":
+        elif file_path.suffix == XLSX:
             sheet_name = self.validator.find_forecast_sheet(file_path)
             if sheet_name:
+                print(f"  Using sheet: {sheet_name}")
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
             else:
+                print("Using default sheet: Sheet1")
                 df = pd.read_excel(file_path, sheet_name="Sheet1")
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
@@ -263,6 +289,8 @@ class SalesDataLoader:
 
         if "data" in df.columns:
             df["data"] = pd.to_datetime(df["data"])
+
+        print(f"  Loaded {len(df):,} forecast records for {df['sku'].nunique():,} SKUs")
 
         return df
 
@@ -297,3 +325,57 @@ class SalesDataLoader:
 
     def get_aggregated_data(self) -> pd.DataFrame:
         return self.consolidate_all_files()
+
+    def find_model_metadata_file(self) -> Optional[Path]:
+        if self.model_metadata_path is not None and self.model_metadata_path.exists():
+            return self.model_metadata_path
+
+        data_dir = Path(__file__).parent.parent / "data"
+        if data_dir.exists():
+            for file_path in data_dir.glob(XLSX):
+                if "MODELE" in file_path.name.upper() and "KOLORY" in file_path.name.upper():
+                    print("(Using fallback: found in data/ folder)")
+                    return file_path
+
+        return None
+
+    def load_model_metadata(self) -> Optional[pd.DataFrame]:
+        file_path = self.find_model_metadata_file()
+
+        if file_path is None:
+            print("\nModel metadata file not found")
+            return None
+
+        print(f"\nLoading model metadata: {file_path.name}")
+
+        try:
+            if file_path.suffix == CSV:
+                df = pd.read_csv(file_path)
+            elif file_path.suffix == XLSX:
+                sheet_name = self.validator.find_model_metadata_sheet(file_path)
+                if sheet_name:
+                    print(f"  Using sheet: {sheet_name}")
+                    df = pd.read_excel(file_path, sheet_name=sheet_name)
+                else:
+                    print("Could not find valid sheet with metadata columns")
+                    return None
+            else:
+                return None
+
+            is_valid, errors = self.validator.validate_model_metadata(df)
+            if not is_valid:
+                print(f"  Warning: Invalid model metadata: {errors}")
+                return None
+
+            required_cols = ["Model", "SZWALNIA GŁÓWNA", "SZWALNIA DRUGA", "RODZAJ MATERIAŁU", "GRAMATURA"]
+            df = df[required_cols].copy()
+
+            df = df.dropna(subset=["Model"])
+
+            print(f"  Loaded {len(df):,} models with metadata")
+
+            return df
+
+        except Exception as e:
+            print(f"  Warning: Could not load model metadata: {e}")
+            return None

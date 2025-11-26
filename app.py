@@ -14,6 +14,12 @@ from utils.pattern_optimizer_logic import (
 from sales_data import SalesAnalyzer, SalesDataLoader
 from utils.settings_manager import load_settings, save_settings, reset_settings
 
+MATERIAL = "RODZAJ MATERIAŁU"
+
+SZWALNIA_D = "SZWALNIA DRUGA"
+
+SZWALNIA_G = "SZWALNIA GŁÓWNA"
+
 BELOW_ROP = "Below ROP"
 
 AVERAGE_SALES = "AVERAGE SALES"
@@ -268,6 +274,11 @@ with tab1:
             df_forecast = loader.load_forecast_file(forecast_file)
             return df_forecast, file_date, forecast_file.name
         return None, None, None
+
+    @st.cache_data
+    def load_model_metadata():
+        loader = SalesDataLoader()
+        return loader.load_model_metadata()
 
     df = load_data()
     analyzer = SalesAnalyzer(df)
@@ -1379,6 +1390,8 @@ with tab3:
         if st.session_state.recommendations_data is not None:
             recommendations = st.session_state.recommendations_data
 
+            model_metadata_df = load_model_metadata()
+
             top_model_colors = (
                 recommendations["model_color_summary"]  # type: ignore
                 .sort_values("PRIORITY_SCORE", ascending=False)
@@ -1405,7 +1418,7 @@ with tab3:
 
                 urgent_mark = "🚨" if row.get("URGENT", False) else ""
 
-                order_list.append({
+                order_item = {
                     "#": idx,
                     "Model": model,
                     "Color": color,
@@ -1413,7 +1426,14 @@ with tab3:
                     "Deficit": int(row["DEFICIT"]),
                     "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
                     "Sizes (Size:Qty)": sizes_str
-                })
+                }
+
+                if model_metadata_df is not None:
+                    metadata_row = model_metadata_df[model_metadata_df["Model"] == model]
+                    if not metadata_row.empty:
+                        order_item[SZWALNIA_G] = metadata_row.iloc[0][SZWALNIA_G]
+
+                order_list.append(order_item)
 
             order_df = pd.DataFrame(order_list)
             st.dataframe(
@@ -1425,6 +1445,19 @@ with tab3:
 
             st.markdown("---")
             st.subheader("Full Model+Color Priority Summary")
+
+            model_color_summary = recommendations["model_color_summary"].copy()  # type: ignore
+
+            if model_metadata_df is not None:
+                model_color_summary = model_color_summary.merge(
+                    model_metadata_df,
+                    left_on="MODEL",
+                    right_on="Model",
+                    how="left"
+                )
+                if "Model" in model_color_summary.columns:
+                    model_color_summary = model_color_summary.drop(columns=["Model"])
+
             display_cols = [
                 "MODEL",
                 "COLOR",
@@ -1434,13 +1467,17 @@ with tab3:
                 "COVERAGE_GAP",
                 "URGENT",
             ]
+
+            if model_metadata_df is not None:
+                display_cols.extend([SZWALNIA_G, SZWALNIA_D, MATERIAL, "GRAMATURA"])
+
             available_cols = [
                 col
                 for col in display_cols
-                if col in recommendations["model_color_summary"].columns  # type: ignore
+                if col in model_color_summary.columns
             ]
             st.dataframe(
-                recommendations["model_color_summary"][available_cols],  # type: ignore
+                model_color_summary[available_cols],
                 hide_index=True,
                 height=400,
             )

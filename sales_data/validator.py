@@ -3,6 +3,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+DFRAME_EMPTY = "DataFrame is empty"
+
 
 class DataValidator:
     SALES_COLUMNS = {"order_id", "data", "sku", "ilosc", "cena", "razem"}
@@ -16,6 +18,7 @@ class DataValidator:
         "aktywny",
     }
     FORECAST_COLUMNS = {"data", "sku", "forecast"}
+    MODEL_METADATA_COLUMNS = {"Model", "SZWALNIA GŁÓWNA", "SZWALNIA DRUGA", "RODZAJ MATERIAŁU", "GRAMATURA"}
 
     @staticmethod
     def validate_sales_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
@@ -27,7 +30,7 @@ class DataValidator:
             errors.append(f"Missing required columns: {', '.join(missing_columns)}")
 
         if len(df) == 0:
-            errors.append("DataFrame is empty")
+            errors.append(DFRAME_EMPTY)
 
         if "ilosc" in df.columns and not pd.api.types.is_numeric_dtype(df["ilosc"]):
             errors.append("Column 'ilosc' must be numeric")
@@ -51,7 +54,7 @@ class DataValidator:
             errors.append(f"Missing required columns: {', '.join(missing_columns)}")
 
         if len(df) == 0:
-            errors.append("DataFrame is empty")
+            errors.append(DFRAME_EMPTY)
 
         if "stock" in df.columns and not pd.api.types.is_numeric_dtype(df["stock"]):
             errors.append("Column 'stock' must be numeric")
@@ -77,10 +80,28 @@ class DataValidator:
             errors.append(f"Missing required columns: {', '.join(missing_columns)}")
 
         if len(df) == 0:
-            errors.append("DataFrame is empty")
+            errors.append(DFRAME_EMPTY)
 
         if "forecast" in df.columns and not pd.api.types.is_numeric_dtype(df["forecast"]):
             errors.append("Column 'forecast' must be numeric")
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
+
+    @staticmethod
+    def validate_model_metadata(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+
+        errors = []
+
+        missing_columns = DataValidator.MODEL_METADATA_COLUMNS - set(df.columns)
+        if missing_columns:
+            errors.append(f"Missing required columns: {', '.join(missing_columns)}")
+
+        if len(df) == 0:
+            errors.append(DFRAME_EMPTY)
+
+        if "Model" not in df.columns:
+            errors.append("Column 'Model' is required")
 
         is_valid = len(errors) == 0
         return is_valid, errors
@@ -119,6 +140,27 @@ class DataValidator:
     @staticmethod
     def find_forecast_sheet(file_path: Path) -> Optional[str]:
         return DataValidator.find_sheet_by_columns(file_path, DataValidator.FORECAST_COLUMNS, "data")
+
+    @staticmethod
+    def find_model_metadata_sheet(file_path: Path) -> Optional[str]:
+        try:
+            excel_file = pd.ExcelFile(file_path)
+            for sheet_name in excel_file.sheet_names:
+                try:
+                    df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)
+                    if DataValidator.MODEL_METADATA_COLUMNS.issubset(set(df.columns)):
+                        return str(sheet_name)
+                except (ValueError, KeyError, pd.errors.EmptyDataError):
+                    continue
+            return None
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {file_path}")
+        except pd.errors.EmptyDataError:
+            raise ValueError(f"File is empty: {file_path}")
+        except PermissionError:
+            raise PermissionError(f"Permission denied: {file_path}")
+        except Exception as e:
+            raise RuntimeError(f"An error occurred: {e}")
 
     @staticmethod
     def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> Dict[str, Any]:
