@@ -4,7 +4,7 @@ This is a comprehensive Streamlit-based inventory management and sales analytics
 
 1. **Sales & Inventory Analysis**: Statistical analysis of sales data with Safety Stock (SS) and Reorder Point (ROP) calculations
 2. **Size Pattern Optimizer**: Cutting pattern optimization for manufacturing/ordering
-3. **Order Recommendations**: Automated priority-based ordering system that integrates with pattern matching
+3. **Order Recommendations**: Automated priority-based ordering system with adjustable parameters and size breakdowns
 
 The application uses statistical methods to analyze historical sales, forecast future demand, and optimize ordering decisions to maximize sales while minimizing stockouts and excess inventory.
 
@@ -76,62 +76,56 @@ Standalone cutting pattern optimization tool:
 **Pattern Sets** are stored in `saved_pattern_sets.json` and can be:
 - Created, edited, and deleted through the UI
 - Reused across different order scenarios
-- Associated with specific product models in Tab 3
+- Used with size quantities from Tab 3 recommendations
 
 ### Tab 3: 🎯 Order Recommendations
 
-**Most Important Feature**: Automated priority-based ordering system that determines what to order first and how much.
+**Most Important Feature**: Automated priority-based ordering system showing what to order first with size breakdowns.
 
 #### How It Works:
 
-1. **Click "Generate Recommendations"**: Analyzes all SKUs considering:
+1. **Adjust Parameters** (optional): Expand "⚙️ Recommendation Parameters" to tune:
+    - Priority Weights: Balance between stockout risk, revenue impact, and demand forecast
+    - Type Multipliers: Adjust priority boost for new/seasonal/regular/basic products
+    - Stockout Risk: Control urgency penalties for zero stock and below-ROP items
+    - Demand Cap: Set maximum forecast value to prevent outliers
+    - All parameters have helpful tooltips explaining their effect
+
+2. **Click "Generate Recommendations"**: Analyzes all SKUs considering:
     - Current stock vs ROP (Reorder Point)
     - Forecast demand during lead time
     - Product type urgency (new, seasonal, basic, regular)
     - Revenue at risk (forecast × price)
 
-2. **Priority Scoring Algorithm**:
+3. **Priority Scoring Algorithm**:
    ```
-   Priority Score = (Stockout Risk × 0.5) + (Revenue Impact × 0.3) + (Demand × 0.2) × Type Multiplier
+   Priority Score = (Stockout Risk × weight) + (Revenue Impact × weight) + (Demand × weight) × Type Multiplier
 
-   Where:
+   Where (default values):
    - Stockout Risk: 100 if stock = 0 with forecast > 0; 0-80 if below ROP (proportional to deficit)
    - Revenue Impact: Normalized forecast revenue (forecast × price)
    - Demand: Forecast quantity during lead time (capped at 100)
    - Type Multiplier: Seasonal=1.3, New=1.2, Regular=1.0, Basic=0.9
    ```
 
-3. **Model-First Grouping**: Results are grouped by **MODEL** (first five chars of SKU), then broken down by **COLOR** (chars 6–7)
-
-4. **Pattern Set Selection**: For each model, select the appropriate pattern set (adults/kids/etc.)
-
-5. **Size Analysis**: For each color, shows ALL sizes from the selected pattern set, including:
-    - Sizes that exist in inventory (with the calculated deficit)
-    - Sizes that don't exist yet (shown as zero quantity)
-    - This ensures complete size runs can be ordered
-
-6. **Pattern Optimization**: Click "🎯 Optimize Cutting Patterns" to:
-    - Automatically run the pattern matcher
-    - See which cutting patterns to order and how many
-    - View production vs. required breakdown
-    - Identify excess and coverage gaps
+4. **Compact Table View**: Shows top N MODEL+COLOR combinations in a single scrollable table with:
+    - Priority score and urgency indicators (🚨)
+    - Deficit and forecast quantities
+    - Size breakdown in compact format (e.g., "08:15, 12:25, 13:30")
+    - All critical info visible at once
 
 #### Order Recommendations Workflow:
 
 ```
 1. Load Data (Tab 1) → Ensure stock + forecast data are loaded
 2. Go to Tab 3
-3. Click "Generate Recommendations" → System calculates priorities
-4. Review top priority models (sorted by urgency score)
-5. For each model:
-   a. Select pattern set (adults/kids)
-   b. Review colors within that model
-   c. For each color:
-      - Review size quantities needed
-      - Click "Optimize Cutting Patterns"
-      - See optimal pattern allocation
-      - Make ordering decision
-6. Download full priority report (CSV) for records
+3. (Optional) Expand "⚙️ Recommendation Parameters" to adjust algorithm
+4. Set number of top priority items to show (5-50)
+5. Click "Generate Recommendations" → System calculates priorities
+6. Review compact table with MODEL+COLOR combinations sorted by priority
+7. Use size breakdown column to see exactly what quantities to order
+8. (Optional) Use Tab 2 Pattern Optimizer with size quantities for cutting patterns
+9. Download full priority report (CSV) for records
 ```
 
 ### Key Design Patterns

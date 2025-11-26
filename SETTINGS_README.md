@@ -107,7 +107,7 @@ Pattern optimization parameters:
 
 - **min_order_per_pattern**: Minimum quantity required per cutting pattern
   - Default: 5
-  - **Used in**: Tab 2 (Pattern Optimizer) and Tab 3 (Order Recommendations)
+  - **Used in**: Tab 2 (Pattern Optimizer)
 
 ### Order Recommendations Settings
 
@@ -197,6 +197,37 @@ Adjust any parameter in the sidebar:
 
 Changes are immediately reflected in calculations. Click **💾 Save** to persist them.
 
+### Tab 3: Order Recommendations Parameters
+
+In Tab 3, you can adjust all order recommendation parameters through an interactive UI:
+
+1. **Access Controls**: Expand "⚙️ Recommendation Parameters" section
+2. **Parameter Groups**:
+   - **Priority Weights** (3 sliders): Control contribution of each factor to final priority score
+     - Stockout Risk (0.0-1.0)
+     - Revenue Impact (0.0-1.0)
+     - Demand Forecast (0.0-1.0)
+     - Shows sum indicator (should ideally equal 1.0)
+   - **Type Multipliers** (4 sliders): Adjust priority boost by product type
+     - New Products (0.5-2.0)
+     - Seasonal (0.5-2.0)
+     - Regular (0.5-2.0)
+     - Basic (0.5-2.0)
+   - **Stockout Risk & Other** (3 sliders): Fine-tune urgency penalties
+     - Zero Stock Penalty (50-150)
+     - Below ROP Max Penalty (40-100)
+     - Demand Cap (50-300)
+
+3. **Help Tooltips**: Every slider has a help icon (ℹ️) with detailed explanation
+4. **Live Updates**: Changes apply immediately when you click "Generate Recommendations"
+5. **Persistence**: Click **💾 Save** in Tab 1 sidebar to persist changes to `settings.json`
+
+This UI approach is recommended over editing `settings.json` directly, as it provides:
+- Immediate visual feedback
+- Input validation (min/max ranges)
+- Contextual help for each parameter
+- No risk of JSON syntax errors
+
 ## Tuning Order Recommendations
 
 The order recommendations system can be tuned based on your business priorities:
@@ -250,12 +281,21 @@ Increase demand cap for high-volume operations:
 ### Testing Your Changes
 After modifying `order_recommendations` settings:
 
+**Option 1: Using UI Sliders (Recommended)**
+1. Go to Tab 3 (Order Recommendations)
+2. Expand "⚙️ Recommendation Parameters"
+3. Adjust any sliders to tune the algorithm (each has helpful tooltips)
+4. Click "Generate Recommendations"
+5. Review the new priority scores and rankings in the compact table
+6. Compare with previous results to validate changes
+7. Click **💾 Save** in the Tab 1 sidebar to persist changes
+
+**Option 2: Edit Settings File Directly**
 1. Edit `settings.json` directly or through code
 2. Go to Tab 3 (Order Recommendations)
 3. Click "Generate Recommendations"
 4. Review the new priority scores and rankings
-5. Compare with previous results to validate changes
-6. Click **💾 Save** in the Tab 1 sidebar to persist changes
+5. Click **💾 Save** in the Tab 1 sidebar to persist changes
 
 ## Future Enhancements
 
@@ -266,4 +306,4 @@ Potential improvements to the settings system:
 - [ ] Settings history/versioning
 - [ ] Per-user settings with profiles
 - [ ] Settings validation with min/max ranges
-- [ ] Settings documentation tooltips in UI
+- [x] Settings documentation tooltips in UI (implemented in Tab 3)
