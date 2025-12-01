@@ -12,6 +12,8 @@ from sales_data.loader import SalesDataLoader
 
 load_dotenv(find_dotenv(filename='.env'))
 
+BATCH_SIZE = 1000
+
 
 def import_stock_data(connection_string: str):
     print("Starting stock data import...")
@@ -27,8 +29,8 @@ def import_stock_data(connection_string: str):
         return
 
     print(f"Found {len(stock_files)} stock file(s):")
-    for file_path, file_date in stock_files:
-        print(f"  - {file_path.name}: {file_date.date()}")
+    for file_path, snapshot_date in stock_files:
+        print(f"  - {file_path.name}: {snapshot_date.date()}")
 
     for file_path, snapshot_date in stock_files:
         print(f"\nProcessing: {file_path.name}")
@@ -36,9 +38,10 @@ def import_stock_data(connection_string: str):
 
         with engine.connect() as conn:
             result = conn.execute(text("""
-                SELECT COUNT(*) FROM stock_snapshots
-                WHERE snapshot_date = :snapshot_date
-            """), {'snapshot_date': snapshot_date})
+                                       SELECT COUNT(*)
+                                       FROM stock_snapshots
+                                       WHERE snapshot_date = :snapshot_date
+                                       """), {'snapshot_date': snapshot_date})
 
             if result.fetchone()[0] > 0:
                 print(f"  Skipping - data for {snapshot_date.date()} already exists")
@@ -47,40 +50,37 @@ def import_stock_data(connection_string: str):
         try:
             df = loader.load_stock_file(file_path)
 
-            if not df.empty:
+            if df.empty:
                 print("  Skipping empty file")
                 continue
 
-            batch_data = []
-            for _, row in df.iterrows():
-                sku = row['sku']
-                batch_data.append({
+            batch_data = [
+                {
                     'snapshot_date': snapshot_date,
-                    'sku': sku,
-                    'product_name': row.get('nazwa', ''),
-                    'net_price': row.get('cena_netto', 0),
-                    'available_stock': row.get('available_stock', 0),
-                    'model': sku[:5] if len(sku) >= 5 else None,
+                    'sku': row.sku,
+                    'product_name': getattr(row, 'nazwa', ''),
+                    'net_price': getattr(row, 'cena_netto', 0),
+                    'available_stock': getattr(row, 'available_stock', 0),
+                    'model': row.sku[:5] if len(row.sku) >= 5 else None,
                     'source_file': file_path.name,
                     'import_batch_id': batch_id
-                })
+                }
+                for row in df.itertuples(index=False)
+            ]
 
             with engine.connect() as conn:
                 conn.execute(text("""
-                    INSERT INTO stock_snapshots (
-                        snapshot_date, sku, product_name, net_price, available_stock,
-                        model, source_file, import_batch_id
-                    )
-                    VALUES (
-                        :snapshot_date, :sku, :product_name, :net_price, :available_stock,
-                        :model, :source_file, :import_batch_id
-                    )
-                """), batch_data)
+                                  INSERT INTO stock_snapshots (snapshot_date, sku, product_name, net_price,
+                                                               available_stock,
+                                                               model, source_file, import_batch_id)
+                                  VALUES (:snapshot_date, :sku, :product_name, :net_price, :available_stock,
+                                          :model, :source_file, :import_batch_id)
+                                  """), batch_data)
                 conn.commit()
 
             print(f"  OK Imported {len(batch_data)} stock records")
 
-        except Exception as e:
+        except (ValueError, OSError, IOError) as e:
             print(f"  ERROR: {e}")
 
     print("=" * 60)

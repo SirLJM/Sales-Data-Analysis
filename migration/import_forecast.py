@@ -9,8 +9,11 @@ from sqlalchemy import create_engine, text
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sales_data.loader import SalesDataLoader
+from utils.import_utils import build_forecast_record
 
 load_dotenv(find_dotenv(filename='.env'))
+
+BATCH_SIZE = 1000
 
 
 def _is_forecast_already_imported(engine, generated_date):
@@ -20,20 +23,6 @@ def _is_forecast_already_imported(engine, generated_date):
             WHERE generated_date = :generated_date
         """), {'generated_date': generated_date})
         return result.fetchone()[0] > 0
-
-
-def _build_forecast_record(row, generation_date, file_path, batch_id):
-    sku = row['sku']
-    forecast_date = row['data']
-    return {
-        'forecast_date': forecast_date,
-        'sku': sku,
-        'forecast_quantity': row['forecast'],
-        'model': sku[:5] if len(sku) >= 5 else None,
-        'generated_date': generation_date,
-        'source_file': file_path.name,
-        'import_batch_id': batch_id
-    }
 
 
 def _insert_forecast_batch(engine, batch_data):
@@ -69,9 +58,9 @@ def _process_forecast_file(engine, loader, file_path, generation_date):
 
     batch_data = []
     for _, row in df.iterrows():
-        batch_data.append(_build_forecast_record(row, generation_date, file_path, batch_id))
+        batch_data.append(build_forecast_record(row, generation_date, file_path, batch_id))
 
-        if len(batch_data) >= 1000:
+        if len(batch_data) >= BATCH_SIZE:
             _insert_forecast_batch(engine, batch_data)
             batch_data = []
 
@@ -106,7 +95,7 @@ def import_forecast_data(connection_string: str):
         print(f"\nProcessing: {file_path.name}")
         try:
             _process_forecast_file(engine, loader, file_path, generation_date)
-        except Exception as e:
+        except (ValueError, OSError, IOError) as e:
             print(f"  ERROR: {e}")
 
     print("=" * 60)
