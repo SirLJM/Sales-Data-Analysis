@@ -7,6 +7,8 @@ import pandas as pd
 
 from .validator import DataValidator
 
+PATH_TO = "/path/to"
+
 CSV = ".csv"
 
 XLSX = ".xlsx"
@@ -25,19 +27,22 @@ class SalesDataLoader:
         else:
             paths_file_path = Path(paths_file)
 
+        default_data_dir = Path(__file__).parent.parent / "data"
+
         if paths_file_path.exists():
             with open(paths_file_path, "r", encoding="utf-8") as f:
                 lines = [line.strip().strip("'\"") for line in f.readlines()]
-                self.archival_sales_dir = Path(lines[0]) if len(lines) > 0 else Path("data")
-                self.current_sales_dir = Path(lines[1]) if len(lines) > 1 else Path("data")
-                self.stock_dir = Path(lines[2]) if len(lines) > 2 else Path("data")
-                self.forecast_dir = Path(lines[3]) if len(lines) > 3 else Path("data")
-                self.model_metadata_path = Path(lines[4]) if len(lines) > 4 else None
+
+                self.archival_sales_dir = Path(lines[0]) if len(lines) > 0 and lines[0] and not lines[0].startswith(PATH_TO) else default_data_dir
+                self.current_sales_dir = Path(lines[1]) if len(lines) > 1 and lines[1] and not lines[1].startswith(PATH_TO) else default_data_dir
+                self.stock_dir = Path(lines[2]) if len(lines) > 2 and lines[2] and not lines[2].startswith(PATH_TO) else default_data_dir
+                self.forecast_dir = Path(lines[3]) if len(lines) > 3 and lines[3] and not lines[3].startswith(PATH_TO) else default_data_dir
+                self.model_metadata_path = Path(lines[4]) if len(lines) > 4 and lines[4] and not lines[4].startswith(PATH_TO) else None
         else:
-            self.archival_sales_dir = Path("data")
-            self.current_sales_dir = Path("data")
-            self.stock_dir = Path("data")
-            self.forecast_dir = Path("data")
+            self.archival_sales_dir = default_data_dir
+            self.current_sales_dir = default_data_dir
+            self.stock_dir = default_data_dir
+            self.forecast_dir = default_data_dir
             self.model_metadata_path = None
 
     @staticmethod
@@ -85,7 +90,7 @@ class SalesDataLoader:
                 return None
         return None
 
-    def _collect_files_from_directory(self, directory: Path) -> List[tuple]:
+    def collect_files_from_directory(self, directory: Path) -> List[tuple]:
         collected_files = []
         for file_path in list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)):
             date_range = self._parse_sales_filename(file_path.name)
@@ -97,7 +102,7 @@ class SalesDataLoader:
         if not self.archival_sales_dir.exists():
             return
 
-        for file_path, start_date, end_date in self._collect_files_from_directory(self.archival_sales_dir):
+        for file_path, start_date, end_date in self.collect_files_from_directory(self.archival_sales_dir):
             date_key = (start_date, end_date)
             if date_key not in seen_dates:
                 files_info.append((file_path, start_date, end_date))
@@ -107,7 +112,7 @@ class SalesDataLoader:
         if not self.current_sales_dir.exists():
             return
 
-        current_files = self._collect_files_from_directory(self.current_sales_dir)
+        current_files = self.collect_files_from_directory(self.current_sales_dir)
         if not current_files:
             return
 
@@ -155,17 +160,19 @@ class SalesDataLoader:
         seen_dates = {}
 
         if self.forecast_dir.exists():
-            all_files = list(self.forecast_dir.glob("forecast_*.csv")) + list(
-                self.forecast_dir.glob("forecast_*.xlsx")
-            )
+            subdirs = [d for d in self.forecast_dir.iterdir() if d.is_dir()]
 
-            for file_path in all_files:
-                file_date = self._parse_forecast_filename(file_path.name)
-                if file_date is None:
+            for subdir in subdirs:
+                try:
+                    folder_date = datetime.strptime(subdir.name, "%Y-%m-%d")
+                except ValueError:
                     continue
 
-                if file_date not in seen_dates or self._should_replace_forecast_file(file_path, seen_dates[file_date]):
-                    seen_dates[file_date] = file_path
+                forecast_files = list(subdir.glob("forecast_*.csv")) + list(subdir.glob("forecast_*.xlsx"))
+
+                for file_path in forecast_files:
+                    if folder_date not in seen_dates or self._should_replace_forecast_file(file_path, seen_dates[folder_date]):
+                        seen_dates[folder_date] = file_path
 
             files_info = [(path, date) for date, path in seen_dates.items()]
 

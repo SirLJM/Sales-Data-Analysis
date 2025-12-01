@@ -12,6 +12,7 @@ from utils.pattern_optimizer_logic import (
 )
 
 from sales_data import SalesAnalyzer, SalesDataLoader
+from sales_data.data_source_factory import DataSourceFactory
 from utils.settings_manager import load_settings, save_settings, reset_settings
 
 MODEL_COLOR = "MODEL+COLOR"
@@ -285,25 +286,30 @@ with tab1:
 
     @st.cache_data
     def load_data():
-        loader = SalesDataLoader()
-        return loader.get_aggregated_data()
+        data_source = DataSourceFactory.create_data_source()
+        return data_source.load_sales_data()
 
     @st.cache_data
     def load_stock():
-        loader = SalesDataLoader()
-        stock_file = loader.get_latest_stock_file()
-        if stock_file:
-            return loader.load_stock_file(stock_file), stock_file.name
+        data_source = DataSourceFactory.create_data_source()
+        stock_dataframe = data_source.load_stock_data()
+        if stock_dataframe is not None and not stock_dataframe.empty:
+            return stock_dataframe, "database" if data_source.get_data_source_type() == "database" else "file"
         return None, None
 
     @st.cache_data
     def load_forecast():
-        loader = SalesDataLoader()
-        forecast_result = loader.get_latest_forecast_file()
-        if forecast_result:
-            forecast_file, file_date = forecast_result
-            df_forecast = loader.load_forecast_file(forecast_file)
-            return df_forecast, file_date, forecast_file.name
+        data_source = DataSourceFactory.create_data_source()
+        forecast_dataframe = data_source.load_forecast_data()
+        if forecast_dataframe is not None and not forecast_dataframe.empty:
+            if 'generated_date' in forecast_dataframe.columns:
+                loaded_forecast_date = forecast_dataframe['generated_date'].iloc[0]
+                if loaded_forecast_date is not None and not isinstance(loaded_forecast_date, pd.Timestamp):
+                    loaded_forecast_date = pd.Timestamp(loaded_forecast_date)
+            else:
+                loaded_forecast_date = None
+            source_name = "database" if data_source.get_data_source_type() == "database" else "file"
+            return forecast_dataframe, loaded_forecast_date, source_name
         return None, None, None
 
     @st.cache_data

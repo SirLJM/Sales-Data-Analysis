@@ -17,7 +17,20 @@ class SalesAnalyzer:
     @staticmethod
     def _get_week_start_monday(date):
         days_since_mon = date.weekday()
-        return date - timedelta(days=days_since_mon)
+        week_start = date - timedelta(days=days_since_mon)
+        return week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    @staticmethod
+    def _get_last_week_range(reference_date: datetime) -> tuple[datetime, datetime]:
+        if reference_date.weekday() >= 2:
+            last_week_start = SalesAnalyzer._get_week_start_monday(reference_date)
+        else:
+            last_week_start = SalesAnalyzer._get_week_start_monday(reference_date - timedelta(days=7))
+
+        last_week_end = last_week_start + timedelta(days=6)
+        last_week_end = last_week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        return last_week_start, last_week_end
 
     def aggregate_by_sku(self):
         self.data["year_month"] = self.data["data"].dt.to_period("M")
@@ -625,8 +638,7 @@ class SalesAnalyzer:
         if reference_date is None:
             reference_date = datetime.today()
 
-        last_week_start = SalesAnalyzer._get_week_start_monday(reference_date - timedelta(days=7))
-        last_week_end = last_week_start + timedelta(days=6)
+        last_week_start, last_week_end = SalesAnalyzer._get_last_week_range(reference_date)
 
         prev_year_start = last_week_start - timedelta(days=364)
         prev_year_end = last_week_end - timedelta(days=364)
@@ -687,8 +699,7 @@ class SalesAnalyzer:
         if reference_date is None:
             reference_date = datetime.today()
 
-        last_week_start = SalesAnalyzer._get_week_start_monday(reference_date - timedelta(days=7))
-        last_week_end = last_week_start + timedelta(days=6)
+        last_week_start, last_week_end = SalesAnalyzer._get_last_week_range(reference_date)
 
         df = sales_df.copy()
         df["model"] = df["sku"].astype(str).str[:5]
