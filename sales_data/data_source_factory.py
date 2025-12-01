@@ -13,49 +13,60 @@ SOURCE_CONFIG_JSON = 'data_source_config.json'
 class DataSourceFactory:
 
     @staticmethod
-    def create_data_source() -> DataSource:
-
-        load_dotenv()
-
+    def _load_config():
         config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
-
         if config_path.exists():
             with open(config_path, 'r') as f:
-                config = json.load(f)
-        else:
-            config = {'mode': 'file'}
+                return json.load(f)
+        return {'mode': 'file'}
 
+    @staticmethod
+    def _get_connection_string(config):
+        return config.get('connection_string') or os.environ.get('DATABASE_URL')
+
+    @staticmethod
+    def _create_database_source(connection_string, config):
+        from .db_source import DatabaseSource
+
+        pool_size = config.get('pool_size', 10)
+        pool_recycle = config.get('pool_recycle', 3600)
+
+        db_source = DatabaseSource(connection_string, pool_size, pool_recycle)
+
+        if db_source.is_available():
+            print("[OK] Using database data source")
+            return db_source
+        else:
+            print("[WARN] Database unavailable, falling back to file mode")
+            return FileSource()
+
+    @staticmethod
+    def _handle_database_mode(config):
+        connection_string = DataSourceFactory._get_connection_string(config)
+
+        if not connection_string:
+            print("[WARN] No database connection string found, using file mode")
+            return FileSource()
+
+        try:
+            return DataSourceFactory._create_database_source(connection_string, config)
+        except Exception as e:
+            print(f"[ERROR] Database connection failed: {e}")
+            if config.get('fallback_to_file', True):
+                print("[INFO] Falling back to file mode")
+                return FileSource()
+            else:
+                raise
+
+    @staticmethod
+    def create_data_source() -> DataSource:
+        load_dotenv()
+
+        config = DataSourceFactory._load_config()
         mode = os.environ.get('DATA_SOURCE_MODE', config.get('mode', 'file'))
 
         if mode == 'database':
-            connection_string = config.get('connection_string') or os.environ.get('DATABASE_URL')
-
-            if connection_string:
-                try:
-                    from .db_source import DatabaseSource
-
-                    pool_size = config.get('pool_size', 10)
-                    pool_recycle = config.get('pool_recycle', 3600)
-
-                    db_source: DatabaseSource = DatabaseSource(connection_string, pool_size, pool_recycle)
-
-                    if db_source.is_available():
-                        print("[OK] Using database data source")
-                        return db_source
-                    else:
-                        print("[WARN] Database unavailable, falling back to file mode")
-                        return FileSource()
-
-                except Exception as e:
-                    print(f"[ERROR] Database connection failed: {e}")
-                    if config.get('fallback_to_file', True):
-                        print("[INFO] Falling back to file mode")
-                        return FileSource()
-                    else:
-                        raise
-            else:
-                print("[WARN] No database connection string found, using file mode")
-                return FileSource()
+            return DataSourceFactory._handle_database_mode(config)
 
         print("[INFO] Using file data source")
         return FileSource()

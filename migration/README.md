@@ -11,21 +11,24 @@ This guide will help you set up and migrate your inventory management system to 
 ## Step 1: Install PostgreSQL
 
 ### Windows
+
 Download and install from: https://www.postgresql.org/download/windows/
 
 During installation:
+
 - Remember your postgres user password
 - Default port: 5432
 - Install pgAdmin 4 (GUI tool)
 
 ### Verify Installation
+
 ```bash
 psql --version
 ```
 
 ## Step 2: Create Database
 
-Open pgAdmin or use command line:
+Open pgAdmin or use the command line:
 
 ```sql
 CREATE DATABASE inventory_db;
@@ -51,6 +54,7 @@ psql -U inventory_user -d inventory_db -f materialized_views.sql
 ```
 
 Or using pgAdmin:
+
 1. Connect to `inventory_db`
 2. Open Query Tool
 3. Copy-paste each SQL file and execute
@@ -147,6 +151,7 @@ ORDER BY tablename;
 Once data is verified:
 
 1. Edit `src/data_source_config.json`:
+
 ```json
 {
   "mode": "database",
@@ -156,11 +161,13 @@ Once data is verified:
 ```
 
 2. Or update `.env`:
+
 ```env
 DATA_SOURCE_MODE=database
 ```
 
 3. Restart the Streamlit app:
+
 ```bash
 cd src
 py -m streamlit run app.py
@@ -171,6 +178,7 @@ You should see: `✓ Using database data source`
 ## Step 9: Daily Updates
 
 ### Manual Update (via Streamlit UI)
+
 - Open Tab 1 sidebar
 - Click "🔄 Update Database" button
 
@@ -201,23 +209,27 @@ Schedule to run daily at 7 AM.
 ## Troubleshooting
 
 ### Connection Refused
+
 - Check PostgreSQL service is running: `pg_ctl status`
 - Verify port 5432 is open
 - Check `pg_hba.conf` allows local connections
 
 ### Slow Queries
+
 - Check indexes: `SELECT * FROM pg_indexes WHERE tablename LIKE '%sales%'`
 - Run `VACUUM ANALYZE` on large tables
 - Check query plans: `EXPLAIN ANALYZE SELECT ...`
 
 ### Cache Not Updating
+
 - Manually invalidate: `SELECT invalidate_all_caches()`
 - Refresh materialized views: `SELECT refresh_all_materialized_views()`
 
 ### Rollback to File Mode
+
 1. Edit `src/data_source_config.json`: `"mode": "file"`
 2. Restart app
-3. Files remain source of truth
+3. Files remain a source of truth
 
 ## Performance Monitoring
 
@@ -251,14 +263,17 @@ ORDER BY index_usage_pct DESC;
 ## Maintenance
 
 ### Weekly
+
 - `VACUUM ANALYZE` on large tables
 - Check file import logs: `SELECT * FROM file_imports WHERE import_status = 'failed'`
 
 ### Monthly
-- Add new year partitions if approaching year boundary
+
+- Add new year partitions if approaching the year boundary
 - Review and archive old cache versions
 
 ### Yearly
+
 ```sql
 -- Create next year partition
 CREATE TABLE raw_sales_transactions_2027 PARTITION OF raw_sales_transactions
@@ -268,6 +283,7 @@ CREATE TABLE raw_sales_transactions_2027 PARTITION OF raw_sales_transactions
 ## Next Steps
 
 Once database migration is complete:
+
 1. Monitor performance improvements (should see 10-100x speedup)
 2. Set up automated daily updates
 3. Consider implementing cache pre-warming

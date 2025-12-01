@@ -42,4 +42,5 @@ bak/
 .flake8
 saved_pattern_sets.json
 .env
+utils/optimizer_pattern_sets.json
 
