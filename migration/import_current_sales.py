@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine
 from tqdm import tqdm
 
@@ -15,10 +15,10 @@ from utils.import_utils import (
     compute_file_hash,
     is_file_imported,
     log_file_import,
-    process_sales_file_in_batches
+    process_sales_file_in_batches,
 )
 
-load_dotenv(find_dotenv(filename='.env'))
+load_dotenv(find_dotenv(filename=".env"))
 
 BATCH_SIZE = 1000
 
@@ -39,7 +39,7 @@ def _collect_files_to_import(engine, loader):
     files_to_import = []
     for file_path, start_date, end_date in current_files:
         file_hash = compute_file_hash(file_path)
-        if not is_file_imported(engine, file_hash, 'sales_current'):
+        if not is_file_imported(engine, file_hash, "sales_current"):
             files_to_import.append((file_path, start_date, end_date, file_hash))
 
     return files_to_import
@@ -56,14 +56,22 @@ def _process_single_file(engine, loader, file_info):
         return 0
 
     records_imported = process_sales_file_in_batches(
-        sales_df, engine, file_path, start_date, end_date, batch_id, 'current', BATCH_SIZE
+        sales_df, engine, file_path, start_date, end_date, batch_id, "current", BATCH_SIZE
     )
 
     processing_time_ms = int((datetime.now() - file_start_time).total_seconds() * 1000)
 
     log_file_import(
-        engine, file_path, file_hash, start_date, end_date, batch_id,
-        records_imported, processing_time_ms, 'sales_current', 'import_current_sales'
+        engine,
+        file_path,
+        file_hash,
+        start_date,
+        end_date,
+        batch_id,
+        records_imported,
+        processing_time_ms,
+        "sales_current",
+        "import_current_sales",
     )
 
     print(f"OK {file_path.name}: {records_imported} records ({processing_time_ms}ms)")
@@ -106,7 +114,7 @@ def import_current_sales(connection_string: str):
 
 
 if __name__ == "__main__":
-    db_url = os.environ.get('DATABASE_URL')
+    db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         print("Error: DATABASE_URL not set")
         sys.exit(1)

@@ -103,9 +103,7 @@ def _get_empty_result(quantities: Dict[str, int]) -> Dict:
 
 
 def _find_best_solution(
-    quantities: Dict[str, int],
-    patterns: List[Pattern],
-    min_per_pattern: int
+    quantities: Dict[str, int], patterns: List[Pattern], min_per_pattern: int
 ) -> Optional[Dict[int, int]]:
     best_solution = None
     best_excess = float("inf")
@@ -131,9 +129,7 @@ def _find_best_solution(
 
 
 def _calculate_production(
-    allocation: Dict[int, int],
-    patterns: List[Pattern],
-    quantities: Dict[str, int]
+    allocation: Dict[int, int], patterns: List[Pattern], quantities: Dict[str, int]
 ) -> Dict[str, int]:
     produced = dict.fromkeys(quantities, 0)
     for pattern in patterns:
@@ -144,9 +140,7 @@ def _calculate_production(
 
 
 def _find_violations(
-    allocation: Dict[int, int],
-    patterns: List[Pattern],
-    min_per_pattern: int
+    allocation: Dict[int, int], patterns: List[Pattern], min_per_pattern: int
 ) -> List[tuple]:
     violations = []
     for pattern in patterns:
@@ -205,9 +199,7 @@ def _calculate_greedy_score(pattern: Pattern, remaining: Dict[str, int]) -> floa
 
 
 def _find_best_pattern_by_score(
-    patterns: List[Pattern],
-    remaining: Dict[str, int],
-    score_func
+    patterns: List[Pattern], remaining: Dict[str, int], score_func
 ) -> Optional[Pattern]:
     best_pattern = None
     best_score = -float("inf")
@@ -226,18 +218,14 @@ def _can_allocate_pattern(
     allocation: Dict[int, int],
     patterns_used: int,
     total: int,
-    min_per_pattern: int
+    min_per_pattern: int,
 ) -> bool:
     if patterns_used + min_per_pattern > total:
         return allocation[pattern.id] > 0
     return True
 
 
-def _update_remaining(
-    remaining: Dict[str, int],
-    pattern: Pattern,
-    quantity: int
-):
+def _update_remaining(remaining: Dict[str, int], pattern: Pattern, quantity: int):
     for size, count in pattern.sizes.items():
         remaining[size] = remaining.get(size, 0) - (count * quantity)
 
@@ -251,14 +239,17 @@ def find_allocation_for_total(
 
     while patterns_used < total:
         valid_patterns = [
-            p for p in patterns
+            p
+            for p in patterns
             if _can_allocate_pattern(p, allocation, patterns_used, total, min_per_pattern)
         ]
 
         if not valid_patterns:
             break
 
-        best_pattern = _find_best_pattern_by_score(valid_patterns, remaining, _calculate_pattern_score)
+        best_pattern = _find_best_pattern_by_score(
+            valid_patterns, remaining, _calculate_pattern_score
+        )
         if not best_pattern:
             break
 
@@ -281,9 +272,7 @@ def _has_remaining_demand(remaining: Dict[str, int]) -> bool:
 
 
 def _determine_allocation_quantity(
-    allocation: Dict[int, int],
-    pattern_id: int,
-    min_per_pattern: int
+    allocation: Dict[int, int], pattern_id: int, min_per_pattern: int
 ) -> int:
     if allocation[pattern_id] == 0:
         return min_per_pattern

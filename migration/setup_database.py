@@ -2,15 +2,15 @@ import os
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 
 def main():
-    load_dotenv(Path(__file__).parent.parent / '.env')
-    connection_string = os.environ.get('DATABASE_URL')
+    load_dotenv(Path(__file__).parent.parent / ".env")
+    connection_string = os.environ.get("DATABASE_URL")
 
     if not connection_string:
         print("=" * 60)
@@ -44,13 +44,13 @@ def main():
         return 1
 
     print("\n2. Running schema.sql...")
-    schema_file = Path(__file__).parent / 'schema.sql'
+    schema_file = Path(__file__).parent / "schema.sql"
 
     if not schema_file.exists():
         print(f"   File not found: {schema_file}")
         return 1
 
-    with open(schema_file, 'r', encoding='utf-8') as f:
+    with open(schema_file, "r", encoding="utf-8") as f:
         schema_sql = f.read()
 
     try:
@@ -63,13 +63,13 @@ def main():
         print("\n   This is normal if tables already exist. Continuing...")
 
     print("\n3. Running triggers.sql...")
-    triggers_file = Path(__file__).parent / 'triggers.sql'
+    triggers_file = Path(__file__).parent / "triggers.sql"
 
     if not triggers_file.exists():
         print(f"   File not found: {triggers_file}")
         return 1
 
-    with open(triggers_file, 'r', encoding='utf-8') as f:
+    with open(triggers_file, "r", encoding="utf-8") as f:
         triggers_sql = f.read()
 
     try:
@@ -82,13 +82,13 @@ def main():
         print("   Continuing...")
 
     print("\n4. Running materialized_views.sql...")
-    views_file = Path(__file__).parent / 'materialized_views.sql'
+    views_file = Path(__file__).parent / "materialized_views.sql"
 
     if not views_file.exists():
         print(f"   File not found: {views_file}")
         return 1
 
-    with open(views_file, 'r', encoding='utf-8') as f:
+    with open(views_file, "r", encoding="utf-8") as f:
         views_sql = f.read()
 
     try:
@@ -103,24 +103,32 @@ def main():
     print("\n5. Verifying database structure...")
     try:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(
+                text(
+                    """
                                        SELECT tablename
                                        FROM pg_tables
                                        WHERE schemaname = 'public'
                                        ORDER BY tablename
-                                       """))
+                                       """
+                )
+            )
             tables = [row[0] for row in result]
 
             print(f"   Found {len(tables)} tables:")
             for table in tables:
                 print(f"      - {table}")
 
-            result = conn.execute(text("""
+            result = conn.execute(
+                text(
+                    """
                                        SELECT matviewname
                                        FROM pg_matviews
                                        WHERE schemaname = 'public'
                                        ORDER BY matviewname
-                                       """))
+                                       """
+                )
+            )
             views = [row[0] for row in result]
 
             if views:
@@ -128,11 +136,15 @@ def main():
                 for view in views:
                     print(f"      - {view}")
 
-            result = conn.execute(text("""
+            result = conn.execute(
+                text(
+                    """
                                        SELECT COUNT(*)
                                        FROM pg_trigger
                                        WHERE tgname LIKE 'trg_%'
-                                       """))
+                                       """
+                )
+            )
             trigger_count = result.fetchone()[0]
             print(f"\n   Found {trigger_count} triggers")
 

@@ -1,17 +1,18 @@
-import sys
 import os
-from pathlib import Path
-from dotenv import load_dotenv, find_dotenv
-from sqlalchemy import create_engine, text
+import sys
 from datetime import datetime
+from pathlib import Path
+
+from dotenv import find_dotenv, load_dotenv
+from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-load_dotenv(find_dotenv(filename='.env'))
+load_dotenv(find_dotenv(filename=".env"))
 
-from import_stock import import_stock_data
-from import_forecast import import_forecast_data
 from import_current_sales import import_current_sales
+from import_forecast import import_forecast_data
+from import_stock import import_stock_data
 from initial_populate import populate_archival_sales
 
 
@@ -24,11 +25,15 @@ def refresh_materialized_views(connection_string: str):
 
     try:
         with engine.connect() as conn:
-            result = conn.execute(text("""
+            result = conn.execute(
+                text(
+                    """
                 SELECT matviewname FROM pg_matviews
                 WHERE schemaname = 'public'
                 ORDER BY matviewname
-            """))
+            """
+                )
+            )
             views = [row[0] for row in result]
 
             if not views:
@@ -60,7 +65,9 @@ def print_import_summary(connection_string: str):
     engine = create_engine(connection_string)
 
     with engine.connect() as conn:
-        result = conn.execute(text("""
+        result = conn.execute(
+            text(
+                """
             SELECT
                 COUNT(*) as total_transactions,
                 MIN(sale_date) as earliest_sale,
@@ -69,7 +76,9 @@ def print_import_summary(connection_string: str):
                 COUNT(DISTINCT order_id) as unique_orders,
                 SUM(total_amount) as total_revenue
             FROM raw_sales_transactions
-        """))
+        """
+            )
+        )
         row = result.fetchone()
 
         print("\nSales Transactions:")
@@ -77,36 +86,50 @@ def print_import_summary(connection_string: str):
         print(f"  Date range:          {row[1].date()} to {row[2].date()}")
         print(f"  Unique SKUs:         {row[3]:,}")
         print(f"  Unique orders:       {row[4]:,}")
-        print(f"  Total revenue:       ${row[5]:,.2f}" if row[5] else "  Total revenue:       $0.00")
+        print(
+            f"  Total revenue:       ${row[5]:,.2f}" if row[5] else "  Total revenue:       $0.00"
+        )
 
-        result = conn.execute(text("""
+        result = conn.execute(
+            text(
+                """
             SELECT COUNT(*) as total_records, COUNT(DISTINCT snapshot_date) as unique_dates
             FROM stock_snapshots
-        """))
+        """
+            )
+        )
         row = result.fetchone()
         print("\nStock Snapshots:")
         print(f"  Total records:       {row[0]:,}")
         print(f"  Unique dates:        {row[1]}")
 
-        result = conn.execute(text("""
+        result = conn.execute(
+            text(
+                """
             SELECT
                 COUNT(*) as total_records,
                 COUNT(DISTINCT sku) as unique_skus,
                 COUNT(DISTINCT generated_date) as unique_generations
             FROM forecast_data
-        """))
+        """
+            )
+        )
         row = result.fetchone()
         print("\nForecast Data:")
         print(f"  Total records:       {row[0]:,}")
         print(f"  Unique SKUs:         {row[1]:,}")
         print(f"  Forecast versions:   {row[2]}")
 
-        result = conn.execute(text("""
+        result = conn.execute(
+            text(
+                """
             SELECT file_type, COUNT(*) as count, import_status
             FROM file_imports
             GROUP BY file_type, import_status
             ORDER BY file_type, import_status
-        """))
+        """
+            )
+        )
         print("\nFile Imports:")
         for row in result:
             print(f"  {row[0]:20s} {row[2]:10s} {row[1]:3d} files")
@@ -116,7 +139,7 @@ def print_import_summary(connection_string: str):
 
 
 def main():
-    db_url = os.environ.get('DATABASE_URL')
+    db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         print("Error: DATABASE_URL not set")
         print("Please check your .env file")

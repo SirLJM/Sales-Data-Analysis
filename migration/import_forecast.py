@@ -3,7 +3,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -11,23 +11,30 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from sales_data.loader import SalesDataLoader
 from utils.import_utils import build_forecast_record
 
-load_dotenv(find_dotenv(filename='.env'))
+load_dotenv(find_dotenv(filename=".env"))
 
 BATCH_SIZE = 1000
 
 
 def _is_forecast_already_imported(engine, generated_date):
     with engine.connect() as conn:
-        result = conn.execute(text("""
+        result = conn.execute(
+            text(
+                """
             SELECT COUNT(*) FROM forecast_data
             WHERE generated_date = :generated_date
-        """), {'generated_date': generated_date})
+        """
+            ),
+            {"generated_date": generated_date},
+        )
         return result.fetchone()[0] > 0
 
 
 def _insert_forecast_batch(engine, batch_data):
     with engine.connect() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text(
+                """
             INSERT INTO forecast_data (
                 forecast_date, sku, forecast_quantity,
                 model, generated_date,
@@ -39,7 +46,10 @@ def _insert_forecast_batch(engine, batch_data):
                 :source_file, :import_batch_id
             )
             ON CONFLICT (sku, forecast_date, generated_date) DO NOTHING
-        """), batch_data)
+        """
+            ),
+            batch_data,
+        )
         conn.commit()
 
 
@@ -104,7 +114,7 @@ def import_forecast_data(connection_string: str):
 
 
 if __name__ == "__main__":
-    db_url = os.environ.get('DATABASE_URL')
+    db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         print("Error: DATABASE_URL not set")
         sys.exit(1)
