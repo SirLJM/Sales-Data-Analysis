@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any
 
 SETTINGS_FILE = "../settings.json"
 
@@ -38,7 +38,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-def load_settings() -> Dict[str, Any]:
+def load_settings() -> dict[str, Any]:
     if not os.path.exists(SETTINGS_FILE):
         return DEFAULT_SETTINGS.copy()
 
@@ -51,7 +51,7 @@ def load_settings() -> Dict[str, Any]:
         return DEFAULT_SETTINGS.copy()
 
 
-def save_settings(settings: Dict[str, Any]) -> bool:
+def save_settings(settings: dict[str, Any]) -> bool:
     try:
         with open(SETTINGS_FILE, "w") as f:
             json.dump(settings, f, indent=2)
@@ -61,26 +61,26 @@ def save_settings(settings: Dict[str, Any]) -> bool:
         return False
 
 
-def reset_settings() -> Dict[str, Any]:
+def reset_settings() -> dict[str, Any]:
     save_settings(DEFAULT_SETTINGS)
     return DEFAULT_SETTINGS.copy()
 
 
-def _merge_with_defaults(settings: Dict[str, Any]) -> Dict[str, Any]:
+def _merge_with_defaults(settings: dict[str, Any]) -> dict[str, Any]:
     merged = DEFAULT_SETTINGS.copy()
 
     for key in DEFAULT_SETTINGS:
         if key in settings:
             if isinstance(DEFAULT_SETTINGS[key], dict):
-                merged[key] = DEFAULT_SETTINGS[key].copy()
-                merged[key].update(settings[key])
+                merged[key] = DEFAULT_SETTINGS[key].copy()  # type: ignore[attr-defined]
+                merged[key].update(settings[key])  # type: ignore[attr-defined]
             else:
                 merged[key] = settings[key]
 
     return merged
 
 
-def get_setting(key: str, settings: Dict[str, Any] | None = None) -> Any:
+def get_setting(key: str, settings: dict[str, Any] | None = None) -> Any:
     if settings is None:
         settings = load_settings()
 
@@ -96,7 +96,7 @@ def get_setting(key: str, settings: Dict[str, Any] | None = None) -> Any:
     return value
 
 
-def update_setting(key: str, value: Any, settings: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def update_setting(key: str, value: Any, settings: dict[str, Any] | None = None) -> dict[str, Any]:
     if settings is None:
         settings = load_settings()
 

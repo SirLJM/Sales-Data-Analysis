@@ -1,8 +1,11 @@
 import hashlib
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
+import pandas as pd
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 
 def compute_file_hash(file_path: Path) -> str:
@@ -13,7 +16,7 @@ def compute_file_hash(file_path: Path) -> str:
     return sha256_hash.hexdigest()
 
 
-def is_file_imported(engine, file_hash: str, file_type: str) -> bool:
+def is_file_imported(engine: Engine, file_hash: str, file_type: str) -> bool:
     query = text(
         """
         SELECT COUNT(*) as count
@@ -24,11 +27,13 @@ def is_file_imported(engine, file_hash: str, file_type: str) -> bool:
 
     with engine.connect() as conn:
         result = conn.execute(query, {"file_hash": file_hash, "file_type": file_type})
-        count = result.fetchone()[0]
-        return count > 0
+        row = result.fetchone()
+        if row is None:
+            return False
+        return bool(row[0] > 0)
 
 
-def insert_sales_batch(engine, batch_data: list) -> int:
+def insert_sales_batch(engine: Engine, batch_data: list[dict]) -> int:
     with engine.connect() as conn:
         conn.execute(
             text(
@@ -62,7 +67,7 @@ def parse_sku_components(sku: str) -> tuple[str | None, str | None, str | None]:
 
 
 def build_sales_record(
-    row,
+    row: Any,
     file_path: Path,
     start_date: datetime,
     end_date: datetime,
@@ -92,7 +97,9 @@ def build_sales_record(
     }
 
 
-def build_forecast_record(row, generation_date: datetime, file_path: Path, batch_id: str) -> dict:
+def build_forecast_record(
+    row: Any, generation_date: datetime, file_path: Path, batch_id: str
+) -> dict:
     sku = row["sku"]
     forecast_date = row["data"]
     model, _, _ = parse_sku_components(sku)
@@ -108,7 +115,7 @@ def build_forecast_record(row, generation_date: datetime, file_path: Path, batch
     }
 
 
-def build_stock_record(row, snapshot_date: datetime, file_path: Path, batch_id: str) -> dict:
+def build_stock_record(row: Any, snapshot_date: datetime, file_path: Path, batch_id: str) -> dict:
     sku = row["sku"]
     model, _, _ = parse_sku_components(sku)
 
@@ -125,7 +132,7 @@ def build_stock_record(row, snapshot_date: datetime, file_path: Path, batch_id: 
 
 
 def log_file_import(
-    engine,
+    engine: Engine,
     file_path: Path,
     file_hash: str,
     start_date: datetime | None,
@@ -171,8 +178,8 @@ def log_file_import(
 
 
 def process_sales_file_in_batches(
-    df,
-    engine,
+    df: pd.DataFrame,
+    engine: Engine,
     file_path: Path,
     start_date: datetime,
     end_date: datetime,
