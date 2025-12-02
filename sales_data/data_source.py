@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
 
 import pandas as pd
 
@@ -9,41 +8,33 @@ class DataSource(ABC):
 
     @abstractmethod
     def load_sales_data(
-        self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
         pass
 
     @abstractmethod
-    def load_stock_data(self, snapshot_date: Optional[datetime] = None) -> pd.DataFrame:
+    def load_stock_data(self, snapshot_date: datetime | None = None) -> pd.DataFrame:
         pass
 
     @abstractmethod
-    def load_forecast_data(self, generated_date: Optional[datetime] = None) -> pd.DataFrame:
+    def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
         pass
 
     @abstractmethod
     def get_sku_statistics(
-        self,
-        entity_type: str = 'sku',
-        force_recompute: bool = False
+        self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
         pass
 
     @abstractmethod
     def get_order_priorities(
-        self,
-        top_n: Optional[int] = None,
-        force_recompute: bool = False
+        self, top_n: int | None = None, force_recompute: bool = False
     ) -> pd.DataFrame:
         pass
 
     @abstractmethod
     def get_monthly_aggregations(
-        self,
-        entity_type: str = 'sku',
-        force_recompute: bool = False
+        self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
         pass
 

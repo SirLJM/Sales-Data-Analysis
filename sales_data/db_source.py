@@ -1,24 +1,26 @@
-from typing import Optional
+import hashlib
+import json
 from datetime import datetime
+
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
-import hashlib
-import json
 
 from sales_data.data_source import DataSource
 
 
 class DatabaseSource(DataSource):
 
-    def __init__(self, connection_string: str, pool_size: int = 10, pool_recycle: int = 3600):
+    def __init__(
+        self, connection_string: str, pool_size: int = 10, pool_recycle: int = 3600
+    ) -> None:
         self.connection_string = connection_string
         self.engine = create_engine(
             connection_string,
             poolclass=QueuePool,
             pool_size=pool_size,
             pool_recycle=pool_recycle,
-            pool_pre_ping=True
+            pool_pre_ping=True,
         )
         self._is_available = self._test_connection()
 
@@ -32,9 +34,7 @@ class DatabaseSource(DataSource):
             return False
 
     def load_sales_data(
-        self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
 
         query = """
@@ -57,23 +57,23 @@ class DatabaseSource(DataSource):
 
         if start_date is not None:
             query += " AND sale_date >= :start_date"
-            params['start_date'] = start_date
+            params["start_date"] = start_date
 
         if end_date is not None:
             query += " AND sale_date <= :end_date"
-            params['end_date'] = end_date
+            params["end_date"] = end_date
 
         query += " ORDER BY sale_date, sku"
 
         with self.engine.connect() as conn:
             df = pd.read_sql_query(text(query), conn, params=params)
 
-        if not df.empty and 'data' in df.columns:
-            df['data'] = pd.to_datetime(df['data'])
+        if not df.empty and "data" in df.columns:
+            df["data"] = pd.to_datetime(df["data"])
 
         return df
 
-    def load_stock_data(self, snapshot_date: Optional[datetime] = None) -> pd.DataFrame:
+    def load_stock_data(self, snapshot_date: datetime | None = None) -> pd.DataFrame:
 
         if snapshot_date is not None:
             query = """
@@ -91,7 +91,11 @@ class DatabaseSource(DataSource):
                   AND is_active = TRUE
                 ORDER BY sku
             """
-            params = {'snapshot_date': snapshot_date.date() if isinstance(snapshot_date, datetime) else snapshot_date}
+            params = {
+                "snapshot_date": (
+                    snapshot_date.date() if isinstance(snapshot_date, datetime) else snapshot_date
+                )
+            }
         else:
             query = """
                 SELECT
@@ -119,7 +123,7 @@ class DatabaseSource(DataSource):
             print(f"[ERROR] Failed to load stock data: {e}")
             return pd.DataFrame()
 
-    def load_forecast_data(self, generated_date: Optional[datetime] = None) -> pd.DataFrame:
+    def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
 
         if generated_date is not None:
             query = """
@@ -133,7 +137,13 @@ class DatabaseSource(DataSource):
                 WHERE generated_date = :generated_date
                 ORDER BY forecast_date, sku
             """
-            params = {'generated_date': generated_date.date() if isinstance(generated_date, datetime) else generated_date}
+            params = {
+                "generated_date": (
+                    generated_date.date()
+                    if isinstance(generated_date, datetime)
+                    else generated_date
+                )
+            }
         else:
             query = """
                 SELECT
@@ -152,8 +162,8 @@ class DatabaseSource(DataSource):
             with self.engine.connect() as conn:
                 df = pd.read_sql_query(text(query), conn, params=params)
 
-            if not df.empty and 'data' in df.columns:
-                df['data'] = pd.to_datetime(df['data'])
+            if not df.empty and "data" in df.columns:
+                df["data"] = pd.to_datetime(df["data"])
 
             return df
         except Exception as e:
@@ -161,9 +171,7 @@ class DatabaseSource(DataSource):
             return pd.DataFrame()
 
     def get_sku_statistics(
-        self,
-        entity_type: str = 'sku',
-        force_recompute: bool = False
+        self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
 
         if force_recompute:
@@ -195,17 +203,18 @@ class DatabaseSource(DataSource):
         """
 
         with self.engine.connect() as conn:
-            df = pd.read_sql_query(text(query), conn, params={'entity_type': entity_type})
+            df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
         if df.empty:
             return self._compute_sku_statistics(entity_type)
 
         from utils.settings_manager import load_settings
+
         settings = load_settings()
         current_hash = self._compute_settings_hash(settings)
 
-        if not df.empty and 'configuration_hash' in df.columns:
-            cached_hash = df['configuration_hash'].iloc[0] if len(df) > 0 else None
+        if not df.empty and "configuration_hash" in df.columns:
+            cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
                 print("Settings changed, recomputing statistics...")
                 return self._compute_sku_statistics(entity_type)
@@ -213,9 +222,7 @@ class DatabaseSource(DataSource):
         return df
 
     def get_order_priorities(
-        self,
-        top_n: Optional[int] = None,
-        force_recompute: bool = False
+        self, top_n: int | None = None, force_recompute: bool = False
     ) -> pd.DataFrame:
 
         if force_recompute:
@@ -254,11 +261,12 @@ class DatabaseSource(DataSource):
             return self._compute_order_priorities(top_n)
 
         from utils.settings_manager import load_settings
+
         settings = load_settings()
         current_hash = self._compute_settings_hash(settings)
 
-        if not df.empty and 'configuration_hash' in df.columns:
-            cached_hash = df['configuration_hash'].iloc[0] if len(df) > 0 else None
+        if not df.empty and "configuration_hash" in df.columns:
+            cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
                 print("Settings changed, recomputing priorities...")
                 return self._compute_order_priorities(top_n)
@@ -266,9 +274,7 @@ class DatabaseSource(DataSource):
         return df
 
     def get_monthly_aggregations(
-        self,
-        entity_type: str = 'sku',
-        force_recompute: bool = False
+        self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
 
         query = """
@@ -288,7 +294,7 @@ class DatabaseSource(DataSource):
         """
 
         with self.engine.connect() as conn:
-            df = pd.read_sql_query(text(query), conn, params={'entity_type': entity_type})
+            df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
         if df.empty and not force_recompute:
             return self._compute_monthly_aggregations(entity_type)
@@ -297,9 +303,16 @@ class DatabaseSource(DataSource):
 
     @staticmethod
     def _compute_settings_hash(settings: dict) -> str:
-        relevant_keys = ['lead_time', 'cv_threshold_basic', 'cv_threshold_seasonal',
-                        'z_score_basic', 'z_score_regular', 'z_score_seasonal_in',
-                        'z_score_seasonal_out', 'z_score_new']
+        relevant_keys = [
+            "lead_time",
+            "cv_threshold_basic",
+            "cv_threshold_seasonal",
+            "z_score_basic",
+            "z_score_regular",
+            "z_score_seasonal_in",
+            "z_score_seasonal_out",
+            "z_score_new",
+        ]
         settings_subset = {k: settings.get(k) for k in relevant_keys if k in settings}
         settings_json = json.dumps(settings_subset, sort_keys=True)
         return hashlib.md5(settings_json.encode()).hexdigest()
@@ -307,18 +320,21 @@ class DatabaseSource(DataSource):
     @staticmethod
     def _compute_sku_statistics(entity_type: str) -> pd.DataFrame:
         from .file_source import FileSource
+
         file_source = FileSource()
         return file_source.get_sku_statistics(entity_type, force_recompute=True)
 
     @staticmethod
-    def _compute_order_priorities(top_n: Optional[int] = None) -> pd.DataFrame:
+    def _compute_order_priorities(top_n: int | None = None) -> pd.DataFrame:
         from .file_source import FileSource
+
         file_source = FileSource()
         return file_source.get_order_priorities(top_n, force_recompute=True)
 
     @staticmethod
     def _compute_monthly_aggregations(entity_type: str) -> pd.DataFrame:
         from .file_source import FileSource
+
         file_source = FileSource()
         return file_source.get_monthly_aggregations(entity_type, force_recompute=True)
 
@@ -329,6 +345,6 @@ class DatabaseSource(DataSource):
     def get_data_source_type(**kwargs) -> str:
         return "database"
 
-    def close(self):
+    def close(self) -> None:
         if self.engine:
             self.engine.dispose()

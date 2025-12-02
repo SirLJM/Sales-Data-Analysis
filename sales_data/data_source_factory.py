@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from .data_source import DataSource
 from .file_source import FileSource
 
-SOURCE_CONFIG_JSON = 'data_source_config.json'
+SOURCE_CONFIG_JSON = "data_source_config.json"
 
 
 class DataSourceFactory:
@@ -16,20 +16,20 @@ class DataSourceFactory:
     def _load_config():
         config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
         if config_path.exists():
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 return json.load(f)
-        return {'mode': 'file'}
+        return {"mode": "file"}
 
     @staticmethod
     def _get_connection_string(config):
-        return config.get('connection_string') or os.environ.get('DATABASE_URL')
+        return config.get("connection_string") or os.environ.get("DATABASE_URL")
 
     @staticmethod
     def _create_database_source(connection_string, config):
         from .db_source import DatabaseSource
 
-        pool_size = config.get('pool_size', 10)
-        pool_recycle = config.get('pool_recycle', 3600)
+        pool_size = config.get("pool_size", 10)
+        pool_recycle = config.get("pool_recycle", 3600)
 
         db_source = DatabaseSource(connection_string, pool_size, pool_recycle)
 
@@ -52,7 +52,7 @@ class DataSourceFactory:
             return DataSourceFactory._create_database_source(connection_string, config)
         except Exception as e:
             print(f"[ERROR] Database connection failed: {e}")
-            if config.get('fallback_to_file', True):
+            if config.get("fallback_to_file", True):
                 print("[INFO] Falling back to file mode")
                 return FileSource()
             else:
@@ -63,9 +63,9 @@ class DataSourceFactory:
         load_dotenv()
 
         config = DataSourceFactory._load_config()
-        mode = os.environ.get('DATA_SOURCE_MODE', config.get('mode', 'file'))
+        mode = os.environ.get("DATA_SOURCE_MODE", config.get("mode", "file"))
 
-        if mode == 'database':
+        if mode == "database":
             return DataSourceFactory._handle_database_mode(config)
 
         print("[INFO] Using file data source")
@@ -78,29 +78,29 @@ class DataSourceFactory:
         config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
 
         if config_path.exists():
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 config = json.load(f)
         else:
-            config = {'mode': 'file'}
+            config = {"mode": "file"}
 
-        return os.environ.get('DATA_SOURCE_MODE', config.get('mode', 'file'))
+        return os.environ.get("DATA_SOURCE_MODE", config.get("mode", "file"))
 
     @staticmethod
     def switch_mode(mode: str) -> None:
-        if mode not in ['file', 'database']:
+        if mode not in ["file", "database"]:
             raise ValueError("Mode must be 'file' or 'database'")
 
         config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
 
         if config_path.exists():
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 config = json.load(f)
         else:
             config = {}
 
-        config['mode'] = mode
+        config["mode"] = mode
 
-        with open(config_path, 'w') as f:
+        with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
 
         print(f"[OK] Data source mode switched to: {mode}")

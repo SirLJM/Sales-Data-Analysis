@@ -7,7 +7,7 @@ AVERAGE_SALES = "AVERAGE SALES"
 
 
 class SalesAnalyzer:
-    def __init__(self, data):
+    def __init__(self, data: pd.DataFrame) -> None:
         self.data = data.copy()
         if not pd.api.types.is_datetime64_any_dtype(self.data["data"]):
             self.data["data"] = pd.to_datetime(self.data["data"])
@@ -15,7 +15,7 @@ class SalesAnalyzer:
         self.data["model"] = self.data["sku"].astype(str).str[:5]
 
     @staticmethod
-    def _get_week_start_monday(date):
+    def _get_week_start_monday(date: datetime) -> datetime:
         days_since_mon = date.weekday()
         week_start = date - timedelta(days=days_since_mon)
         return week_start.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -25,14 +25,16 @@ class SalesAnalyzer:
         if reference_date.weekday() >= 2:
             last_week_start = SalesAnalyzer._get_week_start_monday(reference_date)
         else:
-            last_week_start = SalesAnalyzer._get_week_start_monday(reference_date - timedelta(days=7))
+            last_week_start = SalesAnalyzer._get_week_start_monday(
+                reference_date - timedelta(days=7)
+            )
 
         last_week_end = last_week_start + timedelta(days=6)
         last_week_end = last_week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
 
         return last_week_start, last_week_end
 
-    def aggregate_by_sku(self):
+    def aggregate_by_sku(self) -> pd.DataFrame:
         self.data["year_month"] = self.data["data"].dt.to_period("M")
 
         first_sale = self.data.groupby("sku")["data"].min().reset_index()
@@ -41,7 +43,7 @@ class SalesAnalyzer:
         monthly_sales = self.data.groupby(["sku", "year_month"], as_index=False)["ilosc"].sum()
 
         sku_summary = monthly_sales.groupby("sku", as_index=False).agg(
-            {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}
+            {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}  # type: ignore[arg-type]
         )
 
         sku_summary.columns = ["SKU", "MONTHS", "QUANTITY", AVERAGE_SALES, "SD"]
@@ -53,7 +55,7 @@ class SalesAnalyzer:
 
         return sku_summary.sort_values("SKU", ascending=False)
 
-    def aggregate_by_model(self):
+    def aggregate_by_model(self) -> pd.DataFrame:
         self.data["year_month"] = self.data["data"].dt.to_period("M")
 
         first_sale = self.data.groupby("model")["data"].min().reset_index()
@@ -62,7 +64,7 @@ class SalesAnalyzer:
         monthly_sales = self.data.groupby(["model", "year_month"], as_index=False)["ilosc"].sum()
 
         model_summary = monthly_sales.groupby("model", as_index=False).agg(
-            {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}
+            {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}  # type: ignore[arg-type]
         )
 
         model_summary.columns = ["MODEL", "MONTHS", "QUANTITY", AVERAGE_SALES, "SD"]
@@ -74,7 +76,7 @@ class SalesAnalyzer:
 
         return model_summary.sort_values("MODEL", ascending=False)
 
-    def calculate_last_two_years_avg_sales(self, by_model=False):
+    def calculate_last_two_years_avg_sales(self, by_model: bool = False) -> pd.DataFrame:
         df = self.data.copy()
 
         two_years_ago = datetime.today() - timedelta(days=730)
@@ -86,13 +88,13 @@ class SalesAnalyzer:
             monthly_sales = df_last_2_years.groupby(["model", "year_month"], as_index=False)[
                 "ilosc"
             ].sum()
-            avg_sales = monthly_sales.groupby("model", as_index=False)["ilosc"].mean()
+            avg_sales = monthly_sales.groupby("model", as_index=False)["ilosc"].mean()  # type: ignore[assignment]
             avg_sales.columns = ["MODEL", "LAST_2_YEARS_AVG"]
         else:
             monthly_sales = df_last_2_years.groupby(["sku", "year_month"], as_index=False)[
                 "ilosc"
             ].sum()
-            avg_sales = monthly_sales.groupby("sku", as_index=False)["ilosc"].mean()
+            avg_sales = monthly_sales.groupby("sku", as_index=False)["ilosc"].mean()  # type: ignore[assignment]
             avg_sales.columns = ["SKU", "LAST_2_YEARS_AVG"]
 
         avg_sales["LAST_2_YEARS_AVG"] = avg_sales["LAST_2_YEARS_AVG"].round(2)
@@ -100,7 +102,9 @@ class SalesAnalyzer:
         return avg_sales
 
     @staticmethod
-    def classify_sku_type(sku_summary, cv_basic, cv_seasonal):
+    def classify_sku_type(
+        sku_summary: pd.DataFrame, cv_basic: float, cv_seasonal: float
+    ) -> pd.DataFrame:
         df = sku_summary.copy()
 
         one_year_ago = datetime.today() - timedelta(days=365)
@@ -112,7 +116,7 @@ class SalesAnalyzer:
 
         return df
 
-    def determine_seasonal_months(self):
+    def determine_seasonal_months(self) -> pd.DataFrame:
         df = self.data.copy()
 
         two_years_ago = datetime.today() - timedelta(days=730)
@@ -123,10 +127,10 @@ class SalesAnalyzer:
 
         monthly_sales = df.groupby(["sku", "year", "month"], as_index=False)["ilosc"].sum()
 
-        avg_monthly_sales = monthly_sales.groupby(["sku", "month"], as_index=False)["ilosc"].mean()
+        avg_monthly_sales = monthly_sales.groupby(["sku", "month"], as_index=False)["ilosc"].mean()  # type: ignore[assignment]
         avg_monthly_sales = avg_monthly_sales.rename(columns={"sku": "SKU", "ilosc": "avg_sales"})
 
-        overall_avg = avg_monthly_sales.groupby("SKU", as_index=False)["avg_sales"].mean()
+        overall_avg = avg_monthly_sales.groupby("SKU", as_index=False)["avg_sales"].mean()  # type: ignore[assignment]
         overall_avg = overall_avg.rename(columns={"avg_sales": "overall_avg"})
 
         seasonal_data = avg_monthly_sales.merge(overall_avg, on="SKU")
@@ -137,15 +141,15 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_safety_stock_and_rop(
-        sku_summary,
-        seasonal_data,
-        lead_time,
-        z_basic,
-        z_regular,
-        z_seasonal_in,
-        z_seasonal_out,
-        z_new,
-    ):
+        sku_summary: pd.DataFrame,
+        seasonal_data: pd.DataFrame,
+        lead_time: float,
+        z_basic: float,
+        z_regular: float,
+        z_seasonal_in: float,
+        z_seasonal_out: float,
+        z_new: float,
+    ) -> pd.DataFrame:
         df = sku_summary.copy()
 
         id_column = "MODEL" if "MODEL" in df.columns else "SKU"
@@ -213,9 +217,7 @@ class SalesAnalyzer:
         return df[[id_column] + base_cols]
 
     @staticmethod
-    def calculate_forecast_metrics(
-        forecast_df: pd.DataFrame, file_date: datetime
-    ) -> pd.DataFrame:
+    def calculate_forecast_metrics(forecast_df: pd.DataFrame, file_date: datetime) -> pd.DataFrame:
 
         if forecast_df.empty:
             return pd.DataFrame(columns=["sku", "FORECAST_8W", "FORECAST_16W"])
@@ -234,7 +236,10 @@ class SalesAnalyzer:
         ]
 
         forecast_8w_sum = (
-            forecast_8w.groupby("sku")["forecast"].sum().reset_index().rename(columns={"forecast": "FORECAST_8W"})
+            forecast_8w.groupby("sku")["forecast"]
+            .sum()
+            .reset_index()
+            .rename(columns={"forecast": "FORECAST_8W"})
         )
 
         forecast_16w_sum = (
@@ -262,16 +267,12 @@ class SalesAnalyzer:
         projection_months: int = 12,
     ) -> pd.DataFrame:
         if forecast_df.empty:
-            return pd.DataFrame(
-                columns=["date", "projected_stock", "rop_reached", "zero_reached"]
-            )
+            return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
 
         sku_forecast = forecast_df[forecast_df["sku"] == sku].copy()
 
         if sku_forecast.empty:
-            return pd.DataFrame(
-                columns=["date", "projected_stock", "rop_reached", "zero_reached"]
-            )
+            return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
 
         sku_forecast["data"] = pd.to_datetime(sku_forecast["data"])
 
@@ -283,12 +284,14 @@ class SalesAnalyzer:
         # noinspection PyArgumentList
         sku_forecast = sku_forecast.sort_values("data")
 
-        projection = [{
-            "date": start_date,
-            "projected_stock": current_stock,
-            "rop_reached": current_stock <= rop,
-            "zero_reached": current_stock <= 0,
-        }]
+        projection = [
+            {
+                "date": start_date,
+                "projected_stock": current_stock,
+                "rop_reached": current_stock <= rop,
+                "zero_reached": current_stock <= 0,
+            }
+        ]
 
         running_stock = current_stock
 
@@ -327,7 +330,7 @@ class SalesAnalyzer:
         forecast_df: pd.DataFrame,
         forecast_date: datetime,
         lead_time_months: float = 1.36,
-        settings: dict = None,
+        settings: dict | None = None,
     ) -> pd.DataFrame:
         if settings is None:
             from utils.settings_manager import load_settings
@@ -359,9 +362,7 @@ class SalesAnalyzer:
             forecast_window = forecast_df[
                 (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
             ]
-            forecast_sum = (
-                forecast_window.groupby("sku")["forecast"].sum().reset_index()
-            )
+            forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
             forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
             df = df.merge(forecast_sum, on="SKU", how="left")
             df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
@@ -387,16 +388,12 @@ class SalesAnalyzer:
         if "PRICE" in df.columns:
             df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
             if df["REVENUE_AT_RISK"].max() > 0:
-                df["REVENUE_IMPACT"] = (
-                    df["REVENUE_AT_RISK"] / df["REVENUE_AT_RISK"].max() * 100
-                )
+                df["REVENUE_IMPACT"] = df["REVENUE_AT_RISK"] / df["REVENUE_AT_RISK"].max() * 100
             else:
                 df["REVENUE_IMPACT"] = 0
         else:
             if df["FORECAST_LEADTIME"].max() > 0:
-                df["REVENUE_IMPACT"] = (
-                    df["FORECAST_LEADTIME"] / df["FORECAST_LEADTIME"].max() * 100
-                )
+                df["REVENUE_IMPACT"] = df["FORECAST_LEADTIME"] / df["FORECAST_LEADTIME"].max() * 100
             else:
                 df["REVENUE_IMPACT"] = 0
 
@@ -427,7 +424,7 @@ class SalesAnalyzer:
 
     @staticmethod
     def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
-        agg_dict = {
+        agg_dict = {  # type: ignore[var-annotated]
             "PRIORITY_SCORE": "mean",
             "DEFICIT": "sum",
             "FORECAST_LEADTIME": "sum",
@@ -458,9 +455,7 @@ class SalesAnalyzer:
 
         Returns dict mapping size to quantity needed (based on deficit or forecast).
         """
-        filtered = priority_df[
-            (priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)
-        ]
+        filtered = priority_df[(priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)]
 
         size_quantities = {}
 
@@ -484,7 +479,7 @@ class SalesAnalyzer:
         forecast_date: datetime,
         lead_time_months: float = 1.36,
         top_n: int = 10,
-        settings: dict = None,
+        settings: dict | None = None,
     ) -> dict:
         priority_df = SalesAnalyzer.calculate_order_priority(
             summary_df, forecast_df, forecast_date, lead_time_months, settings
@@ -524,12 +519,12 @@ class SalesAnalyzer:
     @staticmethod
     def generate_weekly_new_products_analysis(
         sales_df: pd.DataFrame,
-        stock_df: pd.DataFrame = None,
+        stock_df: pd.DataFrame | None = None,
         lookback_days: int = 60,
-        reference_date: datetime = None
+        reference_date: datetime | None = None,
     ) -> pd.DataFrame:
 
-        def get_week_start_wednesday(date):
+        def get_week_start_wednesday(date: datetime) -> datetime:
             days_since_wed = (date.weekday() - 2) % 7
             return date - timedelta(days=days_since_wed)
 
@@ -549,19 +544,21 @@ class SalesAnalyzer:
         if new_products.empty:
             return pd.DataFrame()
 
-        new_products["monitoring_end_date"] = new_products["first_sale_date"] + timedelta(days=lookback_days)
+        new_products["monitoring_end_date"] = new_products["first_sale_date"] + timedelta(
+            days=lookback_days
+        )
 
         df_new = df[df["model"].isin(new_products["model"])].copy()
 
         df_new = df_new.merge(
             new_products[["model", "first_sale_date", "monitoring_end_date"]],
             on="model",
-            how="left"
+            how="left",
         )
 
         df_new = df_new[
-            (df_new["data"] >= df_new["first_sale_date"]) &
-            (df_new["data"] <= df_new["monitoring_end_date"])
+            (df_new["data"] >= df_new["first_sale_date"])
+            & (df_new["data"] <= df_new["monitoring_end_date"])
         ]
 
         df_new["week_start"] = df_new["data"].apply(get_week_start_wednesday)
@@ -585,17 +582,11 @@ class SalesAnalyzer:
         full_combinations = pd.DataFrame(model_week_ranges)
 
         weekly_complete = full_combinations.merge(
-            weekly_sales,
-            on=["model", "week_start"],
-            how="left"
+            weekly_sales, on=["model", "week_start"], how="left"
         )
         weekly_complete["ilosc"] = weekly_complete["ilosc"].fillna(0).astype(int)
 
-        pivot_df = weekly_complete.pivot(
-            index="model",
-            columns="week_start",
-            values="ilosc"
-        )
+        pivot_df = weekly_complete.pivot(index="model", columns="week_start", values="ilosc")
 
         pivot_df.columns = [col.strftime("%Y-%m-%d") for col in pivot_df.columns]
         pivot_df = pivot_df.reset_index()
@@ -604,10 +595,7 @@ class SalesAnalyzer:
 
         result["first_sale_date"] = result["first_sale_date"].dt.strftime("%d-%m-%Y")
 
-        result = result.rename(columns={
-            "first_sale_date": "SALES_START_DATE",
-            "model": "MODEL"
-        })
+        result = result.rename(columns={"first_sale_date": "SALES_START_DATE", "model": "MODEL"})
 
         if stock_df is not None:
             stock_df = stock_df.copy()
@@ -616,8 +604,9 @@ class SalesAnalyzer:
             descriptions.columns = ["MODEL", "DESCRIPTION"]
             result = result.merge(descriptions, on="MODEL", how="left")
 
-        week_cols = [col for col in result.columns
-                     if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
+        week_cols = [
+            col for col in result.columns if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]
+        ]
         week_cols.sort()
 
         base_cols = ["SALES_START_DATE", "MODEL"]
@@ -632,8 +621,7 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_top_sales_report(
-        sales_df: pd.DataFrame,
-        reference_date: datetime = None
+        sales_df: pd.DataFrame, reference_date: datetime | None = None
     ) -> dict:
         if reference_date is None:
             reference_date = datetime.today()
@@ -647,17 +635,19 @@ class SalesAnalyzer:
         df["model"] = df["sku"].astype(str).str[:5]
 
         # noinspection PyUnresolvedReferences
-        last_week_sales = df[
-            (df["data"] >= last_week_start) &
-            (df["data"] <= last_week_end)
-        ].groupby("model", as_index=False)["ilosc"].sum()
+        last_week_sales = (
+            df[(df["data"] >= last_week_start) & (df["data"] <= last_week_end)]
+            .groupby("model", as_index=False)["ilosc"]
+            .sum()
+        )
         last_week_sales.columns = ["model", "current_week_sales"]
 
         # noinspection PyUnresolvedReferences
-        prev_year_sales = df[
-            (df["data"] >= prev_year_start) &
-            (df["data"] <= prev_year_end)
-        ].groupby("model", as_index=False)["ilosc"].sum()
+        prev_year_sales = (
+            df[(df["data"] >= prev_year_start) & (df["data"] <= prev_year_end)]
+            .groupby("model", as_index=False)["ilosc"]
+            .sum()
+        )
         prev_year_sales.columns = ["model", "prev_year_sales"]
 
         comparison = last_week_sales.merge(prev_year_sales, on="model", how="outer")
@@ -669,8 +659,8 @@ class SalesAnalyzer:
 
         mask = comparison["prev_year_sales"] > 0
         comparison.loc[mask, "percent_change"] = (
-            (comparison.loc[mask, "difference"] / comparison.loc[mask, "prev_year_sales"]) * 100
-        )
+            comparison.loc[mask, "difference"] / comparison.loc[mask, "prev_year_sales"]
+        ) * 100
 
         comparison.loc[~mask & (comparison["current_week_sales"] > 0), "percent_change"] = 999.0
 
@@ -686,7 +676,7 @@ class SalesAnalyzer:
             "prev_year_start": prev_year_start,
             "prev_year_end": prev_year_end,
             "rising_star": rising_star,
-            "falling_star": falling_star
+            "falling_star": falling_star,
         }
 
     @staticmethod
@@ -694,7 +684,7 @@ class SalesAnalyzer:
         sales_df: pd.DataFrame,
         cv_basic: float = 0.6,
         cv_seasonal: float = 1.0,
-        reference_date: datetime = None
+        reference_date: datetime | None = None,
     ) -> dict:
         if reference_date is None:
             reference_date = datetime.today()
@@ -705,23 +695,22 @@ class SalesAnalyzer:
         df["model"] = df["sku"].astype(str).str[:5]
         df["color"] = df["sku"].astype(str).str[5:7]
 
-        last_week_sales = df[
-            (df["data"] >= last_week_start) &
-            (df["data"] <= last_week_end)
-        ].copy()
+        last_week_sales = df[(df["data"] >= last_week_start) & (df["data"] <= last_week_end)].copy()
 
         # noinspection PyUnresolvedReferences
-        model_color_sales = last_week_sales.groupby(["model", "color"], as_index=False)["ilosc"].sum()
+        model_color_sales = last_week_sales.groupby(["model", "color"], as_index=False)[
+            "ilosc"
+        ].sum()
         model_color_sales.columns = ["model", "color", "sales"]
 
         monthly_sales = df.copy()
         monthly_sales["month"] = monthly_sales["data"].dt.to_period("M")
         monthly_agg = monthly_sales.groupby(["model", "month"], as_index=False)["ilosc"].sum()
 
-        stats = monthly_agg.groupby("model", as_index=False).agg(
+        stats = monthly_agg.groupby("model", as_index=False).agg(  # type: ignore[call-overload]
             avg_sales=("ilosc", "mean"),
             sd_sales=("ilosc", "std"),
-            months_with_sales=("month", "nunique")
+            months_with_sales=("month", "nunique"),
         )
         stats["sd_sales"] = stats["sd_sales"].fillna(0)
         stats["cv"] = 0.0
@@ -739,7 +728,9 @@ class SalesAnalyzer:
         stats.loc[(stats["type"] != "new") & (stats["cv"] < cv_basic), "type"] = "basic"
         stats.loc[(stats["type"] != "new") & (stats["cv"] > cv_seasonal), "type"] = "seasonal"
 
-        model_color_sales = model_color_sales.merge(stats[["model", "type"]], on="model", how="left")
+        model_color_sales = model_color_sales.merge(
+            stats[["model", "type"]], on="model", how="left"
+        )
 
         top_by_type = {}
         for product_type in ["new", "seasonal", "regular", "basic"]:
@@ -750,5 +741,5 @@ class SalesAnalyzer:
         return {
             "last_week_start": last_week_start,
             "last_week_end": last_week_end,
-            "top_by_type": top_by_type
+            "top_by_type": top_by_type,
         }
