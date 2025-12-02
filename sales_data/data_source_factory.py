@@ -25,7 +25,7 @@ class DataSourceFactory:
         return config.get("connection_string") or os.environ.get("DATABASE_URL")
 
     @staticmethod
-    def _create_database_source(connection_string, config):
+    def _create_database_source(connection_string, config) -> DataSource:
         from .db_source import DatabaseSource
 
         pool_size = config.get("pool_size", 10)
@@ -41,7 +41,7 @@ class DataSourceFactory:
             return FileSource()
 
     @staticmethod
-    def _handle_database_mode(config):
+    def _handle_database_mode(config) -> DataSource:
         connection_string = DataSourceFactory._get_connection_string(config)
 
         if not connection_string:
