@@ -2,7 +2,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from sales_data import SalesAnalyzer, SalesDataLoader
+from sales_data import SalesAnalyzer
 from sales_data.data_source_factory import DataSourceFactory
 from utils.pattern_optimizer_logic import (
     Pattern,
@@ -113,7 +113,7 @@ with tab1:
     col_save, col_reset = st.sidebar.columns(2)
     with col_save:
         if st.button(
-            "💾 Save", key="save_settings", help="Save current parameters to settings.json"
+                "💾 Save", key="save_settings", help="Save current parameters to settings.json"
         ):
             if save_settings(st.session_state.settings):
                 st.success("✅ Saved!")
@@ -292,12 +292,14 @@ with tab1:
     use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
     use_forecast = st.sidebar.checkbox("Load forecast data from data directory", value=True)
 
+
     # -----------END OF SIDEBAR-------------
 
     @st.cache_data
     def load_data():
         data_source = DataSourceFactory.create_data_source()
         return data_source.load_sales_data()
+
 
     @st.cache_data
     def load_stock():
@@ -309,6 +311,7 @@ with tab1:
             )
         return None, None
 
+
     @st.cache_data
     def load_forecast():
         data_source = DataSourceFactory.create_data_source()
@@ -317,7 +320,7 @@ with tab1:
             if "generated_date" in forecast_dataframe.columns:
                 loaded_forecast_date = forecast_dataframe["generated_date"].iloc[0]
                 if loaded_forecast_date is not None and not isinstance(
-                    loaded_forecast_date, pd.Timestamp
+                        loaded_forecast_date, pd.Timestamp
                 ):
                     loaded_forecast_date = pd.Timestamp(loaded_forecast_date)
             else:
@@ -326,10 +329,12 @@ with tab1:
             return forecast_dataframe, loaded_forecast_date, source_name
         return None, None, None
 
+
     @st.cache_data
     def load_model_metadata():
-        loader = SalesDataLoader()
-        return loader.load_model_metadata()
+        data_source = DataSourceFactory.create_data_source()
+        return data_source.load_model_metadata()
+
 
     df = load_data()
     analyzer = SalesAnalyzer(df)
@@ -394,7 +399,7 @@ with tab1:
             summary["DEFICIT"] = summary["ROP"] - summary["STOCK"]
             summary["DEFICIT"] = summary["DEFICIT"].apply(lambda x: max(0, x))
             summary[OVERSTOCKED__] = (
-                (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
+                    (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
             ).round(1)
 
             stock_loaded = True
@@ -406,27 +411,35 @@ with tab1:
         if forecast_df is not None:
             try:
                 forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(
-                    forecast_df, forecast_date
+                    forecast_df, forecast_date, lead_time_months=st.session_state.settings["lead_time"]
                 )
 
                 if group_by_model:
                     forecast_metrics["MODEL"] = forecast_metrics["sku"].astype(str).str[:5]
+                    agg_dict = {"FORECAST_8W": "sum", "FORECAST_16W": "sum"}
+                    if "FORECAST_LEADTIME" in forecast_metrics.columns:
+                        agg_dict["FORECAST_LEADTIME"] = "sum"
                     forecast_agg = (
                         forecast_metrics.groupby("MODEL")
-                        .agg({"FORECAST_8W": "sum", "FORECAST_16W": "sum"})
+                        .agg(agg_dict)
                         .reset_index()
                     )
                     summary = summary.merge(forecast_agg, on="MODEL", how="left")
                 else:
                     forecast_metrics = forecast_metrics.rename(columns={"sku": "SKU"})
+                    merge_cols = ["SKU", "FORECAST_8W", "FORECAST_16W"]
+                    if "FORECAST_LEADTIME" in forecast_metrics.columns:
+                        merge_cols.append("FORECAST_LEADTIME")
                     summary = summary.merge(
-                        forecast_metrics[["SKU", "FORECAST_8W", "FORECAST_16W"]],
+                        forecast_metrics[merge_cols],
                         on="SKU",
                         how="left",
                     )
 
                 summary["FORECAST_8W"] = summary["FORECAST_8W"].fillna(0)
                 summary["FORECAST_16W"] = summary["FORECAST_16W"].fillna(0)
+                if "FORECAST_LEADTIME" in summary.columns:
+                    summary["FORECAST_LEADTIME"] = summary["FORECAST_LEADTIME"].fillna(0)
 
             except Exception as e:
                 st.error(f"❌ Error processing forecast data: {e}")
@@ -440,6 +453,7 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "FORECAST_LEADTIME",
                 "FORECAST_8W",
                 "FORECAST_16W",
                 OVERSTOCKED__,
@@ -460,6 +474,7 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "FORECAST_LEADTIME",
                 "FORECAST_8W",
                 "FORECAST_16W",
                 OVERSTOCKED__,
@@ -484,6 +499,7 @@ with tab1:
             "SS",
             "CV",
             "ROP",
+            "FORECAST_LEADTIME",
             "FORECAST_8W",
             "FORECAST_16W",
         ]
@@ -662,7 +678,7 @@ with tab1:
                 (summary["STOCK"].notna())
                 & (summary["ROP"].notna())
                 & (summary[id_column].isin(forecast_df["sku"].unique()))
-            ][id_column].unique()
+                ][id_column].unique()
         )
 
         if len(available_skus) > 0:
@@ -751,11 +767,11 @@ with tab1:
                         rop_cross = projection_df[
                             (projection_df["rop_reached"])
                             & (~projection_df["rop_reached"].shift(1, fill_value=False))
-                        ]
+                            ]
                         zero_cross = projection_df[
                             (projection_df["zero_reached"])
                             & (~projection_df["zero_reached"].shift(1, fill_value=False))
-                        ]
+                            ]
 
                         if not rop_cross.empty:
                             first_rop = rop_cross.iloc[0]
@@ -1138,7 +1154,7 @@ with tab2:
                             editing_set.patterns = patterns
                         else:
                             new_id = (
-                                max([ps.id for ps in st.session_state.pattern_sets], default=0) + 1
+                                    max([ps.id for ps in st.session_state.pattern_sets], default=0) + 1
                             )
                             st.session_state.pattern_sets.append(
                                 PatternSet(new_id, set_name, size_names, patterns)
@@ -1653,13 +1669,14 @@ with tab4:
         col_new, col_seasonal = st.columns(2)
         col_regular, col_basic = st.columns(2)
 
+
         def display_top_5(column, type_name, emoji, df_top):
             with column:
                 st.subheader(f"{emoji} {type_name.upper()}")
                 if not df_top.empty:
                     top_products_df = df_top.copy()
                     top_products_df[MODEL_COLOR] = (
-                        top_products_df["model"] + top_products_df["color"]
+                            top_products_df["model"] + top_products_df["color"]
                     )
 
                     if stock_df is not None:
@@ -1684,6 +1701,7 @@ with tab4:
                     st.dataframe(top_products_df, hide_index=True, width="stretch")
                 else:
                     st.info(f"No {type_name} products found")
+
 
         display_top_5(col_new, "New", "🆕", top_products["top_by_type"]["new"])
         display_top_5(col_seasonal, "Seasonal", "🌸", top_products["top_by_type"]["seasonal"])

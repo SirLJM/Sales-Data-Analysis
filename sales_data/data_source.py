@@ -39,6 +39,10 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
+    def load_model_metadata(self) -> pd.DataFrame | None:
+        pass
+
+    @abstractmethod
     def is_available(self) -> bool:
         pass
 

@@ -124,7 +124,7 @@ CREATE INDEX idx_forecast_sku_date ON forecast_data(sku, forecast_date);
 CREATE TABLE model_metadata (
     id SERIAL PRIMARY KEY,
 
-    model VARCHAR(5) NOT NULL UNIQUE,
+    model VARCHAR(20) NOT NULL UNIQUE,
     primary_production VARCHAR(100),
     secondary_production VARCHAR(100),
     material_type VARCHAR(100),

@@ -220,10 +220,15 @@ class SalesAnalyzer:
         return df[[id_column] + base_cols]
 
     @staticmethod
-    def calculate_forecast_metrics(forecast_df: pd.DataFrame, file_date: datetime) -> pd.DataFrame:
+    def calculate_forecast_metrics(
+        forecast_df: pd.DataFrame, file_date: datetime, lead_time_months: float = None
+    ) -> pd.DataFrame:
 
         if forecast_df.empty:
-            return pd.DataFrame(columns=["sku", "FORECAST_8W", "FORECAST_16W"])
+            columns = ["sku", "FORECAST_8W", "FORECAST_16W"]
+            if lead_time_months is not None:
+                columns.append("FORECAST_LEADTIME")
+            return pd.DataFrame(columns=columns)
 
         forecast_df["data"] = pd.to_datetime(forecast_df["data"])
 
@@ -256,6 +261,24 @@ class SalesAnalyzer:
 
         result["FORECAST_8W"] = result["FORECAST_8W"].fillna(0).round(2)
         result["FORECAST_16W"] = result["FORECAST_16W"].fillna(0).round(2)
+
+        if lead_time_months is not None:
+            lead_time_days = lead_time_months * 30.44
+            leadtime_end = file_date + pd.Timedelta(days=lead_time_days)
+
+            forecast_leadtime = forecast_df[
+                (forecast_df["data"] >= file_date) & (forecast_df["data"] < leadtime_end)
+            ]
+
+            forecast_leadtime_sum = (
+                forecast_leadtime.groupby("sku")["forecast"]
+                .sum()
+                .reset_index()
+                .rename(columns={"forecast": "FORECAST_LEADTIME"})
+            )
+
+            result = result.merge(forecast_leadtime_sum, on="sku", how="outer")
+            result["FORECAST_LEADTIME"] = result["FORECAST_LEADTIME"].fillna(0).round(2)
 
         return result
 

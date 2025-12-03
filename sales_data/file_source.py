@@ -121,6 +121,9 @@ class FileSource(DataSource):
 
         return monthly_agg
 
+    def load_model_metadata(self) -> pd.DataFrame | None:
+        return self.loader.load_model_metadata()
+
     def is_available(self) -> bool:
         return True
 
