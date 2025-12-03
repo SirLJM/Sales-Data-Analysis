@@ -1,5 +1,5 @@
 {
-  "forecast_time": 1.36,
+  "forecast_time": 5,
   "cv_thresholds": {
     "basic": 0.6,
     "seasonal": 1.0

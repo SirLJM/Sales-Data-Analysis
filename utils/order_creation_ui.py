@@ -6,8 +6,7 @@ import streamlit as st
 
 from sales_data.analyzer import SalesAnalyzer
 from sales_data.data_source_factory import DataSourceFactory
-from sales_data.loader import load_size_aliases_from_excel
-from utils.pattern_optimizer_logic import PatternSet, load_pattern_sets, optimize_patterns, get_min_order_per_pattern
+from utils.pattern_optimizer_logic import PatternSet, load_pattern_sets, get_min_order_per_pattern
 
 TOTAL_PATTERNS = "Total Patterns"
 
@@ -15,26 +14,7 @@ TOTAL_PATTERNS = "Total Patterns"
 @st.cache_data(ttl=3600)
 def load_size_aliases() -> Dict[str, str]:
     data_source = DataSourceFactory.create_data_source()
-
-    try:
-        from sqlalchemy import text
-
-        if hasattr(data_source, 'engine'):
-            with data_source.engine.connect() as conn:
-                result = conn.execute(text("SELECT size_code, size_alias FROM size_aliases"))
-                return {row[0]: row[1] for row in result}
-    except (ImportError, AttributeError):
-        pass
-
-    try:
-        from pathlib import Path
-        sizes_file = Path(__file__).parent.parent / "data" / "sizes.xlsx"
-        if sizes_file.exists():
-            return load_size_aliases_from_excel(sizes_file)
-    except (FileNotFoundError, KeyError, ValueError):
-        pass
-
-    return {}
+    return data_source.load_size_aliases()
 
 
 def render_order_creation_interface() -> None:
@@ -123,11 +103,7 @@ def find_urgent_colors_for_model(model: str) -> List[str]:
     if model_color_summary is None:
         return []
 
-    urgent = model_color_summary[
-        (model_color_summary["MODEL"] == model) &
-        (model_color_summary.get("URGENT", False) == True)
-        ]
-    return urgent["COLOR"].tolist()
+    return SalesAnalyzer.find_urgent_colors(model_color_summary, model)
 
 
 def lookup_pattern_set(model: str) -> Optional[PatternSet]:
@@ -145,22 +121,12 @@ def optimize_color_pattern(model: str, color: str, pattern_set: PatternSet) -> D
         return _get_empty_optimization_result()
 
     priority_skus = recommendations_data["priority_skus"]
-    size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(priority_skus, model, color)
-
-    if not size_quantities:
-        st.warning(f"No size quantities found for {model}-{color}")
-        return _get_empty_optimization_result()
-
     size_aliases = load_size_aliases()
-    size_quantities_with_aliases = {}
-    for size_code, quantity in size_quantities.items():
-        alias = size_aliases.get(size_code, size_code)
-        size_quantities_with_aliases[alias] = size_quantities_with_aliases.get(alias, 0) + quantity
-
     min_per_pattern = get_min_order_per_pattern()
-    result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern)
 
-    return result
+    return SalesAnalyzer.optimize_pattern_with_aliases(
+        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern
+    )
 
 
 def _get_empty_optimization_result() -> Dict:

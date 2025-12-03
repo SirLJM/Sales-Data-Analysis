@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime
+from typing import Dict
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -368,6 +369,27 @@ class DatabaseSource(DataSource):
         except Exception as e:
             print(f"[ERROR] Failed to load model metadata from database: {e}")
             return None
+
+    def load_size_aliases(self) -> Dict[str, str]:
+        query = """
+                SELECT size_code, size_alias
+                FROM size_aliases
+                ORDER BY size_code
+                """
+
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+
+            if df.empty:
+                print("[WARN] No size aliases found in database")
+                return {}
+
+            return dict(zip(df["size_code"], df["size_alias"]))
+
+        except Exception as e:
+            print(f"[ERROR] Failed to load size aliases from database: {e}")
+            return {}
 
     def is_available(self) -> bool:
         return self._is_available

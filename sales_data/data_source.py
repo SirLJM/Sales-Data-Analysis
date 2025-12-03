@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Dict
 
 import pandas as pd
 
@@ -40,6 +41,10 @@ class DataSource(ABC):
 
     @abstractmethod
     def load_model_metadata(self) -> pd.DataFrame | None:
+        pass
+
+    @abstractmethod
+    def load_size_aliases(self) -> Dict[str, str]:
         pass
 
     @abstractmethod

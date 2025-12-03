@@ -844,3 +844,90 @@ class SalesAnalyzer:
             "last_week_end": last_week_end,
             "top_by_type": top_by_type,
         }
+
+    @staticmethod
+    def find_urgent_colors(model_color_summary: pd.DataFrame, model: str) -> list[str]:
+        urgent = model_color_summary[
+            (model_color_summary["MODEL"] == model) &
+            (model_color_summary.get("URGENT", pd.Series([False] * len(model_color_summary))) == True)
+        ]
+        return urgent["COLOR"].tolist()
+
+    @staticmethod
+    def get_last_n_months_sales_by_color(
+            monthly_agg: pd.DataFrame,
+            model: str,
+            colors: list[str],
+            months: int = 4
+    ) -> pd.DataFrame:
+        if monthly_agg is None or monthly_agg.empty:
+            return pd.DataFrame()
+
+        df = monthly_agg.copy()
+
+        if "entity_id" in df.columns:
+            df = df.rename(columns={"entity_id": "SKU"})
+        if "year_month" in df.columns:
+            df = df.rename(columns={"year_month": "YEAR_MONTH"})
+        if "total_quantity" in df.columns:
+            df = df.rename(columns={"total_quantity": "TOTAL_QUANTITY"})
+
+        df["model"] = df["SKU"].astype(str).str[:5]
+        df["color"] = df["SKU"].astype(str).str[5:7]
+
+        filtered = df[
+            (df["model"] == model) &
+            (df["color"].isin(colors))
+        ]
+
+        if filtered.empty:
+            return pd.DataFrame()
+
+        filtered = filtered.sort_values("YEAR_MONTH")
+
+        unique_months = filtered["YEAR_MONTH"].unique()
+        last_n_months = sorted(unique_months)[-months:] if len(unique_months) >= months else sorted(unique_months)
+
+        filtered_last_n = filtered[filtered["YEAR_MONTH"].isin(last_n_months)]
+
+        pivot_df = filtered_last_n.pivot_table(
+            index="color",
+            columns="YEAR_MONTH",
+            values="TOTAL_QUANTITY",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        return pivot_df.reset_index()
+
+    @staticmethod
+    def optimize_pattern_with_aliases(
+            priority_skus: pd.DataFrame,
+            model: str,
+            color: str,
+            pattern_set,
+            size_aliases: dict[str, str],
+            min_per_pattern: int
+    ) -> dict:
+        from utils.pattern_optimizer_logic import optimize_patterns
+
+        size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(priority_skus, model, color)
+
+        if not size_quantities:
+            return {
+                "allocation": {},
+                "produced": {},
+                "excess": {},
+                "total_patterns": 0,
+                "total_excess": 0,
+                "all_covered": False,
+            }
+
+        size_quantities_with_aliases = {}
+        for size_code, quantity in size_quantities.items():
+            alias = size_aliases.get(size_code, size_code)
+            size_quantities_with_aliases[alias] = size_quantities_with_aliases.get(alias, 0) + quantity
+
+        result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern)
+
+        return result
