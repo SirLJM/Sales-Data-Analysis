@@ -65,6 +65,7 @@ WHERE is_valid = TRUE
         AND cma2.is_valid = TRUE
   );
 
+CREATE UNIQUE INDEX idx_mv_monthly_aggs_unique ON mv_valid_monthly_aggs(entity_type, entity_id, year_month);
 CREATE INDEX idx_mv_monthly_aggs_entity ON mv_valid_monthly_aggs(entity_type, entity_id);
 CREATE INDEX idx_mv_monthly_aggs_year_month ON mv_valid_monthly_aggs(year_month);
 
@@ -104,7 +105,7 @@ WHERE is_valid = TRUE
         AND css2.is_valid = TRUE
   );
 
-CREATE INDEX idx_mv_sku_stats_entity ON mv_valid_sku_stats(entity_type, entity_id);
+CREATE UNIQUE INDEX idx_mv_sku_stats_unique ON mv_valid_sku_stats(entity_type, entity_id);
 CREATE INDEX idx_mv_sku_stats_type ON mv_valid_sku_stats(product_type);
 
 
@@ -140,6 +141,7 @@ WHERE is_valid = TRUE
         AND cop2.is_valid = TRUE
   );
 
+CREATE UNIQUE INDEX idx_mv_priorities_unique ON mv_valid_order_priorities(sku);
 CREATE INDEX idx_mv_priorities_model_color ON mv_valid_order_priorities(model, color);
 CREATE INDEX idx_mv_priorities_score ON mv_valid_order_priorities(priority_score DESC);
 CREATE INDEX idx_mv_priorities_urgent ON mv_valid_order_priorities(is_urgent) WHERE is_urgent = TRUE;

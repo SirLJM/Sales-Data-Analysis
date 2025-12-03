@@ -289,14 +289,17 @@ class DatabaseSource(DataSource):
             df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
         if df.empty and not force_recompute:
+            print(
+                f"[WARN] Materialized view mv_valid_monthly_aggs is empty for {entity_type}, falling back to file computation")
             return self._compute_monthly_aggregations(entity_type)
 
+        print(f"[OK] Using database monthly aggregations for {entity_type}: {len(df)} rows")
         return df
 
     @staticmethod
     def _compute_settings_hash(settings: dict) -> str:
         relevant_keys = [
-            "lead_time",
+            "forecast_time",
             "cv_threshold_basic",
             "cv_threshold_seasonal",
             "z_score_basic",

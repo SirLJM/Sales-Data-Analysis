@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+CONTINUING = "   Continuing..."
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from dotenv import load_dotenv
@@ -44,7 +46,7 @@ def main():
         return 1
 
     print("\n2. Running schema.sql...")
-    schema_file = Path(__file__).parent / "schema.sql"
+    schema_file = Path(__file__).parent / "sql" / "schema.sql"
 
     if not schema_file.exists():
         print(f"   File not found: {schema_file}")
@@ -63,7 +65,7 @@ def main():
         print("\n   This is normal if tables already exist. Continuing...")
 
     print("\n3. Running triggers.sql...")
-    triggers_file = Path(__file__).parent / "triggers.sql"
+    triggers_file = Path(__file__).parent / "sql" / "triggers.sql"
 
     if not triggers_file.exists():
         print(f"   File not found: {triggers_file}")
@@ -79,10 +81,29 @@ def main():
         print("   Triggers created successfully")
     except Exception as e:
         print(f"   Trigger creation failed: {e}")
-        print("   Continuing...")
+        print(CONTINUING)
 
-    print("\n4. Running materialized_views.sql...")
-    views_file = Path(__file__).parent / "materialized_views.sql"
+    print("\n4. Running orders_schema.sql...")
+    orders_file = Path(__file__).parent / "sql" / "orders_schema.sql"
+
+    if not orders_file.exists():
+        print(f"   File not found: {orders_file}")
+        return 1
+
+    with open(orders_file, "r", encoding="utf-8") as f:
+        orders_sql = f.read()
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(orders_sql))
+            conn.commit()
+        print("   Order tables created successfully")
+    except Exception as e:
+        print(f"   Order table creation failed: {e}")
+        print(CONTINUING)
+
+    print("\n5. Running materialized_views.sql...")
+    views_file = Path(__file__).parent / "sql" / "materialized_views.sql"
 
     if not views_file.exists():
         print(f"   File not found: {views_file}")
@@ -98,19 +119,19 @@ def main():
         print("   Materialized views created successfully")
     except Exception as e:
         print(f"   Materialized view creation failed: {e}")
-        print("   Continuing...")
+        print(CONTINUING)
 
-    print("\n5. Verifying database structure...")
+    print("\n6. Verifying database structure...")
     try:
         with engine.connect() as conn:
             result = conn.execute(
                 text(
                     """
-                                       SELECT tablename
-                                       FROM pg_tables
-                                       WHERE schemaname = 'public'
-                                       ORDER BY tablename
-                                       """
+                    SELECT tablename
+                    FROM pg_tables
+                    WHERE schemaname = 'public'
+                    ORDER BY tablename
+                    """
                 )
             )
             tables = [row[0] for row in result]
@@ -122,11 +143,11 @@ def main():
             result = conn.execute(
                 text(
                     """
-                                       SELECT matviewname
-                                       FROM pg_matviews
-                                       WHERE schemaname = 'public'
-                                       ORDER BY matviewname
-                                       """
+                    SELECT matviewname
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                    ORDER BY matviewname
+                    """
                 )
             )
             views = [row[0] for row in result]
@@ -139,10 +160,10 @@ def main():
             result = conn.execute(
                 text(
                     """
-                                       SELECT COUNT(*)
-                                       FROM pg_trigger
-                                       WHERE tgname LIKE 'trg_%'
-                                       """
+                    SELECT COUNT(*)
+                    FROM pg_trigger
+                    WHERE tgname LIKE 'trg_%'
+                    """
                 )
             )
             trigger_count = result.fetchone()[0]
@@ -156,9 +177,9 @@ def main():
     print("Database setup complete!")
     print("=" * 60)
     print("\nNext steps:")
-    print("  1. Import data: python migration/initial_populate.py")
-    print("  2. Test app in file mode first")
-    print("  3. Switch to database mode in data_source_config.json")
+    print("  1. Import data: python src/migration/import_all.py")
+    print("  2. Populate cache: python src/migration/populate_cache.py")
+    print("  3. Switch to database mode in .env: DATA_SOURCE_MODE=database")
     print("  4. Run app: cd src && py -m streamlit run app.py")
 
     engine.dispose()

@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+lead_time = 1.36
+
 AVERAGE_SALES = "AVERAGE SALES"
 
 
@@ -146,7 +148,6 @@ class SalesAnalyzer:
     def calculate_safety_stock_and_rop(
             sku_summary: pd.DataFrame,
             seasonal_data: pd.DataFrame,
-            lead_time: float,
             z_basic: float,
             z_regular: float,
             z_seasonal_in: float,
@@ -221,7 +222,7 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_forecast_metrics(
-        forecast_df: pd.DataFrame, file_date: datetime, lead_time_months: float = None
+            forecast_df: pd.DataFrame, file_date: datetime, lead_time_months: float = None
     ) -> pd.DataFrame:
 
         if forecast_df.empty:
@@ -268,7 +269,7 @@ class SalesAnalyzer:
 
             forecast_leadtime = forecast_df[
                 (forecast_df["data"] >= file_date) & (forecast_df["data"] < leadtime_end)
-            ]
+                ]
 
             forecast_leadtime_sum = (
                 forecast_leadtime.groupby("sku")["forecast"]
@@ -360,98 +361,116 @@ class SalesAnalyzer:
     ) -> pd.DataFrame:
         if settings is None:
             from utils.settings_manager import load_settings
-
             settings = load_settings()
 
+        config = SalesAnalyzer._extract_priority_config(settings)
+        df = summary_df.copy()
+
+        SalesAnalyzer._validate_required_columns(df)
+        df = SalesAnalyzer._add_forecast_leadtime(df, forecast_df, forecast_date, lead_time_months)
+        df = SalesAnalyzer._add_sku_components(df)
+        df = SalesAnalyzer._calculate_stockout_risk(df, config)
+        df = SalesAnalyzer._calculate_revenue_impact(df)
+        df = SalesAnalyzer._apply_type_multipliers(df, config["type_multipliers"])
+        df = SalesAnalyzer._calculate_priority_score(df, config)
+        df["URGENT"] = (df["STOCK"] <= 0) | ((df["STOCK"] < df["ROP"]) & (df["FORECAST_LEADTIME"] > df["STOCK"]))
+
+        return df.sort_values("PRIORITY_SCORE", ascending=False)
+
+    @staticmethod
+    def _extract_priority_config(settings: dict) -> dict:
         rec_settings = settings.get("order_recommendations", {})
         stockout_cfg = rec_settings.get("stockout_risk", {})
         weights = rec_settings.get("priority_weights", {})
-        type_multipliers = rec_settings.get("type_multipliers", {})
-        demand_cap = rec_settings.get("demand_cap", 100)
 
-        zero_stock_penalty = stockout_cfg.get("zero_stock_penalty", 100)
-        below_rop_max = stockout_cfg.get("below_rop_max_penalty", 80)
-        weight_stockout = weights.get("stockout_risk", 0.5)
-        weight_revenue = weights.get("revenue_impact", 0.3)
-        weight_demand = weights.get("demand_forecast", 0.2)
+        return {
+            "zero_stock_penalty": stockout_cfg.get("zero_stock_penalty", 100),
+            "below_rop_max": stockout_cfg.get("below_rop_max_penalty", 80),
+            "weight_stockout": weights.get("stockout_risk", 0.5),
+            "weight_revenue": weights.get("revenue_impact", 0.3),
+            "weight_demand": weights.get("demand_forecast", 0.2),
+            "type_multipliers": rec_settings.get("type_multipliers", {}),
+            "demand_cap": rec_settings.get("demand_cap", 100),
+        }
 
-        df = summary_df.copy()
-
+    @staticmethod
+    def _validate_required_columns(df: pd.DataFrame) -> None:
         required_cols = ["SKU", "STOCK", "ROP", "TYPE"]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
 
-        if not forecast_df.empty:
-            lead_time_days = int(lead_time_months * 30.44)
-            lead_time_end = forecast_date + pd.Timedelta(days=lead_time_days)
-            forecast_window = forecast_df[
-                (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
-                ]
-            if not forecast_window.empty:
-                forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
-                forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
-                df = df.merge(forecast_sum, on="SKU", how="left")
-                if "FORECAST_LEADTIME" in df.columns:
-                    df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
-                else:
-                    df["FORECAST_LEADTIME"] = 0
-            else:
-                df["FORECAST_LEADTIME"] = 0
-        else:
+    @staticmethod
+    def _add_forecast_leadtime(
+            df: pd.DataFrame, forecast_df: pd.DataFrame, forecast_date: datetime, lead_time_months: float
+    ) -> pd.DataFrame:
+        if forecast_df.empty:
             df["FORECAST_LEADTIME"] = 0
+            return df
 
+        lead_time_days = int(lead_time_months * 30.44)
+        lead_time_end = forecast_date + pd.Timedelta(days=lead_time_days)
+        forecast_window = forecast_df[
+            (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
+            ]
+
+        if forecast_window.empty:
+            df["FORECAST_LEADTIME"] = 0
+            return df
+
+        forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
+        forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
+        df = df.merge(forecast_sum, on="SKU", how="left")
+        df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
+        return df
+
+    @staticmethod
+    def _add_sku_components(df: pd.DataFrame) -> pd.DataFrame:
         sku_components = df["SKU"].apply(SalesAnalyzer.parse_sku_components)
         df["MODEL"] = sku_components.apply(lambda x: x["model"])
         df["COLOR"] = sku_components.apply(lambda x: x["color"])
         df["SIZE"] = sku_components.apply(lambda x: x["size"])
+        return df
 
-        df["PRIORITY_SCORE"] = 0.0
-
+    @staticmethod
+    def _calculate_stockout_risk(df: pd.DataFrame, config: dict) -> pd.DataFrame:
         df["STOCKOUT_RISK"] = 0.0
         zero_stock_mask = (df["STOCK"] <= 0) & (df["FORECAST_LEADTIME"] > 0)
-        df.loc[zero_stock_mask, "STOCKOUT_RISK"] = zero_stock_penalty
+        df.loc[zero_stock_mask, "STOCKOUT_RISK"] = config["zero_stock_penalty"]
 
         below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
         df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
-                (df["ROP"] - df["STOCK"]) / df["ROP"] * below_rop_max
+                (df["ROP"] - df["STOCK"]) / df["ROP"] * config["below_rop_max"]
         )
+        return df
 
+    @staticmethod
+    def _calculate_revenue_impact(df: pd.DataFrame) -> pd.DataFrame:
         if "PRICE" in df.columns:
             df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
-            if df["REVENUE_AT_RISK"].max() > 0:
-                df["REVENUE_IMPACT"] = df["REVENUE_AT_RISK"] / df["REVENUE_AT_RISK"].max() * 100
-            else:
-                df["REVENUE_IMPACT"] = 0
+            max_revenue = df["REVENUE_AT_RISK"].max()
+            df["REVENUE_IMPACT"] = (df["REVENUE_AT_RISK"] / max_revenue * 100) if max_revenue > 0 else 0
         else:
-            if df["FORECAST_LEADTIME"].max() > 0:
-                df["REVENUE_IMPACT"] = df["FORECAST_LEADTIME"] / df["FORECAST_LEADTIME"].max() * 100
-            else:
-                df["REVENUE_IMPACT"] = 0
+            max_forecast = df["FORECAST_LEADTIME"].max()
+            df["REVENUE_IMPACT"] = (df["FORECAST_LEADTIME"] / max_forecast * 100) if max_forecast > 0 else 0
+        return df
 
-        default_type_mult = {
-            "new": 1.2,
-            "seasonal": 1.3,
-            "regular": 1.0,
-            "basic": 0.9,
-        }
+    @staticmethod
+    def _apply_type_multipliers(df: pd.DataFrame, type_multipliers: dict) -> pd.DataFrame:
+        default_type_mult = {"new": 1.2, "seasonal": 1.3, "regular": 1.0, "basic": 0.9}
         type_mult = {k: type_multipliers.get(k, v) for k, v in default_type_mult.items()}
         df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_mult).fillna(1.0)
+        return df
 
+    @staticmethod
+    def _calculate_priority_score(df: pd.DataFrame, config: dict) -> pd.DataFrame:
         df["DEFICIT"] = (df["ROP"] - df["STOCK"]).clip(lower=0)
-
         df["PRIORITY_SCORE"] = (
-                                       (df["STOCKOUT_RISK"] * weight_stockout)
-                                       + (df["REVENUE_IMPACT"] * weight_revenue)
-                                       + (df["FORECAST_LEADTIME"].clip(upper=demand_cap) * weight_demand)
+                                       (df["STOCKOUT_RISK"] * config["weight_stockout"])
+                                       + (df["REVENUE_IMPACT"] * config["weight_revenue"])
+                                       + (df["FORECAST_LEADTIME"].clip(upper=config["demand_cap"]) * config[
+                                   "weight_demand"])
                                ) * df["TYPE_MULTIPLIER"]
-
-        df["URGENT"] = (df["STOCK"] <= 0) | (
-                (df["STOCK"] < df["ROP"]) & (df["FORECAST_LEADTIME"] > df["STOCK"])
-        )
-
-        df = df.sort_values("PRIORITY_SCORE", ascending=False)
-
         return df
 
     @staticmethod
@@ -462,6 +481,7 @@ class SalesAnalyzer:
             "FORECAST_LEADTIME": "sum",
             "STOCK": "sum",
             "ROP": "sum",
+            "SS": "sum",
             "URGENT": "any",
         }
 
@@ -483,10 +503,6 @@ class SalesAnalyzer:
     def get_size_quantities_for_model_color(
             priority_df: pd.DataFrame, model: str, color: str
     ) -> dict:
-        """Get size quantities needed for a specific model and color.
-
-        Returns dict mapping size to quantity needed (based on deficit or forecast).
-        """
         filtered = priority_df[(priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)]
 
         size_quantities = {}
@@ -509,12 +525,12 @@ class SalesAnalyzer:
             summary_df: pd.DataFrame,
             forecast_df: pd.DataFrame,
             forecast_date: datetime,
-            lead_time_months: float = 1.36,
+            forecast_time_months: float = 1.36,
             top_n: int = 10,
             settings: dict | None = None,
     ) -> dict:
         priority_df = SalesAnalyzer.calculate_order_priority(
-            summary_df, forecast_df, forecast_date, lead_time_months, settings
+            summary_df, forecast_df, forecast_date, forecast_time_months, settings
         )
 
         model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_df)

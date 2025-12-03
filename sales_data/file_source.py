@@ -15,7 +15,7 @@ class FileSource(DataSource):
         self._analyzer: SalesAnalyzer | None = None
 
     def load_sales_data(
-        self, start_date: datetime | None = None, end_date: datetime | None = None
+            self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
 
         if self._sales_data is None:
@@ -46,7 +46,7 @@ class FileSource(DataSource):
         return self.loader.load_forecast_file(forecast_file)
 
     def get_sku_statistics(
-        self, entity_type: str = "sku", force_recompute: bool = False
+            self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
 
         if self._analyzer is None or force_recompute:
@@ -59,7 +59,7 @@ class FileSource(DataSource):
             return self._analyzer.aggregate_by_sku()
 
     def get_order_priorities(
-        self, top_n: int | None = None, force_recompute: bool = False
+            self, top_n: int | None = None, force_recompute: bool = False
     ) -> pd.DataFrame:
 
         summary = self.get_sku_statistics(entity_type="sku", force_recompute=force_recompute)
@@ -75,7 +75,7 @@ class FileSource(DataSource):
         forecast_date = (
             forecast_df["data"].max() if "data" in forecast_df.columns else datetime.now()
         )
-        lead_time = settings.get("lead_time", 1.36)
+        lead_time = settings.get("forecast_time", 1.36)
 
         assert self._analyzer is not None
         priority_df = self._analyzer.calculate_order_priority(
@@ -88,7 +88,7 @@ class FileSource(DataSource):
         return priority_df
 
     def get_monthly_aggregations(
-        self, entity_type: str = "sku", force_recompute: bool = False
+            self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
 
         if self._analyzer is None or force_recompute:

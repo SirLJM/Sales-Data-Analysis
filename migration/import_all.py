@@ -12,6 +12,8 @@ load_dotenv(find_dotenv(filename=".env"))
 
 from import_current_sales import import_current_sales
 from import_forecast import import_forecast_data
+from import_model_metadata import import_model_metadata
+from import_size_aliases import import_size_aliases
 from import_stock import import_stock_data
 from initial_populate import populate_archival_sales
 
@@ -165,7 +167,13 @@ def main():
     print("\nStep 4: Importing forecast data...")
     import_forecast_data(db_url)
 
-    print("\nStep 5: Refreshing materialized views...")
+    print("\nStep 5: Importing model metadata...")
+    import_model_metadata(db_url)
+
+    print("\nStep 6: Importing size aliases...")
+    import_size_aliases(db_url)
+
+    print("\nStep 7: Refreshing materialized views...")
     refresh_materialized_views(db_url)
 
     elapsed = (datetime.now() - start_time).total_seconds()
@@ -174,8 +182,9 @@ def main():
 
     print(f"\nComplete import finished in {elapsed:.1f} seconds")
     print("\nNext steps:")
-    print("  1. Update .env: Set DATA_SOURCE_MODE=database")
-    print("  2. Run app: cd src && py -3.13 -m streamlit run app.py")
+    print("  1. Populate cache: python src/migration/populate_cache.py")
+    print("  2. Update .env: Set DATA_SOURCE_MODE=database")
+    print("  3. Run app: cd src && py -3.13 -m streamlit run app.py")
     print()
 
 

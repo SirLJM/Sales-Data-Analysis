@@ -14,6 +14,8 @@ from utils.pattern_optimizer_logic import (
 )
 from utils.settings_manager import load_settings, reset_settings, save_settings
 
+SIZE_QTY = "Sizes (Size:Qty)"
+
 MODEL_COLOR = "MODEL+COLOR"
 
 LAST_WEEK = "Last Week"
@@ -78,12 +80,13 @@ def display_star_product(star: dict, stock_data: pd.DataFrame, is_rising: bool):
         )
 
 
-tab1, tab2, tab3, tab4 = st.tabs(
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
     [
         "📊 Sales & Inventory Analysis",
         "📦 Size Pattern Optimizer",
         "🎯 Order Recommendations",
         "📅 Weekly Analysis",
+        "📋 Order Creation",
     ]
 )
 
@@ -124,18 +127,18 @@ with tab1:
             st.session_state.settings = reset_settings()
             st.rerun()
 
-    st.sidebar.subheader("Lead Time")
-    lead_time = st.sidebar.number_input(
-        "Lead time in months",
+    st.sidebar.subheader("Forecast Time")
+    forecast_time = st.sidebar.number_input(
+        "Forecast time in months",
         label_visibility="collapsed",
         min_value=0.0,
         max_value=100.0,
-        value=st.session_state.settings["lead_time"],
+        value=st.session_state.settings["forecast_time"],
         step=0.01,
         format="%.2f",
-        key="lead_time_input",
+        key="forecast_time_input",
     )
-    st.session_state.settings["lead_time"] = lead_time
+    st.session_state.settings["forecast_time"] = forecast_time
 
     st.sidebar.subheader("Service Levels")
     header_cols = st.sidebar.columns([2, 1.5, 1.5, 1.5])
@@ -273,7 +276,7 @@ with tab1:
 
     st.sidebar.markdown("---")
     st.sidebar.write("**Current Parameters:**")
-    st.sidebar.write(f"Lead Time: {lead_time} months")
+    st.sidebar.write(f"Forecast Time: {forecast_time} months")
     st.sidebar.write(f"Basic: CV < {service_basic} : Z-Score = {z_score_basic}")
     st.sidebar.write(
         f"Regular: {service_regular_min} ≤ CV ≤ {service_regular_max} : Z-Score = {z_score_regular}"
@@ -355,7 +358,6 @@ with tab1:
     summary = analyzer.calculate_safety_stock_and_rop(
         summary,
         seasonal_data,
-        lead_time=lead_time,
         z_basic=z_score_basic,
         z_regular=z_score_regular,
         z_seasonal_in=z_score_seasonal_1,
@@ -411,7 +413,7 @@ with tab1:
         if forecast_df is not None:
             try:
                 forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(
-                    forecast_df, forecast_date, lead_time_months=st.session_state.settings["lead_time"]
+                    forecast_df, forecast_date, lead_time_months=st.session_state.settings["forecast_time"]
                 )
 
                 if group_by_model:
@@ -453,9 +455,8 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "SS",
                 "FORECAST_LEADTIME",
-                "FORECAST_8W",
-                "FORECAST_16W",
                 OVERSTOCKED__,
                 "DEFICIT",
                 "MONTHS",
@@ -463,8 +464,9 @@ with tab1:
                 AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
-                "SS",
                 "VALUE",
+                "FORECAST_8W",
+                "FORECAST_16W",
                 "BELOW_ROP",
             ]
         else:
@@ -474,9 +476,8 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "SS",
                 "FORECAST_LEADTIME",
-                "FORECAST_8W",
-                "FORECAST_16W",
                 OVERSTOCKED__,
                 "DEFICIT",
                 "MONTHS",
@@ -484,8 +485,9 @@ with tab1:
                 AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
-                "SS",
                 "VALUE",
+                "FORECAST_8W",
+                "FORECAST_16W",
                 "BELOW_ROP",
             ]
     else:
@@ -1290,6 +1292,12 @@ with tab3:
         st.session_state.recommendations_data = None
     if "recommendations_top_n" not in st.session_state:
         st.session_state.recommendations_top_n = 10
+    if "selected_order_items" not in st.session_state:
+        st.session_state.selected_order_items = []
+    if "szwalnia_include_filter" not in st.session_state:
+        st.session_state.szwalnia_include_filter = []
+    if "szwalnia_exclude_filter" not in st.session_state:
+        st.session_state.szwalnia_exclude_filter = []
 
     if not stock_loaded or not use_forecast or forecast_df is None:
         st.warning("⚠️ Please load both stock and forecast data in Tab 1 to use this feature.")
@@ -1451,6 +1459,33 @@ with tab3:
             ] = below_rop_penalty
             st.session_state.settings["order_recommendations"]["demand_cap"] = demand_cap
 
+        st.write("**Filter by Production Facility**")
+        model_metadata_df_filter = load_model_metadata()
+        if model_metadata_df_filter is not None and SZWALNIA_G in model_metadata_df_filter.columns:
+            unique_facilities = sorted(
+                model_metadata_df_filter[SZWALNIA_G].dropna().unique().tolist()
+            )
+
+            col_include, col_exclude = st.columns(2)
+
+            with col_include:
+                st.session_state.szwalnia_include_filter = st.multiselect(
+                    "Include Facilities:",
+                    options=unique_facilities,
+                    default=st.session_state.szwalnia_include_filter,
+                    help="Select facilities to INCLUDE. Empty = include all.",
+                )
+
+            with col_exclude:
+                st.session_state.szwalnia_exclude_filter = st.multiselect(
+                    "Exclude Facilities:",
+                    options=unique_facilities,
+                    default=st.session_state.szwalnia_exclude_filter,
+                    help="Select facilities to EXCLUDE. Takes precedence over include.",
+                )
+        else:
+            st.info("Model metadata not available. Showing all items.")
+
         col_top_n, col_calc, col_clear = st.columns([3, 1, 1])
         with col_top_n:
             top_n_recommendations = st.slider(
@@ -1484,7 +1519,6 @@ with tab3:
                     sku_summary = analyzer.calculate_safety_stock_and_rop(
                         sku_summary,
                         seasonal_data,
-                        lead_time=st.session_state.settings["lead_time"],
                         z_basic=st.session_state.settings["z_scores"]["basic"],
                         z_regular=st.session_state.settings["z_scores"]["regular"],
                         z_seasonal_in=st.session_state.settings["z_scores"]["seasonal_in"],
@@ -1506,10 +1540,43 @@ with tab3:
                         summary_df=sku_summary,
                         forecast_df=forecast_df,
                         forecast_date=forecast_date,
-                        lead_time_months=lead_time,
+                        forecast_time_months=forecast_time,
                         top_n=top_n_recommendations,
                         settings=st.session_state.settings,
                     )
+
+                    include_filter = st.session_state.szwalnia_include_filter
+                    exclude_filter = st.session_state.szwalnia_exclude_filter
+
+                    if include_filter or exclude_filter:
+                        model_metadata_df = load_model_metadata()
+                        if model_metadata_df is not None and SZWALNIA_G in model_metadata_df.columns:
+                            priority_skus = recommendations["priority_skus"].copy()
+                            priority_skus = priority_skus.merge(
+                                model_metadata_df[["Model", SZWALNIA_G]],
+                                left_on="MODEL",
+                                right_on="Model",
+                                how="left",
+                            )
+
+                            if include_filter:
+                                priority_skus = priority_skus[
+                                    priority_skus[SZWALNIA_G].isin(include_filter)
+                                ]
+
+                            if exclude_filter:
+                                priority_skus = priority_skus[
+                                    ~priority_skus[SZWALNIA_G].isin(exclude_filter)
+                                ]
+
+                            priority_skus = priority_skus.drop(columns=["Model", SZWALNIA_G])
+
+                            model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(
+                                priority_skus
+                            )
+
+                            recommendations["priority_skus"] = priority_skus
+                            recommendations["model_color_summary"] = model_color_summary
 
                     st.session_state.recommendations_data = recommendations
 
@@ -1563,7 +1630,7 @@ with tab3:
                     "Priority": f"{row['PRIORITY_SCORE']:.1f}",
                     "Deficit": int(row["DEFICIT"]),
                     "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
-                    "Sizes (Size:Qty)": sizes_str,
+                    SIZE_QTY: sizes_str,
                 }
 
                 if model_metadata_df is not None:
@@ -1574,12 +1641,56 @@ with tab3:
                 order_list.append(order_item)
 
             order_df = pd.DataFrame(order_list)
-            st.dataframe(
+            order_df.insert(0, "Select", False)
+
+            edited_df = st.data_editor(
                 order_df,
                 hide_index=True,
-                width="stretch",
+                disabled=["#", "Model", "Color", "Priority", "Deficit", "Forecast", SIZE_QTY]
+                         + ([SZWALNIA_G] if SZWALNIA_G in order_df.columns else []),
+                column_config={
+                    "Select": st.column_config.CheckboxColumn(
+                        "Select",
+                        help="Select items to create order",
+                        default=False,
+                    )
+                },
                 height=min(600, len(order_list) * 35 + 38),
             )
+
+            selected_rows = edited_df[edited_df["Select"] == True]
+
+            if not selected_rows.empty:
+                selected_items = []
+                for _, row in selected_rows.iterrows():
+                    sizes_str = row[SIZE_QTY]
+                    size_quantities = {}
+                    if sizes_str and sizes_str != "No data":
+                        for pair in sizes_str.split(", "):
+                            if ":" in pair:
+                                size, qty = pair.split(":")
+                                size_quantities[size] = int(qty)
+
+                    selected_items.append({
+                        "model": row["Model"],
+                        "color": row["Color"],
+                        "priority_score": float(row["Priority"]),
+                        "deficit": int(row["Deficit"]),
+                        "forecast": int(row["Forecast"]),
+                        "sizes": size_quantities,
+                    })
+
+                st.session_state.selected_order_items = selected_items
+            else:
+                st.session_state.selected_order_items = []
+
+            if st.session_state.selected_order_items:
+                st.success(f"✓ {len(st.session_state.selected_order_items)} items selected")
+
+                if st.button("📋 Create Order", type="primary"):
+                    st.info("Please navigate to the 'Order Creation' tab to complete the order")
+            else:
+                st.info("Select items above to create an order")
 
             st.markdown("---")
             st.subheader("Full Model+Color Priority Summary")
@@ -1805,3 +1916,19 @@ with tab4:
             import traceback
 
             st.code(traceback.format_exc())
+
+# ========================================
+# TAB 5: ORDER CREATION
+# ========================================
+
+with tab5:
+    st.title("📋 Order Creation")
+
+    if not st.session_state.get("selected_order_items"):
+        st.warning("⚠️ No items selected. Please go to Order Recommendations tab to select items.")
+        if st.button("← Go to Order Recommendations"):
+            st.info("Please switch to the 'Order Recommendations' tab manually")
+    else:
+        from utils.order_creation_ui import render_order_creation_interface
+
+        render_order_creation_interface()

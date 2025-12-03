@@ -138,6 +138,20 @@ CREATE TABLE model_metadata (
 CREATE INDEX idx_model_metadata_model ON model_metadata(model);
 
 
+-- Table: size_aliases
+CREATE TABLE size_aliases (
+    id SERIAL PRIMARY KEY,
+
+    size_code VARCHAR(2) NOT NULL UNIQUE,
+    size_alias VARCHAR(50) NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_size_aliases_code ON size_aliases(size_code);
+CREATE INDEX idx_size_aliases_alias ON size_aliases(size_alias);
+
+
 -- =============================================================================
 -- IMPORT TRACKING TABLE
 -- =============================================================================
