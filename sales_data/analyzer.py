@@ -388,10 +388,16 @@ class SalesAnalyzer:
             forecast_window = forecast_df[
                 (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
                 ]
-            forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
-            forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
-            df = df.merge(forecast_sum, on="SKU", how="left")
-            df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
+            if not forecast_window.empty:
+                forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
+                forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
+                df = df.merge(forecast_sum, on="SKU", how="left")
+                if "FORECAST_LEADTIME" in df.columns:
+                    df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
+                else:
+                    df["FORECAST_LEADTIME"] = 0
+            else:
+                df["FORECAST_LEADTIME"] = 0
         else:
             df["FORECAST_LEADTIME"] = 0
 

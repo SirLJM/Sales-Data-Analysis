@@ -1475,8 +1475,35 @@ with tab3:
         if calculate_recommendations:
             with st.spinner("Calculating order priorities..."):
                 try:
+                    sku_summary = analyzer.aggregate_by_sku()
+                    sku_summary = analyzer.classify_sku_type(
+                        sku_summary,
+                        cv_basic=st.session_state.settings["cv_thresholds"]["basic"],
+                        cv_seasonal=st.session_state.settings["cv_thresholds"]["seasonal"]
+                    )
+                    sku_summary = analyzer.calculate_safety_stock_and_rop(
+                        sku_summary,
+                        seasonal_data,
+                        lead_time=st.session_state.settings["lead_time"],
+                        z_basic=st.session_state.settings["z_scores"]["basic"],
+                        z_regular=st.session_state.settings["z_scores"]["regular"],
+                        z_seasonal_in=st.session_state.settings["z_scores"]["seasonal_in"],
+                        z_seasonal_out=st.session_state.settings["z_scores"]["seasonal_out"],
+                        z_new=st.session_state.settings["z_scores"]["new"],
+                    )
+                    sku_last_two_years = analyzer.calculate_last_two_years_avg_sales(by_model=False)
+                    sku_summary = sku_summary.merge(sku_last_two_years, on="SKU", how="left")
+                    sku_summary["LAST_2_YEARS_AVG"] = sku_summary["LAST_2_YEARS_AVG"].fillna(0)
+
+                    if stock_loaded:
+                        sku_stock = stock_df.copy()
+                        sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
+                        sku_summary["STOCK"] = sku_summary["STOCK"].fillna(0)
+                        if "PRICE" in sku_stock.columns:
+                            sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
+
                     recommendations = SalesAnalyzer.generate_order_recommendations(
-                        summary_df=summary,
+                        summary_df=sku_summary,
                         forecast_df=forecast_df,
                         forecast_date=forecast_date,
                         lead_time_months=lead_time,
