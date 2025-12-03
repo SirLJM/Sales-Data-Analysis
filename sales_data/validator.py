@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
@@ -18,10 +18,16 @@ class DataValidator:
         "aktywny",
     }
     FORECAST_COLUMNS = {"data", "sku", "forecast"}
-    MODEL_METADATA_COLUMNS = {"Model", "SZWALNIA GŁÓWNA", "SZWALNIA DRUGA", "RODZAJ MATERIAŁU", "GRAMATURA"}
+    MODEL_METADATA_COLUMNS = {
+        "Model",
+        "SZWALNIA GŁÓWNA",
+        "SZWALNIA DRUGA",
+        "RODZAJ MATERIAŁU",
+        "GRAMATURA",
+    }
 
     @staticmethod
-    def validate_sales_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+    def validate_sales_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
 
         errors = []
 
@@ -45,7 +51,7 @@ class DataValidator:
         return is_valid, errors
 
     @staticmethod
-    def validate_stock_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+    def validate_stock_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
 
         errors = []
 
@@ -71,7 +77,7 @@ class DataValidator:
         return is_valid, errors
 
     @staticmethod
-    def validate_forecast_data(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+    def validate_forecast_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
 
         errors = []
 
@@ -89,7 +95,7 @@ class DataValidator:
         return is_valid, errors
 
     @staticmethod
-    def validate_model_metadata(df: pd.DataFrame) -> Tuple[bool, List[str]]:
+    def validate_model_metadata(df: pd.DataFrame) -> tuple[bool, list[str]]:
 
         errors = []
 
@@ -109,7 +115,7 @@ class DataValidator:
     @staticmethod
     def find_sheet_by_columns(
         file_path: Path, required_columns: set, data_type: str = "data"
-    ) -> Optional[str]:
+    ) -> str | None:
         try:
             excel_file = pd.ExcelFile(file_path)
             for sheet_name in excel_file.sheet_names:
@@ -130,19 +136,21 @@ class DataValidator:
             raise RuntimeError(f"An error occurred: {e}")
 
     @staticmethod
-    def find_sales_sheet(file_path: Path) -> Optional[str]:
+    def find_sales_sheet(file_path: Path) -> str | None:
         return DataValidator.find_sheet_by_columns(file_path, DataValidator.SALES_COLUMNS, "data")
 
     @staticmethod
-    def find_stock_sheet(file_path: Path) -> Optional[str]:
+    def find_stock_sheet(file_path: Path) -> str | None:
         return DataValidator.find_sheet_by_columns(file_path, DataValidator.STOCK_COLUMNS, "stock")
 
     @staticmethod
-    def find_forecast_sheet(file_path: Path) -> Optional[str]:
-        return DataValidator.find_sheet_by_columns(file_path, DataValidator.FORECAST_COLUMNS, "data")
+    def find_forecast_sheet(file_path: Path) -> str | None:
+        return DataValidator.find_sheet_by_columns(
+            file_path, DataValidator.FORECAST_COLUMNS, "data"
+        )
 
     @staticmethod
-    def find_model_metadata_sheet(file_path: Path) -> Optional[str]:
+    def find_model_metadata_sheet(file_path: Path) -> str | None:
         try:
             excel_file = pd.ExcelFile(file_path)
             for sheet_name in excel_file.sheet_names:
@@ -163,9 +171,9 @@ class DataValidator:
             raise RuntimeError(f"An error occurred: {e}")
 
     @staticmethod
-    def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> Dict[str, Any]:
+    def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> dict[str, Any]:
 
-        summary: Dict[str, Any] = {
+        summary: dict[str, Any] = {
             "rows": len(df),
             "columns": len(df.columns),
             "column_names": df.columns.tolist(),

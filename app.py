@@ -2,6 +2,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from sales_data import SalesAnalyzer
+from sales_data.data_source_factory import DataSourceFactory
 from utils.pattern_optimizer_logic import (
     Pattern,
     PatternSet,
@@ -10,9 +12,7 @@ from utils.pattern_optimizer_logic import (
     optimize_patterns,
     save_pattern_sets,
 )
-
-from sales_data import SalesAnalyzer, SalesDataLoader
-from utils.settings_manager import load_settings, save_settings, reset_settings
+from utils.settings_manager import load_settings, reset_settings, save_settings
 
 MODEL_COLOR = "MODEL+COLOR"
 
@@ -71,11 +71,20 @@ def display_star_product(star: dict, stock_data: pd.DataFrame, is_rising: bool):
         st.metric("Last Year", f"{int(star['prev_year_sales']):,}")
     with m3:
         sign = "+" if is_rising else ""
-        st.metric("Change", f"{sign}{int(star['difference']):,}", delta=f"{sign}{star['percent_change']:.1f}%")
+        st.metric(
+            "Change",
+            f"{sign}{int(star['difference']):,}",
+            delta=f"{sign}{star['percent_change']:.1f}%",
+        )
 
 
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["📊 Sales & Inventory Analysis", "📦 Size Pattern Optimizer", "🎯 Order Recommendations", "📅 Weekly Analysis"]
+    [
+        "📊 Sales & Inventory Analysis",
+        "📦 Size Pattern Optimizer",
+        "🎯 Order Recommendations",
+        "📅 Weekly Analysis",
+    ]
 )
 
 # ========================================
@@ -103,7 +112,9 @@ with tab1:
 
     col_save, col_reset = st.sidebar.columns(2)
     with col_save:
-        if st.button("💾 Save", key="save_settings", help="Save current parameters to settings.json"):
+        if st.button(
+                "💾 Save", key="save_settings", help="Save current parameters to settings.json"
+        ):
             if save_settings(st.session_state.settings):
                 st.success("✅ Saved!")
             else:
@@ -281,35 +292,49 @@ with tab1:
     use_stock = st.sidebar.checkbox("Load stock data from data directory", value=True)
     use_forecast = st.sidebar.checkbox("Load forecast data from data directory", value=True)
 
+
     # -----------END OF SIDEBAR-------------
 
     @st.cache_data
     def load_data():
-        loader = SalesDataLoader()
-        return loader.get_aggregated_data()
+        data_source = DataSourceFactory.create_data_source()
+        return data_source.load_sales_data()
+
 
     @st.cache_data
     def load_stock():
-        loader = SalesDataLoader()
-        stock_file = loader.get_latest_stock_file()
-        if stock_file:
-            return loader.load_stock_file(stock_file), stock_file.name
+        data_source = DataSourceFactory.create_data_source()
+        stock_dataframe = data_source.load_stock_data()
+        if stock_dataframe is not None and not stock_dataframe.empty:
+            return stock_dataframe, (
+                "database" if data_source.get_data_source_type() == "database" else "file"
+            )
         return None, None
+
 
     @st.cache_data
     def load_forecast():
-        loader = SalesDataLoader()
-        forecast_result = loader.get_latest_forecast_file()
-        if forecast_result:
-            forecast_file, file_date = forecast_result
-            df_forecast = loader.load_forecast_file(forecast_file)
-            return df_forecast, file_date, forecast_file.name
+        data_source = DataSourceFactory.create_data_source()
+        forecast_dataframe = data_source.load_forecast_data()
+        if forecast_dataframe is not None and not forecast_dataframe.empty:
+            if "generated_date" in forecast_dataframe.columns:
+                loaded_forecast_date = forecast_dataframe["generated_date"].iloc[0]
+                if loaded_forecast_date is not None and not isinstance(
+                        loaded_forecast_date, pd.Timestamp
+                ):
+                    loaded_forecast_date = pd.Timestamp(loaded_forecast_date)
+            else:
+                loaded_forecast_date = None
+            source_name = "database" if data_source.get_data_source_type() == "database" else "file"
+            return forecast_dataframe, loaded_forecast_date, source_name
         return None, None, None
+
 
     @st.cache_data
     def load_model_metadata():
-        loader = SalesDataLoader()
-        return loader.load_model_metadata()
+        data_source = DataSourceFactory.create_data_source()
+        return data_source.load_model_metadata()
+
 
     df = load_data()
     analyzer = SalesAnalyzer(df)
@@ -374,7 +399,7 @@ with tab1:
             summary["DEFICIT"] = summary["ROP"] - summary["STOCK"]
             summary["DEFICIT"] = summary["DEFICIT"].apply(lambda x: max(0, x))
             summary[OVERSTOCKED__] = (
-                (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
+                    (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
             ).round(1)
 
             stock_loaded = True
@@ -385,24 +410,36 @@ with tab1:
         forecast_df, forecast_date, forecast_filename = load_forecast()
         if forecast_df is not None:
             try:
-                forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(forecast_df, forecast_date)
+                forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(
+                    forecast_df, forecast_date, lead_time_months=st.session_state.settings["lead_time"]
+                )
 
                 if group_by_model:
                     forecast_metrics["MODEL"] = forecast_metrics["sku"].astype(str).str[:5]
+                    agg_dict = {"FORECAST_8W": "sum", "FORECAST_16W": "sum"}
+                    if "FORECAST_LEADTIME" in forecast_metrics.columns:
+                        agg_dict["FORECAST_LEADTIME"] = "sum"
                     forecast_agg = (
                         forecast_metrics.groupby("MODEL")
-                        .agg({"FORECAST_8W": "sum", "FORECAST_16W": "sum"})
+                        .agg(agg_dict)
                         .reset_index()
                     )
                     summary = summary.merge(forecast_agg, on="MODEL", how="left")
                 else:
                     forecast_metrics = forecast_metrics.rename(columns={"sku": "SKU"})
+                    merge_cols = ["SKU", "FORECAST_8W", "FORECAST_16W"]
+                    if "FORECAST_LEADTIME" in forecast_metrics.columns:
+                        merge_cols.append("FORECAST_LEADTIME")
                     summary = summary.merge(
-                        forecast_metrics[["SKU", "FORECAST_8W", "FORECAST_16W"]], on="SKU", how="left"
+                        forecast_metrics[merge_cols],
+                        on="SKU",
+                        how="left",
                     )
 
                 summary["FORECAST_8W"] = summary["FORECAST_8W"].fillna(0)
                 summary["FORECAST_16W"] = summary["FORECAST_16W"].fillna(0)
+                if "FORECAST_LEADTIME" in summary.columns:
+                    summary["FORECAST_LEADTIME"] = summary["FORECAST_LEADTIME"].fillna(0)
 
             except Exception as e:
                 st.error(f"❌ Error processing forecast data: {e}")
@@ -416,6 +453,7 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "FORECAST_LEADTIME",
                 "FORECAST_8W",
                 "FORECAST_16W",
                 OVERSTOCKED__,
@@ -436,6 +474,7 @@ with tab1:
                 "TYPE",
                 "STOCK",
                 "ROP",
+                "FORECAST_LEADTIME",
                 "FORECAST_8W",
                 "FORECAST_16W",
                 OVERSTOCKED__,
@@ -460,6 +499,7 @@ with tab1:
             "SS",
             "CV",
             "ROP",
+            "FORECAST_LEADTIME",
             "FORECAST_8W",
             "FORECAST_16W",
         ]
@@ -518,9 +558,7 @@ with tab1:
         filtered_summary = filtered_summary[filtered_summary["LAST_2_YEARS_AVG"] > 300]
 
     if stock_loaded and show_overstocked and OVERSTOCKED__ in filtered_summary.columns:
-        filtered_summary = filtered_summary[
-            filtered_summary[OVERSTOCKED__] >= overstock_threshold
-            ]
+        filtered_summary = filtered_summary[filtered_summary[OVERSTOCKED__] >= overstock_threshold]
 
     if type_filter:
         filtered_summary = filtered_summary[filtered_summary["TYPE"].isin(type_filter)]
@@ -640,7 +678,7 @@ with tab1:
                 (summary["STOCK"].notna())
                 & (summary["ROP"].notna())
                 & (summary[id_column].isin(forecast_df["sku"].unique()))
-            ][id_column].unique()
+                ][id_column].unique()
         )
 
         if len(available_skus) > 0:
@@ -662,9 +700,7 @@ with tab1:
 
             if selected_sku:
                 if selected_sku not in available_skus:
-                    st.warning(
-                        f"⚠️ SKU '{selected_sku}' not found or missing stock/forecast data."
-                    )
+                    st.warning(f"⚠️ SKU '{selected_sku}' not found or missing stock/forecast data.")
                 else:
                     sku_data = summary[summary[id_column] == selected_sku].iloc[0]
                     current_stock = sku_data["STOCK"]
@@ -731,11 +767,11 @@ with tab1:
                         rop_cross = projection_df[
                             (projection_df["rop_reached"])
                             & (~projection_df["rop_reached"].shift(1, fill_value=False))
-                        ]
+                            ]
                         zero_cross = projection_df[
                             (projection_df["zero_reached"])
                             & (~projection_df["zero_reached"].shift(1, fill_value=False))
-                        ]
+                            ]
 
                         if not rop_cross.empty:
                             first_rop = rop_cross.iloc[0]
@@ -1118,7 +1154,7 @@ with tab2:
                             editing_set.patterns = patterns
                         else:
                             new_id = (
-                                max([ps.id for ps in st.session_state.pattern_sets], default=0) + 1
+                                    max([ps.id for ps in st.session_state.pattern_sets], default=0) + 1
                             )
                             st.session_state.pattern_sets.append(
                                 PatternSet(new_id, set_name, size_names, patterns)
@@ -1142,9 +1178,7 @@ with tab2:
     with col2:
         st.markdown('<div class="section-header">Optimization</div>', unsafe_allow_html=True)
 
-        if st.button(
-            "Run Optimization", type="primary", width="content", key="run_optimization"
-        ):
+        if st.button("Run Optimization", type="primary", width="content", key="run_optimization"):
             if not st.session_state.pattern_sets:
                 st.error("Please add at least one pattern set before optimizing!")
             elif st.session_state.active_set_id is None:
@@ -1268,70 +1302,89 @@ with tab3:
             with w_col1:
                 weight_stockout = st.slider(
                     "Stockout Risk",
-                    0.0, 1.0,
-                    st.session_state.settings["order_recommendations"]["priority_weights"]["stockout_risk"],
+                    0.0,
+                    1.0,
+                    st.session_state.settings["order_recommendations"]["priority_weights"][
+                        "stockout_risk"
+                    ],
                     0.05,
                     key="weight_stockout",
-                    help="Weight for stockout risk factor in priority calculation. Higher values prioritize items at risk of stockout (zero stock or below ROP)."
+                    help="Weight for stockout risk factor in priority calculation. Higher values prioritize items at risk of stockout (zero stock or below ROP).",
                 )
             with w_col2:
                 weight_revenue = st.slider(
                     "Revenue Impact",
-                    0.0, 1.0,
-                    st.session_state.settings["order_recommendations"]["priority_weights"]["revenue_impact"],
+                    0.0,
+                    1.0,
+                    st.session_state.settings["order_recommendations"]["priority_weights"][
+                        "revenue_impact"
+                    ],
                     0.05,
                     key="weight_revenue",
-                    help="Weight for revenue impact in priority calculation. Higher values prioritize high-revenue items (forecast × price)."
+                    help="Weight for revenue impact in priority calculation. Higher values prioritize high-revenue items (forecast × price).",
                 )
             with w_col3:
                 weight_demand = st.slider(
                     "Demand Forecast",
-                    0.0, 1.0,
-                    st.session_state.settings["order_recommendations"]["priority_weights"]["demand_forecast"],
+                    0.0,
+                    1.0,
+                    st.session_state.settings["order_recommendations"]["priority_weights"][
+                        "demand_forecast"
+                    ],
                     0.05,
                     key="weight_demand",
-                    help="Weight for demand forecast in priority calculation. Higher values prioritize items with high forecasted demand during lead time."
+                    help="Weight for demand forecast in priority calculation. Higher values prioritize items with high forecasted demand during lead time.",
                 )
 
-            st.caption(f"Current weights sum: {weight_stockout + weight_revenue + weight_demand:.2f} (ideally 1.0)")
+            st.caption(
+                f"Current weights sum: {weight_stockout + weight_revenue + weight_demand:.2f} (ideally 1.0)"
+            )
 
             st.write("**Type Multipliers** (priority boost by product type)")
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
             with m_col1:
                 mult_new = st.slider(
                     "New Products",
-                    0.5, 2.0,
+                    0.5,
+                    2.0,
                     st.session_state.settings["order_recommendations"]["type_multipliers"]["new"],
                     0.1,
                     key="mult_new",
-                    help="Multiplier applied to new products (< 12 months since first sale). Values > 1.0 increase priority, < 1.0 decrease priority."
+                    help="Multiplier applied to new products (< 12 months since first sale). Values > 1.0 increase priority, < 1.0 decrease priority.",
                 )
             with m_col2:
                 mult_seasonal = st.slider(
                     "Seasonal",
-                    0.5, 2.0,
-                    st.session_state.settings["order_recommendations"]["type_multipliers"]["seasonal"],
+                    0.5,
+                    2.0,
+                    st.session_state.settings["order_recommendations"]["type_multipliers"][
+                        "seasonal"
+                    ],
                     0.1,
                     key="mult_seasonal",
-                    help="Multiplier for seasonal products (high variability, CV > 1.0). Higher values prioritize seasonal items during peak season."
+                    help="Multiplier for seasonal products (high variability, CV > 1.0). Higher values prioritize seasonal items during peak season.",
                 )
             with m_col3:
                 mult_regular = st.slider(
                     "Regular",
-                    0.5, 2.0,
-                    st.session_state.settings["order_recommendations"]["type_multipliers"]["regular"],
+                    0.5,
+                    2.0,
+                    st.session_state.settings["order_recommendations"]["type_multipliers"][
+                        "regular"
+                    ],
                     0.1,
                     key="mult_regular",
-                    help="Multiplier for regular products (moderate variability, 0.6 < CV < 1.0). Typically set to 1.0 as baseline."
+                    help="Multiplier for regular products (moderate variability, 0.6 < CV < 1.0). Typically set to 1.0 as baseline.",
                 )
             with m_col4:
                 mult_basic = st.slider(
                     "Basic",
-                    0.5, 2.0,
+                    0.5,
+                    2.0,
                     st.session_state.settings["order_recommendations"]["type_multipliers"]["basic"],
                     0.1,
                     key="mult_basic",
-                    help="Multiplier for basic products (stable demand, CV < 0.6). Lower values reduce priority for consistently available items."
+                    help="Multiplier for basic products (stable demand, CV < 0.6). Lower values reduce priority for consistently available items.",
                 )
 
             st.write("**Stockout Risk & Other Parameters**")
@@ -1339,40 +1392,63 @@ with tab3:
             with o_col1:
                 zero_penalty = st.slider(
                     "Zero Stock Penalty",
-                    50, 150,
-                    st.session_state.settings["order_recommendations"]["stockout_risk"]["zero_stock_penalty"],
+                    50,
+                    150,
+                    st.session_state.settings["order_recommendations"]["stockout_risk"][
+                        "zero_stock_penalty"
+                    ],
                     5,
                     key="zero_penalty",
-                    help="Risk score assigned to SKUs with zero stock AND forecasted demand. Higher values = maximum urgency for out-of-stock items."
+                    help="Risk score assigned to SKUs with zero stock AND forecasted demand. Higher values = maximum urgency for out-of-stock items.",
                 )
             with o_col2:
                 below_rop_penalty = st.slider(
                     "Below ROP Max Penalty",
-                    40, 100,
-                    st.session_state.settings["order_recommendations"]["stockout_risk"]["below_rop_max_penalty"],
+                    40,
+                    100,
+                    st.session_state.settings["order_recommendations"]["stockout_risk"][
+                        "below_rop_max_penalty"
+                    ],
                     5,
                     key="below_rop_penalty",
-                    help="Maximum risk score for items below Reorder Point (ROP). Actual score scales proportionally based on how far below ROP."
+                    help="Maximum risk score for items below Reorder Point (ROP). Actual score scales proportionally based on how far below ROP.",
                 )
             with o_col3:
                 demand_cap = st.slider(
                     "Demand Cap",
-                    50, 300,
+                    50,
+                    300,
                     st.session_state.settings["order_recommendations"]["demand_cap"],
                     10,
                     key="demand_cap",
-                    help="Maximum forecast value used in priority calculation. Prevents extremely high forecasts from dominating the score. Values are clipped to this maximum."
+                    help="Maximum forecast value used in priority calculation. Prevents extremely high forecasts from dominating the score. Values are clipped to this maximum.",
                 )
 
-            st.session_state.settings["order_recommendations"]["priority_weights"]["stockout_risk"] = weight_stockout
-            st.session_state.settings["order_recommendations"]["priority_weights"]["revenue_impact"] = weight_revenue
-            st.session_state.settings["order_recommendations"]["priority_weights"]["demand_forecast"] = weight_demand
+            st.session_state.settings["order_recommendations"]["priority_weights"][
+                "stockout_risk"
+            ] = weight_stockout
+            st.session_state.settings["order_recommendations"]["priority_weights"][
+                "revenue_impact"
+            ] = weight_revenue
+            st.session_state.settings["order_recommendations"]["priority_weights"][
+                "demand_forecast"
+            ] = weight_demand
             st.session_state.settings["order_recommendations"]["type_multipliers"]["new"] = mult_new
-            st.session_state.settings["order_recommendations"]["type_multipliers"]["seasonal"] = mult_seasonal
-            st.session_state.settings["order_recommendations"]["type_multipliers"]["regular"] = mult_regular
-            st.session_state.settings["order_recommendations"]["type_multipliers"]["basic"] = mult_basic
-            st.session_state.settings["order_recommendations"]["stockout_risk"]["zero_stock_penalty"] = zero_penalty
-            st.session_state.settings["order_recommendations"]["stockout_risk"]["below_rop_max_penalty"] = below_rop_penalty
+            st.session_state.settings["order_recommendations"]["type_multipliers"][
+                "seasonal"
+            ] = mult_seasonal
+            st.session_state.settings["order_recommendations"]["type_multipliers"][
+                "regular"
+            ] = mult_regular
+            st.session_state.settings["order_recommendations"]["type_multipliers"][
+                "basic"
+            ] = mult_basic
+            st.session_state.settings["order_recommendations"]["stockout_risk"][
+                "zero_stock_penalty"
+            ] = zero_penalty
+            st.session_state.settings["order_recommendations"]["stockout_risk"][
+                "below_rop_max_penalty"
+            ] = below_rop_penalty
             st.session_state.settings["order_recommendations"]["demand_cap"] = demand_cap
 
         col_top_n, col_calc, col_clear = st.columns([3, 1, 1])
@@ -1410,7 +1486,9 @@ with tab3:
 
                     st.session_state.recommendations_data = recommendations
 
-                    st.success(f"✅ Analyzed {len(recommendations['priority_skus'])} SKUs - scroll down to view results")
+                    st.success(
+                        f"✅ Analyzed {len(recommendations['priority_skus'])} SKUs - scroll down to view results"
+                    )
 
                 except Exception as e:
                     st.error(f"Error generating recommendations: {e}")
@@ -1424,7 +1502,7 @@ with tab3:
             model_metadata_df = load_model_metadata()
 
             top_model_colors = (
-                recommendations["model_color_summary"]  # type: ignore
+                recommendations["model_color_summary"]  # type: ignore[index]
                 .sort_values("PRIORITY_SCORE", ascending=False)
                 .head(st.session_state.recommendations_top_n)
             )
@@ -1438,14 +1516,16 @@ with tab3:
                 color = row["COLOR"]
 
                 size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(
-                    recommendations["priority_skus"],  # type: ignore
+                    recommendations["priority_skus"],  # type: ignore[index]
                     model,
                     color,
                 )
 
-                sizes_str = ", ".join(
-                    [f"{size}:{qty}" for size, qty in sorted(size_quantities.items())]
-                ) if size_quantities else "No data"
+                sizes_str = (
+                    ", ".join([f"{size}:{qty}" for size, qty in sorted(size_quantities.items())])
+                    if size_quantities
+                    else "No data"
+                )
 
                 urgent_mark = "🚨" if row.get("URGENT", False) else ""
 
@@ -1456,7 +1536,7 @@ with tab3:
                     "Priority": f"{row['PRIORITY_SCORE']:.1f}",
                     "Deficit": int(row["DEFICIT"]),
                     "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
-                    "Sizes (Size:Qty)": sizes_str
+                    "Sizes (Size:Qty)": sizes_str,
                 }
 
                 if model_metadata_df is not None:
@@ -1477,14 +1557,11 @@ with tab3:
             st.markdown("---")
             st.subheader("Full Model+Color Priority Summary")
 
-            model_color_summary = recommendations["model_color_summary"].copy()  # type: ignore
+            model_color_summary = recommendations["model_color_summary"].copy()  # type: ignore[index]
 
             if model_metadata_df is not None:
                 model_color_summary = model_color_summary.merge(
-                    model_metadata_df,
-                    left_on="MODEL",
-                    right_on="Model",
-                    how="left"
+                    model_metadata_df, left_on="MODEL", right_on="Model", how="left"
                 )
                 if "Model" in model_color_summary.columns:
                     model_color_summary = model_color_summary.drop(columns=["Model"])
@@ -1502,11 +1579,7 @@ with tab3:
             if model_metadata_df is not None:
                 display_cols.extend([SZWALNIA_G, SZWALNIA_D, MATERIAL, "GRAMATURA"])
 
-            available_cols = [
-                col
-                for col in display_cols
-                if col in model_color_summary.columns
-            ]
+            available_cols = [col for col in display_cols if col in model_color_summary.columns]
             st.dataframe(
                 model_color_summary[available_cols],
                 hide_index=True,
@@ -1515,7 +1588,7 @@ with tab3:
 
             st.download_button(
                 "📥 Download Full Priority Report (SKU level)",
-                recommendations["priority_skus"].to_csv(index=False),  # type: ignore
+                recommendations["priority_skus"].to_csv(index=False),  # type: ignore[index]
                 "order_priority_report.csv",
                 TEXT_CSV,
             )
@@ -1544,20 +1617,19 @@ with tab4:
         from datetime import datetime
 
         top_sales = SalesAnalyzer.calculate_top_sales_report(
-            sales_df=df,
-            reference_date=datetime.today()
+            sales_df=df, reference_date=datetime.today()
         )
 
         col_dates1, col_dates2 = st.columns(2)
         with col_dates1:
             st.metric(
                 LAST_WEEK,
-                f"{top_sales['last_week_start'].strftime('%d-%m-%Y')} - {top_sales['last_week_end'].strftime('%d-%m-%Y')}"
+                f"{top_sales['last_week_start'].strftime('%d-%m-%Y')} - {top_sales['last_week_end'].strftime('%d-%m-%Y')}",
             )
         with col_dates2:
             st.metric(
                 "Same Week Last Year",
-                f"{top_sales['prev_year_start'].strftime('%d-%m-%Y')} - {top_sales['prev_year_end'].strftime('%d-%m-%Y')}"
+                f"{top_sales['prev_year_start'].strftime('%d-%m-%Y')} - {top_sales['prev_year_end'].strftime('%d-%m-%Y')}",
             )
 
         col_rising, col_falling = st.columns(2)
@@ -1579,6 +1651,7 @@ with tab4:
     except Exception as e:
         st.error(f"❌ Error generating TOP SALES REPORT: {e}")
         import traceback
+
         st.code(traceback.format_exc())
 
     st.markdown("---")
@@ -1590,28 +1663,32 @@ with tab4:
         cv_seasonal = st.session_state.settings["cv_thresholds"]["seasonal"]
 
         top_products = SalesAnalyzer.calculate_top_products_by_type(
-            sales_df=df,
-            cv_basic=cv_basic,
-            cv_seasonal=cv_seasonal,
-            reference_date=datetime.today()
+            sales_df=df, cv_basic=cv_basic, cv_seasonal=cv_seasonal, reference_date=datetime.today()
         )
 
         col_new, col_seasonal = st.columns(2)
         col_regular, col_basic = st.columns(2)
+
 
         def display_top_5(column, type_name, emoji, df_top):
             with column:
                 st.subheader(f"{emoji} {type_name.upper()}")
                 if not df_top.empty:
                     top_products_df = df_top.copy()
-                    top_products_df[MODEL_COLOR] = top_products_df["model"] + top_products_df["color"]
+                    top_products_df[MODEL_COLOR] = (
+                            top_products_df["model"] + top_products_df["color"]
+                    )
 
                     if stock_df is not None:
                         stock_df_copy = stock_df.copy()
                         stock_df_copy["model"] = stock_df_copy["sku"].astype(str).str[:5]
                         stock_df_copy["color"] = stock_df_copy["sku"].astype(str).str[5:7]
-                        descriptions = stock_df_copy.groupby(["model", "color"])["nazwa"].first().reset_index()
-                        top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
+                        descriptions = (
+                            stock_df_copy.groupby(["model", "color"])["nazwa"].first().reset_index()
+                        )
+                        top_products_df = top_products_df.merge(
+                            descriptions, on=["model", "color"], how="left"
+                        )
                         top_products_df["nazwa"] = top_products_df["nazwa"].fillna("")
                         final_cols = [MODEL_COLOR, "nazwa", "color", "sales"]
                         col_names = {"nazwa": "DESCRIPTION", "color": "COLOR", "sales": "SALES"}
@@ -1625,6 +1702,7 @@ with tab4:
                 else:
                     st.info(f"No {type_name} products found")
 
+
         display_top_5(col_new, "New", "🆕", top_products["top_by_type"]["new"])
         display_top_5(col_seasonal, "Seasonal", "🌸", top_products["top_by_type"]["seasonal"])
         display_top_5(col_regular, "Regular", "📦", top_products["top_by_type"]["regular"])
@@ -1633,11 +1711,14 @@ with tab4:
     except Exception as e:
         st.error(f"❌ Error generating Top 5 by Type: {e}")
         import traceback
+
         st.code(traceback.format_exc())
 
     st.markdown("---")
     st.header("📊 New Products Launch Monitoring")
-    st.caption("Track weekly sales for products launched in the last 2 months (Weeks aligned to calendar Wednesdays)")
+    st.caption(
+        "Track weekly sales for products launched in the last 2 months (Weeks aligned to calendar Wednesdays)"
+    )
 
     lookback_days = st.session_state.settings.get("weekly_analysis", {}).get("lookback_days", 60)
 
@@ -1649,15 +1730,18 @@ with tab4:
                 sales_df=df,
                 stock_df=stock_df,
                 lookback_days=lookback_days,
-                reference_date=datetime.today()
+                reference_date=datetime.today(),
             )
 
             if weekly_df.empty:
                 st.info(f"ℹ️ No new products found with first sale in the last {lookback_days} days")
             else:
                 col1, col2, col3 = st.columns(3)
-                week_cols = [col for col in weekly_df.columns
-                            if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
+                week_cols = [
+                    col
+                    for col in weekly_df.columns
+                    if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]
+                ]
 
                 with col1:
                     st.metric("New Products", len(weekly_df))
@@ -1668,19 +1752,14 @@ with tab4:
                     st.metric("Total Sales", f"{int(total_sales):,}")
 
                 st.subheader("Weekly Sales by Model")
-                st.dataframe(
-                    weekly_df,
-                    hide_index=True,
-                    height=600,
-                    width="stretch"
-                )
+                st.dataframe(weekly_df, hide_index=True, height=600, width="stretch")
 
                 csv = weekly_df.to_csv(index=False)
                 st.download_button(
                     "📥 Download Weekly Analysis (CSV)",
                     csv,
                     f"weekly_new_products_{datetime.today().strftime('%Y%m%d')}.csv",
-                    TEXT_CSV
+                    TEXT_CSV,
                 )
 
                 weekly_df["TOTAL_SALES"] = weekly_df[week_cols].sum(axis=1)
@@ -1692,12 +1771,10 @@ with tab4:
                         display_cols = ["SALES_START_DATE", "MODEL"]
                         if "DESCRIPTION" in zero_sales.columns:
                             display_cols.append("DESCRIPTION")
-                        st.dataframe(
-                            zero_sales[display_cols],
-                            hide_index=True
-                        )
+                        st.dataframe(zero_sales[display_cols], hide_index=True)
 
         except Exception as e:
             st.error(f"❌ Error generating weekly analysis: {e}")
             import traceback
+
             st.code(traceback.format_exc())
