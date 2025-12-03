@@ -524,6 +524,7 @@ with tab1:
             show_only_below_rop = False
     with col3:
         if group_by_model:
+            st.space("small")
             show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
         else:
             show_bestsellers = False
@@ -671,26 +672,41 @@ with tab1:
         download_label, display_data.to_csv(index=False), download_filename, TEXT_CSV
     )
 
-    if stock_loaded and use_forecast and forecast_df is not None and not group_by_model:
+    if stock_loaded and use_forecast and forecast_df is not None:
         st.markdown("---")
         st.subheader("📈 Stock Projection Analysis")
 
-        available_skus = sorted(
-            summary[
-                (summary["STOCK"].notna())
-                & (summary["ROP"].notna())
-                & (summary[id_column].isin(forecast_df["sku"].unique()))
-                ][id_column].unique()
-        )
+        if group_by_model:
+            forecast_df_copy = forecast_df.copy()
+            forecast_df_copy["model"] = forecast_df_copy["sku"].astype(str).str[:5]
+            available_ids = sorted(
+                summary[
+                    (summary["STOCK"].notna())
+                    & (summary["ROP"].notna())
+                    & (summary[id_column].isin(forecast_df_copy["model"].unique()))
+                    ][id_column].unique()
+            )
+        else:
+            available_ids = sorted(
+                summary[
+                    (summary["STOCK"].notna())
+                    & (summary["ROP"].notna())
+                    & (summary[id_column].isin(forecast_df["sku"].unique()))
+                    ][id_column].unique()
+            )
 
-        if len(available_skus) > 0:
-            col_sku, col_months = st.columns([3, 1])
+        if len(available_ids) > 0:
+            col_input, col_months = st.columns([3, 1])
 
-            with col_sku:
-                selected_sku = st.text_input(
-                    "Enter SKU to analyze:",
-                    placeholder="Type SKU...",
-                    help="Enter a SKU with both stock and forecast data available",
+            with col_input:
+                input_label = "Enter Model to analyze:" if group_by_model else "Enter SKU to analyze:"
+                input_placeholder = "Type Model..." if group_by_model else "Type SKU..."
+                input_help = f"Enter a {'model' if group_by_model else 'SKU'} with both stock and forecast data available"
+
+                selected_id = st.text_input(
+                    input_label,
+                    placeholder=input_placeholder,
+                    help=input_help,
                 )
 
             with col_months:
@@ -698,27 +714,40 @@ with tab1:
                     "Projection months:", min_value=1, max_value=12, value=6, step=1
                 )
 
-            st.caption(f"📦 {len(available_skus)} SKUs available with complete data")
+            entity_type = "Models" if group_by_model else "SKUs"
+            st.caption(f"📦 {len(available_ids)} {entity_type} available with complete data")
 
-            if selected_sku:
-                if selected_sku not in available_skus:
-                    st.warning(f"⚠️ SKU '{selected_sku}' not found or missing stock/forecast data.")
+            if selected_id:
+                if selected_id not in available_ids:
+                    entity_name = "Model" if group_by_model else "SKU"
+                    st.warning(f"⚠️ {entity_name} '{selected_id}' not found or missing stock/forecast data.")
                 else:
-                    sku_data = summary[summary[id_column] == selected_sku].iloc[0]
-                    current_stock = sku_data["STOCK"]
-                    rop = sku_data["ROP"]
-                    safety_stock = sku_data["SS"]
-                    avg_sales = sku_data[AVERAGE_SALES]
+                    entity_data = summary[summary[id_column] == selected_id].iloc[0]
+                    current_stock = entity_data["STOCK"]
+                    rop = entity_data["ROP"]
+                    safety_stock = entity_data["SS"]
+                    avg_sales = entity_data[AVERAGE_SALES]
 
-                    projection_df = SalesAnalyzer.calculate_stock_projection(
-                        sku=selected_sku,
-                        current_stock=current_stock,
-                        rop=rop,
-                        safety_stock=safety_stock,
-                        forecast_df=forecast_df,
-                        start_date=forecast_date,
-                        projection_months=projection_months,
-                    )
+                    if group_by_model:
+                        projection_df = SalesAnalyzer.calculate_model_stock_projection(
+                            model=selected_id,
+                            current_stock=current_stock,
+                            rop=rop,
+                            safety_stock=safety_stock,
+                            forecast_df=forecast_df,
+                            start_date=forecast_date,
+                            projection_months=projection_months,
+                        )
+                    else:
+                        projection_df = SalesAnalyzer.calculate_stock_projection(
+                            sku=selected_id,
+                            current_stock=current_stock,
+                            rop=rop,
+                            safety_stock=safety_stock,
+                            forecast_df=forecast_df,
+                            start_date=forecast_date,
+                            projection_months=projection_months,
+                        )
 
                     if not projection_df.empty:
                         import plotly.graph_objects as go
@@ -805,8 +834,9 @@ with tab1:
                                 font={"color": "white"},
                             )
 
+                        entity_name = "Model" if group_by_model else "SKU"
                         fig.update_layout(
-                            title=f"Stock Projection for {selected_sku}",
+                            title=f"Stock Projection for {entity_name} {selected_id}",
                             xaxis_title="Date",
                             yaxis_title="Quantity",
                             hovermode="x unified",
@@ -851,10 +881,12 @@ with tab1:
                             )
 
                     else:
-                        st.info("No forecast data available for this SKU in the projection window.")
+                        entity_name = "Model" if group_by_model else "SKU"
+                        st.info(f"No forecast data available for this {entity_name} in the projection window.")
         else:
+            entity_type = "Models" if group_by_model else "SKUs"
             st.info(
-                "No SKUs have both stock and forecast data available. Load both datasets to use this feature."
+                f"No {entity_type} have both stock and forecast data available. Load both datasets to use this feature."
             )
 
 # ========================================

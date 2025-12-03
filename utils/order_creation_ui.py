@@ -6,8 +6,8 @@ import streamlit as st
 
 from sales_data.analyzer import SalesAnalyzer
 from sales_data.data_source_factory import DataSourceFactory
+from sales_data.loader import load_size_aliases_from_excel
 from utils.pattern_optimizer_logic import PatternSet, load_pattern_sets, optimize_patterns, get_min_order_per_pattern
-from utils.size_alias_loader import load_size_aliases_from_excel
 
 TOTAL_PATTERNS = "Total Patterns"
 
@@ -279,6 +279,7 @@ def load_forecast_data_for_colors(model: str, colors: List[str]) -> Dict:
                 "forecast": int(row.iloc[0].get("FORECAST_LEADTIME", 0)),
                 "deficit": int(row.iloc[0].get("DEFICIT", 0)),
                 "coverage_gap": int(row.iloc[0].get("COVERAGE_GAP", 0)),
+                "stock": int(row.iloc[0].get("STOCK", 0)),
                 "safety_stock": int(row.iloc[0].get("SS", 0)),
                 "reorder_point": int(row.iloc[0].get("ROP", 0)),
             }
@@ -287,7 +288,6 @@ def load_forecast_data_for_colors(model: str, colors: List[str]) -> Dict:
 
 
 def _build_pattern_allocation_string(allocation: Dict, pattern_set: PatternSet) -> str:
-    """Build pattern allocation string from allocation dict."""
     if not allocation:
         return ""
 
@@ -301,7 +301,6 @@ def _build_pattern_allocation_string(allocation: Dict, pattern_set: PatternSet) 
 
 
 def _build_produced_string(produced: Dict) -> str:
-    """Build produced quantities string."""
     if not produced:
         return ""
     return ", ".join([f"{s}:{q}" for s, q in sorted(produced.items()) if q > 0])
@@ -315,7 +314,6 @@ def _format_month_label(year_month_str: str) -> str:
 
 
 def _add_sales_history_to_row(row: Dict, sales_history: pd.DataFrame, color: str) -> None:
-    """Add sales history columns to row dict."""
     if sales_history.empty or "color" not in sales_history.columns:
         return
 
@@ -340,6 +338,7 @@ def _create_base_row(model: str, color: str, pattern_res: Dict, forecast: Dict, 
         "Patterns": pattern_allocation_str,
         TOTAL_PATTERNS: pattern_res.get("total_patterns", 0),
         "Total Excess": pattern_res.get("total_excess", 0),
+        "Stock": forecast.get("stock", 0),
         "Safety Stock": forecast.get("safety_stock", 0),
         "ROP": forecast.get("reorder_point", 0),
         "Forecast": forecast.get("forecast", 0),

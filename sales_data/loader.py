@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Dict
 
 import pandas as pd
 
@@ -15,6 +16,15 @@ XLSX = ".xlsx"
 ANY_XLSX = "*.xlsx"
 
 ANY_CSV = "*.csv"
+
+
+def load_size_aliases_from_excel(sizes_file_path: Path) -> Dict[str, str]:
+    df = pd.read_excel(sizes_file_path)
+    df = df[["size", "metric"]].copy()
+    df.columns = ["size_code", "size_alias"]
+    df["size_code"] = df["size_code"].astype(str).str.zfill(2)
+    df["size_alias"] = df["size_alias"].astype(str)
+    return dict(zip(df["size_code"], df["size_alias"]))
 
 
 class SalesDataLoader:
@@ -122,7 +132,7 @@ class SalesDataLoader:
         return None
 
     def collect_files_from_directory(
-        self, directory: Path
+            self, directory: Path
     ) -> list[tuple[Path, datetime, datetime]]:
         collected_files = []
         for file_path in list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)):
@@ -132,13 +142,13 @@ class SalesDataLoader:
         return collected_files
 
     def _add_archival_files(
-        self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
+            self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
     ) -> None:
         if not self.archival_sales_dir.exists():
             return
 
         for file_path, start_date, end_date in self.collect_files_from_directory(
-            self.archival_sales_dir
+                self.archival_sales_dir
         ):
             date_key = (start_date, end_date)
             if date_key not in seen_dates:
@@ -146,7 +156,7 @@ class SalesDataLoader:
                 seen_dates.add(date_key)
 
     def _add_latest_current_file(
-        self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
+            self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
     ) -> None:
         if not self.current_sales_dir.exists():
             return
@@ -179,7 +189,7 @@ class SalesDataLoader:
 
         if self.stock_dir.exists():
             for file_path in list(self.stock_dir.glob(ANY_CSV)) + list(
-                self.stock_dir.glob(ANY_XLSX)
+                    self.stock_dir.glob(ANY_XLSX)
             ):
                 file_date = self._parse_stock_filename(file_path.name)
                 if file_date is not None and file_date not in seen_dates:
@@ -213,7 +223,7 @@ class SalesDataLoader:
 
                 for file_path in forecast_files:
                     if folder_date not in seen_dates or self._should_replace_forecast_file(
-                        file_path, seen_dates[folder_date]
+                            file_path, seen_dates[folder_date]
                     ):
                         seen_dates[folder_date] = file_path
 
@@ -238,7 +248,7 @@ class SalesDataLoader:
 
         if self.current_sales_dir.exists():
             for file_path in list(self.current_sales_dir.glob(ANY_CSV)) + list(
-                self.current_sales_dir.glob(ANY_XLSX)
+                    self.current_sales_dir.glob(ANY_XLSX)
             ):
                 date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:

@@ -10,11 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 load_dotenv(find_dotenv(filename=".env"))
 
-from import_current_sales import import_current_sales
-from import_forecast import import_forecast_data
-from import_model_metadata import import_model_metadata
-from import_size_aliases import import_size_aliases
-from import_stock import import_stock_data
+from migration.individual.import_current_sales import import_current_sales
+from migration.individual.import_forecast import import_forecast_data
+from migration.individual.import_model_metadata import import_model_metadata
+from migration.individual.import_size_aliases import import_size_aliases
+from migration.individual.import_stock import import_stock_data
 from initial_populate import populate_archival_sales
 
 
@@ -30,10 +30,11 @@ def refresh_materialized_views(connection_string: str):
             result = conn.execute(
                 text(
                     """
-                SELECT matviewname FROM pg_matviews
-                WHERE schemaname = 'public'
-                ORDER BY matviewname
-            """
+                    SELECT matviewname
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                    ORDER BY matviewname
+                    """
                 )
             )
             views = [row[0] for row in result]
@@ -70,15 +71,14 @@ def print_import_summary(connection_string: str):
         result = conn.execute(
             text(
                 """
-            SELECT
-                COUNT(*) as total_transactions,
-                MIN(sale_date) as earliest_sale,
-                MAX(sale_date) as latest_sale,
-                COUNT(DISTINCT sku) as unique_skus,
-                COUNT(DISTINCT order_id) as unique_orders,
-                SUM(total_amount) as total_revenue
-            FROM raw_sales_transactions
-        """
+                SELECT COUNT(*)                 as total_transactions,
+                       MIN(sale_date)           as earliest_sale,
+                       MAX(sale_date)           as latest_sale,
+                       COUNT(DISTINCT sku)      as unique_skus,
+                       COUNT(DISTINCT order_id) as unique_orders,
+                       SUM(total_amount)        as total_revenue
+                FROM raw_sales_transactions
+                """
             )
         )
         row = result.fetchone()
@@ -95,9 +95,9 @@ def print_import_summary(connection_string: str):
         result = conn.execute(
             text(
                 """
-            SELECT COUNT(*) as total_records, COUNT(DISTINCT snapshot_date) as unique_dates
-            FROM stock_snapshots
-        """
+                SELECT COUNT(*) as total_records, COUNT(DISTINCT snapshot_date) as unique_dates
+                FROM stock_snapshots
+                """
             )
         )
         row = result.fetchone()
@@ -108,12 +108,11 @@ def print_import_summary(connection_string: str):
         result = conn.execute(
             text(
                 """
-            SELECT
-                COUNT(*) as total_records,
-                COUNT(DISTINCT sku) as unique_skus,
-                COUNT(DISTINCT generated_date) as unique_generations
-            FROM forecast_data
-        """
+                SELECT COUNT(*)                       as total_records,
+                       COUNT(DISTINCT sku)            as unique_skus,
+                       COUNT(DISTINCT generated_date) as unique_generations
+                FROM forecast_data
+                """
             )
         )
         row = result.fetchone()
@@ -125,11 +124,11 @@ def print_import_summary(connection_string: str):
         result = conn.execute(
             text(
                 """
-            SELECT file_type, COUNT(*) as count, import_status
-            FROM file_imports
-            GROUP BY file_type, import_status
-            ORDER BY file_type, import_status
-        """
+                SELECT file_type, COUNT(*) as count, import_status
+                FROM file_imports
+                GROUP BY file_type, import_status
+                ORDER BY file_type, import_status
+                """
             )
         )
         print("\nFile Imports:")

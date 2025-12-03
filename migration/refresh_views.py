@@ -11,8 +11,6 @@ load_dotenv()
 
 
 def refresh_materialized_views():
-    """Refresh all materialized views to populate cached data."""
-
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         print("ERROR: DATABASE_URL not set")
@@ -47,17 +45,14 @@ def refresh_materialized_views():
                     print("    [SKIP] View does not exist")
                     continue
 
-                # Count rows before refresh
                 count_query = text(f"SELECT COUNT(*) FROM {view}")
                 result = conn.execute(count_query)
                 before_count = result.fetchone()[0]
 
-                # Refresh the view
                 refresh_query = text(f"REFRESH MATERIALIZED VIEW {view}")
                 conn.execute(refresh_query)
                 conn.commit()
 
-                # Count rows after refresh
                 result = conn.execute(count_query)
                 after_count = result.fetchone()[0]
 

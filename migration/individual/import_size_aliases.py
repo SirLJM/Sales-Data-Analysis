@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.size_alias_loader import load_size_aliases_from_excel
+from sales_data.loader import load_size_aliases_from_excel
 
 load_dotenv(find_dotenv(filename=".env"))
 
@@ -46,11 +46,10 @@ def import_size_aliases(connection_string: str) -> None:
             for record in batch_data:
                 conn.execute(
                     text("""
-                        INSERT INTO size_aliases (size_code, size_alias)
-                        VALUES (:size_code, :size_alias)
-                        ON CONFLICT (size_code) DO UPDATE SET
-                            size_alias = EXCLUDED.size_alias
-                    """),
+                         INSERT INTO size_aliases (size_code, size_alias)
+                         VALUES (:size_code, :size_alias)
+                         ON CONFLICT (size_code) DO UPDATE SET size_alias = EXCLUDED.size_alias
+                         """),
                     record,
                 )
             conn.commit()

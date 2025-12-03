@@ -24,7 +24,6 @@ def populate_monthly_aggregations_cache():
     engine = create_engine(db_url)
 
     try:
-        # Compute monthly aggregations for both SKU and Model
         for entity_type in ["sku", "model"]:
             print(f"\nProcessing {entity_type.upper()} aggregations...")
 
@@ -88,7 +87,6 @@ def populate_monthly_aggregations_cache():
 
                 print(f"  [OK] Inserted {len(records):,} records")
 
-        # Refresh materialized view
         print("\nRefreshing materialized view...")
         with engine.connect() as conn:
             conn.execute(text("REFRESH MATERIALIZED VIEW mv_valid_monthly_aggs"))
