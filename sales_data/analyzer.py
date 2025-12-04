@@ -233,6 +233,9 @@ class SalesAnalyzer:
 
         forecast_df["data"] = pd.to_datetime(forecast_df["data"])
 
+        if file_date is None:
+            file_date = forecast_df["data"].min()
+
         weeks_8_end = file_date + pd.Timedelta(weeks=8)
         weeks_16_end = file_date + pd.Timedelta(weeks=16)
 
@@ -244,19 +247,13 @@ class SalesAnalyzer:
             (forecast_df["data"] >= file_date) & (forecast_df["data"] < weeks_16_end)
             ]
 
-        forecast_8w_sum = (
-            forecast_8w.groupby("sku")["forecast"]
-            .sum()
-            .reset_index()
-            .rename(columns={"forecast": "FORECAST_8W"})
-        )
+        forecast_8w_grouped = forecast_8w.groupby("sku", as_index=False)["forecast"]
+        # noinspection PyUnresolvedReferences
+        forecast_8w_sum = forecast_8w_grouped.sum().rename(columns={"forecast": "FORECAST_8W"})
 
-        forecast_16w_sum = (
-            forecast_16w.groupby("sku")["forecast"]
-            .sum()
-            .reset_index()
-            .rename(columns={"forecast": "FORECAST_16W"})
-        )
+        forecast_16w_grouped = forecast_16w.groupby("sku", as_index=False)["forecast"]
+        # noinspection PyUnresolvedReferences
+        forecast_16w_sum = forecast_16w_grouped.sum().rename(columns={"forecast": "FORECAST_16W"})
 
         result = forecast_8w_sum.merge(forecast_16w_sum, on="sku", how="outer")
 
@@ -271,12 +268,9 @@ class SalesAnalyzer:
                 (forecast_df["data"] >= file_date) & (forecast_df["data"] < leadtime_end)
                 ]
 
-            forecast_leadtime_sum = (
-                forecast_leadtime.groupby("sku")["forecast"]
-                .sum()
-                .reset_index()
-                .rename(columns={"forecast": "FORECAST_LEADTIME"})
-            )
+            forecast_leadtime_grouped = forecast_leadtime.groupby("sku", as_index=False)["forecast"]
+            # noinspection PyUnresolvedReferences
+            forecast_leadtime_sum = forecast_leadtime_grouped.sum().rename(columns={"forecast": "FORECAST_LEADTIME"})
 
             result = result.merge(forecast_leadtime_sum, on="sku", how="outer")
             result["FORECAST_LEADTIME"] = result["FORECAST_LEADTIME"].fillna(0).round(2)
@@ -850,7 +844,7 @@ class SalesAnalyzer:
         urgent = model_color_summary[
             (model_color_summary["MODEL"] == model) &
             (model_color_summary.get("URGENT", pd.Series([False] * len(model_color_summary))) == True)
-        ]
+            ]
         return urgent["COLOR"].tolist()
 
     @staticmethod
