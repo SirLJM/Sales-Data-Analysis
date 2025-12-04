@@ -5,7 +5,9 @@ from typing import Any
 SETTINGS_FILE = "../settings.json"
 
 DEFAULT_SETTINGS = {
+    "lead_time": 1.36,
     "forecast_time": 1.36,
+    "sync_forecast_with_lead_time": False,
     "cv_thresholds": {"basic": 0.6, "seasonal": 1.0},
     "z_scores": {
         "basic": 2.5,

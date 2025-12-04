@@ -300,6 +300,7 @@ class DatabaseSource(DataSource):
     @staticmethod
     def _compute_settings_hash(settings: dict) -> str:
         relevant_keys = [
+            "lead_time",
             "forecast_time",
             "cv_threshold_basic",
             "cv_threshold_seasonal",

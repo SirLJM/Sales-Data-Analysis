@@ -23,6 +23,15 @@ class SalesAnalyzer:
         return week_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
     @staticmethod
+    def _get_completed_last_week_range(reference_date: datetime) -> tuple[datetime, datetime]:
+        current_week_start = SalesAnalyzer._get_week_start_monday(reference_date)
+        last_week_start = current_week_start - timedelta(days=7)
+        last_week_end = last_week_start + timedelta(days=6)
+        last_week_end = last_week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        return last_week_start, last_week_end
+
+    @staticmethod
     def _get_last_week_range(reference_date: datetime) -> tuple[datetime, datetime]:
         if reference_date.weekday() >= 2:
             last_week_start = SalesAnalyzer._get_week_start_monday(reference_date)
@@ -153,6 +162,7 @@ class SalesAnalyzer:
             z_seasonal_in: float,
             z_seasonal_out: float,
             z_new: float,
+            lead_time_months: float = 1.36,
     ) -> pd.DataFrame:
         df = sku_summary.copy()
 
@@ -168,10 +178,10 @@ class SalesAnalyzer:
 
         current_month = datetime.today().month
 
-        sqrt_lead_time = np.sqrt(lead_time)
+        sqrt_lead_time = np.sqrt(lead_time_months)
 
         df["SS"] = df["z_score"] * df["SD"] * sqrt_lead_time
-        df["ROP"] = df[AVERAGE_SALES] * lead_time + df["SS"]
+        df["ROP"] = df[AVERAGE_SALES] * lead_time_months + df["SS"]
 
         seasonal_mask = df["TYPE"] == "seasonal"
         if isinstance(seasonal_mask, pd.Series) and seasonal_mask.any():
@@ -187,14 +197,14 @@ class SalesAnalyzer:
 
             df["SS_IN"] = np.where(seasonal_mask, z_seasonal_in * df["SD"] * sqrt_lead_time, np.nan)
             df["ROP_IN"] = np.where(
-                seasonal_mask, df[AVERAGE_SALES] * lead_time + df["SS_IN"], np.nan
+                seasonal_mask, df[AVERAGE_SALES] * lead_time_months + df["SS_IN"], np.nan
             )
 
             df["SS_OUT"] = np.where(
                 seasonal_mask, z_seasonal_out * df["SD"] * sqrt_lead_time, np.nan
             )
             df["ROP_OUT"] = np.where(
-                seasonal_mask, df[AVERAGE_SALES] * lead_time + df["SS_OUT"], np.nan
+                seasonal_mask, df[AVERAGE_SALES] * lead_time_months + df["SS_OUT"], np.nan
             )
 
             in_season_mask = df["is_in_season"]
@@ -727,7 +737,7 @@ class SalesAnalyzer:
         if reference_date is None:
             reference_date = datetime.today()
 
-        last_week_start, last_week_end = SalesAnalyzer._get_last_week_range(reference_date)
+        last_week_start, last_week_end = SalesAnalyzer._get_completed_last_week_range(reference_date)
 
         prev_year_start = last_week_start - timedelta(days=364)
         prev_year_end = last_week_end - timedelta(days=364)
@@ -791,7 +801,7 @@ class SalesAnalyzer:
         if reference_date is None:
             reference_date = datetime.today()
 
-        last_week_start, last_week_end = SalesAnalyzer._get_last_week_range(reference_date)
+        last_week_start, last_week_end = SalesAnalyzer._get_completed_last_week_range(reference_date)
 
         df = sales_df.copy()
         df["model"] = df["sku"].astype(str).str[:5]

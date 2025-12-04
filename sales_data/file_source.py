@@ -77,7 +77,7 @@ class FileSource(DataSource):
         forecast_date = (
             forecast_df["data"].max() if "data" in forecast_df.columns else datetime.now()
         )
-        lead_time = settings.get("forecast_time", 1.36)
+        lead_time = settings.get("lead_time", 1.36)
 
         assert self._analyzer is not None
         priority_df = self._analyzer.calculate_order_priority(

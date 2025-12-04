@@ -11,9 +11,15 @@ from utils.pattern_optimizer_logic import PatternSet, load_pattern_sets, get_min
 TOTAL_PATTERNS = "Total Patterns"
 
 
+def get_data_source():
+    if "data_source" not in st.session_state:
+        st.session_state.data_source = DataSourceFactory.create_data_source()
+    return st.session_state.data_source
+
+
 @st.cache_data(ttl=3600)
 def load_size_aliases() -> Dict[str, str]:
-    data_source = DataSourceFactory.create_data_source()
+    data_source = get_data_source()
     return data_source.load_size_aliases()
 
 
@@ -141,10 +147,8 @@ def _get_empty_optimization_result() -> Dict:
 
 
 def load_model_metadata_for_model(model: str) -> Dict:
-    if "data_source" not in st.session_state:
-        st.session_state.data_source = DataSourceFactory.create_data_source()
-
-    metadata_df = st.session_state.data_source.load_model_metadata()
+    data_source = get_data_source()
+    metadata_df = data_source.load_model_metadata()
 
     if metadata_df is None or metadata_df.empty:
         return {}
@@ -175,10 +179,8 @@ def display_model_metadata(metadata: Dict) -> None:
 
 def load_last_4_months_sales(model: str, colors: List[str]) -> pd.DataFrame:
     try:
-        if "data_source" not in st.session_state:
-            st.session_state.data_source = DataSourceFactory.create_data_source()
-
-        monthly_agg = st.session_state.data_source.get_monthly_aggregations(entity_type="sku")
+        data_source = get_data_source()
+        monthly_agg = data_source.get_monthly_aggregations(entity_type="sku")
 
         return SalesAnalyzer.get_last_n_months_sales_by_color(monthly_agg, model, colors, months=4)
 

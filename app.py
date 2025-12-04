@@ -127,18 +127,43 @@ with tab1:
             st.session_state.settings = reset_settings()
             st.rerun()
 
-    st.sidebar.subheader("Forecast Time")
-    forecast_time = st.sidebar.number_input(
-        "Forecast time in months",
-        label_visibility="collapsed",
+    st.sidebar.subheader("Lead Time & Forecast")
+
+    lead_time = st.sidebar.number_input(
+        "Lead time in months",
         min_value=0.0,
         max_value=100.0,
-        value=st.session_state.settings["forecast_time"],
+        value=st.session_state.settings["lead_time"],
         step=0.01,
         format="%.2f",
-        key="forecast_time_input",
+        key="lead_time_input",
+        help="Time between order placement and receipt (used in ROP and SS calculations)"
     )
-    st.session_state.settings["forecast_time"] = forecast_time
+    st.session_state.settings["lead_time"] = lead_time
+
+    sync_forecast = st.sidebar.checkbox(
+        "Sync forecast time with lead time",
+        value=st.session_state.settings["sync_forecast_with_lead_time"],
+        key="sync_forecast_checkbox",
+        help="When enabled, forecast time automatically matches lead time"
+    )
+    st.session_state.settings["sync_forecast_with_lead_time"] = sync_forecast
+
+    if sync_forecast:
+        forecast_time = lead_time
+        st.session_state.settings["forecast_time"] = lead_time
+    else:
+        forecast_time = st.sidebar.number_input(
+            "Forecast time in months",
+            min_value=0.0,
+            max_value=100.0,
+            value=st.session_state.settings["forecast_time"],
+            step=0.01,
+            format="%.2f",
+            key="forecast_time_input",
+            help="Time period for forecast calculations (independent of lead time when sync is off)"
+        )
+        st.session_state.settings["forecast_time"] = forecast_time
 
     st.sidebar.subheader("Service Levels")
     header_cols = st.sidebar.columns([2, 1.5, 1.5, 1.5])
@@ -276,7 +301,11 @@ with tab1:
 
     st.sidebar.markdown("---")
     st.sidebar.write("**Current Parameters:**")
-    st.sidebar.write(f"Forecast Time: {forecast_time} months")
+    st.sidebar.write(f"Lead Time: {lead_time} months")
+    if sync_forecast:
+        st.sidebar.write(f"Forecast Time: {forecast_time} months (synced with lead time)")
+    else:
+        st.sidebar.write(f"Forecast Time: {forecast_time} months")
     st.sidebar.write(f"Basic: CV < {service_basic} : Z-Score = {z_score_basic}")
     st.sidebar.write(
         f"Regular: {service_regular_min} ≤ CV ≤ {service_regular_max} : Z-Score = {z_score_regular}"
@@ -298,15 +327,20 @@ with tab1:
 
     # -----------END OF SIDEBAR-------------
 
+    def get_data_source():
+        if "data_source" not in st.session_state:
+            st.session_state.data_source = DataSourceFactory.create_data_source()
+        return st.session_state.data_source
+
     @st.cache_data
     def load_data():
-        data_source = DataSourceFactory.create_data_source()
+        data_source = get_data_source()
         return data_source.load_sales_data()
 
 
     @st.cache_data
     def load_stock():
-        data_source = DataSourceFactory.create_data_source()
+        data_source = get_data_source()
         stock_dataframe = data_source.load_stock_data()
         if stock_dataframe is not None and not stock_dataframe.empty:
             return stock_dataframe, (
@@ -317,7 +351,7 @@ with tab1:
 
     @st.cache_data
     def load_forecast():
-        data_source = DataSourceFactory.create_data_source()
+        data_source = get_data_source()
         forecast_dataframe = data_source.load_forecast_data()
         if forecast_dataframe is not None and not forecast_dataframe.empty:
             if "generated_date" in forecast_dataframe.columns:
@@ -335,7 +369,7 @@ with tab1:
 
     @st.cache_data
     def load_model_metadata():
-        data_source = DataSourceFactory.create_data_source()
+        data_source = get_data_source()
         return data_source.load_model_metadata()
 
 
@@ -363,6 +397,7 @@ with tab1:
         z_seasonal_in=z_score_seasonal_1,
         z_seasonal_out=z_score_seasonal_2,
         z_new=z_score_new,
+        lead_time_months=lead_time,
     )
 
     last_two_years_avg = analyzer.calculate_last_two_years_avg_sales(by_model=group_by_model)
@@ -1556,6 +1591,7 @@ with tab3:
                         z_seasonal_in=st.session_state.settings["z_scores"]["seasonal_in"],
                         z_seasonal_out=st.session_state.settings["z_scores"]["seasonal_out"],
                         z_new=st.session_state.settings["z_scores"]["new"],
+                        lead_time_months=st.session_state.settings["lead_time"],
                     )
                     sku_last_two_years = analyzer.calculate_last_two_years_avg_sales(by_model=False)
                     sku_summary = sku_summary.merge(sku_last_two_years, on="SKU", how="left")
