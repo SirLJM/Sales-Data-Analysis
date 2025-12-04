@@ -323,6 +323,10 @@ class SalesAnalyzer:
     ) -> pd.DataFrame:
         df = forecast_df.copy()
         df["data"] = pd.to_datetime(df["data"])
+
+        if start_date is None:
+            start_date = df["data"].min()
+
         end_date = start_date + pd.DateOffset(months=projection_months)
 
         mask = (df["data"] >= start_date) & (df["data"] <= end_date)
@@ -453,6 +457,9 @@ class SalesAnalyzer:
         if forecast_df.empty:
             df["FORECAST_LEADTIME"] = 0
             return df
+
+        if forecast_date is None:
+            forecast_date = pd.to_datetime(forecast_df["data"]).min()
 
         lead_time_days = int(lead_time_months * 30.44)
         lead_time_end = forecast_date + pd.Timedelta(days=lead_time_days)
