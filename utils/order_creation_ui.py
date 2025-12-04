@@ -180,45 +180,7 @@ def load_last_4_months_sales(model: str, colors: List[str]) -> pd.DataFrame:
 
         monthly_agg = st.session_state.data_source.get_monthly_aggregations(entity_type="sku")
 
-        if monthly_agg is None or monthly_agg.empty:
-            return pd.DataFrame()
-
-        if "entity_id" in monthly_agg.columns:
-            monthly_agg = monthly_agg.rename(columns={"entity_id": "SKU"})
-        if "year_month" in monthly_agg.columns:
-            monthly_agg = monthly_agg.rename(columns={"year_month": "YEAR_MONTH"})
-        if "total_quantity" in monthly_agg.columns:
-            monthly_agg = monthly_agg.rename(columns={"total_quantity": "TOTAL_QUANTITY"})
-
-        monthly_agg["model"] = monthly_agg["SKU"].astype(str).str[:5]
-        monthly_agg["color"] = monthly_agg["SKU"].astype(str).str[5:7]
-
-        filtered = monthly_agg[
-            (monthly_agg["model"] == model) &
-            (monthly_agg["color"].isin(colors))
-            ]
-
-        if filtered.empty:
-            return pd.DataFrame()
-
-        filtered = filtered.sort_values("YEAR_MONTH")
-
-        unique_months = filtered["YEAR_MONTH"].unique()
-        last_4_months = sorted(unique_months)[-4:] if len(unique_months) >= 4 else sorted(unique_months)
-
-        filtered_last_4 = filtered[filtered["YEAR_MONTH"].isin(last_4_months)]
-
-        pivot_df = filtered_last_4.pivot_table(
-            index="color",
-            columns="YEAR_MONTH",
-            values="TOTAL_QUANTITY",
-            aggfunc="sum",
-            fill_value=0
-        )
-
-        pivot_df = pivot_df.reset_index()
-
-        return pivot_df
+        return SalesAnalyzer.get_last_n_months_sales_by_color(monthly_agg, model, colors, months=4)
 
     except Exception as e:
         st.warning(f"Could not load sales history: {e}")
