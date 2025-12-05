@@ -236,7 +236,7 @@ class SalesAnalyzer:
     ) -> pd.DataFrame:
 
         if forecast_df.empty:
-            columns = ["sku", "FORECAST_8W", "FORECAST_16W"]
+            columns = ["sku"]
             if lead_time_months is not None:
                 columns.append("FORECAST_LEADTIME")
             return pd.DataFrame(columns=columns)
@@ -245,30 +245,6 @@ class SalesAnalyzer:
 
         if file_date is None:
             file_date = forecast_df["data"].min()
-
-        weeks_8_end = file_date + pd.Timedelta(weeks=8)
-        weeks_16_end = file_date + pd.Timedelta(weeks=16)
-
-        forecast_8w = forecast_df[
-            (forecast_df["data"] >= file_date) & (forecast_df["data"] < weeks_8_end)
-            ]
-
-        forecast_16w = forecast_df[
-            (forecast_df["data"] >= file_date) & (forecast_df["data"] < weeks_16_end)
-            ]
-
-        forecast_8w_grouped = forecast_8w.groupby("sku", as_index=False)["forecast"]
-        # noinspection PyUnresolvedReferences
-        forecast_8w_sum = forecast_8w_grouped.sum().rename(columns={"forecast": "FORECAST_8W"})
-
-        forecast_16w_grouped = forecast_16w.groupby("sku", as_index=False)["forecast"]
-        # noinspection PyUnresolvedReferences
-        forecast_16w_sum = forecast_16w_grouped.sum().rename(columns={"forecast": "FORECAST_16W"})
-
-        result = forecast_8w_sum.merge(forecast_16w_sum, on="sku", how="outer")
-
-        result["FORECAST_8W"] = result["FORECAST_8W"].fillna(0).round(2)
-        result["FORECAST_16W"] = result["FORECAST_16W"].fillna(0).round(2)
 
         if lead_time_months is not None:
             lead_time_days = lead_time_months * 30.44
@@ -280,10 +256,10 @@ class SalesAnalyzer:
 
             forecast_leadtime_grouped = forecast_leadtime.groupby("sku", as_index=False)["forecast"]
             # noinspection PyUnresolvedReferences
-            forecast_leadtime_sum = forecast_leadtime_grouped.sum().rename(columns={"forecast": "FORECAST_LEADTIME"})
-
-            result = result.merge(forecast_leadtime_sum, on="sku", how="outer")
+            result = forecast_leadtime_grouped.sum().rename(columns={"forecast": "FORECAST_LEADTIME"})
             result["FORECAST_LEADTIME"] = result["FORECAST_LEADTIME"].fillna(0).round(2)
+        else:
+            result = pd.DataFrame({"sku": forecast_df["sku"].unique()})
 
         return result
 

@@ -453,18 +453,19 @@ with tab1:
 
                 if group_by_model:
                     forecast_metrics["MODEL"] = forecast_metrics["sku"].astype(str).str[:5]
-                    agg_dict = {"FORECAST_8W": "sum", "FORECAST_16W": "sum"}
+                    agg_dict = {}
                     if "FORECAST_LEADTIME" in forecast_metrics.columns:
                         agg_dict["FORECAST_LEADTIME"] = "sum"
-                    forecast_agg = (
-                        forecast_metrics.groupby("MODEL")
-                        .agg(agg_dict)
-                        .reset_index()
-                    )
-                    summary = summary.merge(forecast_agg, on="MODEL", how="left")
+                    if agg_dict:
+                        forecast_agg = (
+                            forecast_metrics.groupby("MODEL")
+                            .agg(agg_dict)
+                            .reset_index()
+                        )
+                        summary = summary.merge(forecast_agg, on="MODEL", how="left")
                 else:
                     forecast_metrics = forecast_metrics.rename(columns={"sku": "SKU"})
-                    merge_cols = ["SKU", "FORECAST_8W", "FORECAST_16W"]
+                    merge_cols = ["SKU"]
                     if "FORECAST_LEADTIME" in forecast_metrics.columns:
                         merge_cols.append("FORECAST_LEADTIME")
                     summary = summary.merge(
@@ -473,8 +474,6 @@ with tab1:
                         how="left",
                     )
 
-                summary["FORECAST_8W"] = summary["FORECAST_8W"].fillna(0)
-                summary["FORECAST_16W"] = summary["FORECAST_16W"].fillna(0)
                 if "FORECAST_LEADTIME" in summary.columns:
                     summary["FORECAST_LEADTIME"] = summary["FORECAST_LEADTIME"].fillna(0)
 
@@ -500,8 +499,6 @@ with tab1:
                 "LAST_2_YEARS_AVG",
                 "CV",
                 "VALUE",
-                "FORECAST_8W",
-                "FORECAST_16W",
                 "BELOW_ROP",
             ]
         else:
@@ -521,8 +518,6 @@ with tab1:
                 "LAST_2_YEARS_AVG",
                 "CV",
                 "VALUE",
-                "FORECAST_8W",
-                "FORECAST_16W",
                 "BELOW_ROP",
             ]
     else:
@@ -537,8 +532,6 @@ with tab1:
             "CV",
             "ROP",
             "FORECAST_LEADTIME",
-            "FORECAST_8W",
-            "FORECAST_16W",
         ]
 
     column_order = [col for col in column_order if col in summary.columns]
