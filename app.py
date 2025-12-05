@@ -157,7 +157,7 @@ with tab1:
             "Forecast time in months",
             min_value=0.0,
             max_value=100.0,
-            value=st.session_state.settings["forecast_time"],
+            value=float(st.session_state.settings["forecast_time"]),
             step=0.01,
             format="%.2f",
             key="forecast_time_input",

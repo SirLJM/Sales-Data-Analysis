@@ -14,6 +14,7 @@ from migration.individual.import_current_sales import import_current_sales
 from migration.individual.import_forecast import import_forecast_data
 from migration.individual.import_model_metadata import import_model_metadata
 from migration.individual.import_size_aliases import import_size_aliases
+from migration.individual.import_color_aliases import import_color_aliases
 from migration.individual.import_stock import import_stock_data
 from initial_populate import populate_archival_sales
 
@@ -172,7 +173,10 @@ def main():
     print("\nStep 6: Importing size aliases...")
     import_size_aliases(db_url)
 
-    print("\nStep 7: Refreshing materialized views...")
+    print("\nStep 7: Importing color aliases...")
+    import_color_aliases(db_url)
+
+    print("\nStep 8: Refreshing materialized views...")
     refresh_materialized_views(db_url)
 
     elapsed = (datetime.now() - start_time).total_seconds()

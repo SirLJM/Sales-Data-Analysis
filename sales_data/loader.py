@@ -463,3 +463,22 @@ class SalesDataLoader:
         except Exception as e:
             print(f"  Warning: Could not load model metadata: {e}")
             return None
+
+    def load_color_aliases(self) -> Dict[str, str]:
+        file_path = self.find_model_metadata_file()
+
+        if file_path is None:
+            print("\nColor aliases file not found")
+            return {}
+
+        try:
+            df = pd.read_excel(file_path, sheet_name='kolory', engine='openpyxl')
+            df = df[["NUMER", "KOLOR"]].copy()
+            df = df.dropna(subset=["NUMER", "KOLOR"])
+            df["NUMER"] = df["NUMER"].astype(str).str.replace('*', '', regex=False).str[:2].str.zfill(2).str.upper()
+            df["KOLOR"] = df["KOLOR"].astype(str)
+            return dict(zip(df["NUMER"], df["KOLOR"]))
+
+        except Exception as e:
+            print(f"  Warning: Could not load color aliases: {e}")
+            return {}
