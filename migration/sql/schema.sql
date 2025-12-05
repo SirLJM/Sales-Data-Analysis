@@ -152,6 +152,21 @@ CREATE INDEX idx_size_aliases_code ON size_aliases(size_code);
 CREATE INDEX idx_size_aliases_alias ON size_aliases(size_alias);
 
 
+-- Table: color_aliases
+CREATE TABLE color_aliases (
+    id SERIAL PRIMARY KEY,
+
+    color_code VARCHAR(2) NOT NULL UNIQUE,
+    color_name VARCHAR(100) NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_color_aliases_code ON color_aliases(color_code);
+CREATE INDEX idx_color_aliases_name ON color_aliases(color_name);
+
+
 -- =============================================================================
 -- IMPORT TRACKING TABLE
 -- =============================================================================

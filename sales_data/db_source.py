@@ -392,6 +392,27 @@ class DatabaseSource(DataSource):
             print(f"[ERROR] Failed to load size aliases from database: {e}")
             return {}
 
+    def load_color_aliases(self) -> Dict[str, str]:
+        query = """
+                SELECT color_code, color_name
+                FROM color_aliases
+                ORDER BY color_code
+                """
+
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+
+            if df.empty:
+                print("[WARN] No color aliases found in database")
+                return {}
+
+            return dict(zip(df["color_code"], df["color_name"]))
+
+        except Exception as e:
+            print(f"[ERROR] Failed to load color aliases from database: {e}")
+            return {}
+
     def is_available(self) -> bool:
         return self._is_available
 

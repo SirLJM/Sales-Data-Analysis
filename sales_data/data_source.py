@@ -48,6 +48,10 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
+    def load_color_aliases(self) -> Dict[str, str]:
+        pass
+
+    @abstractmethod
     def is_available(self) -> bool:
         pass
 

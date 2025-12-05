@@ -23,6 +23,18 @@ def load_size_aliases() -> Dict[str, str]:
     return data_source.load_size_aliases()
 
 
+@st.cache_data(ttl=3600)
+def load_color_aliases() -> Dict[str, str]:
+    data_source = get_data_source()
+    return data_source.load_color_aliases()
+
+
+@st.cache_data(ttl=3600)
+def load_size_aliases_reverse() -> Dict[str, str]:
+    size_aliases = load_size_aliases()
+    return {v: k for k, v in size_aliases.items()}
+
+
 def render_order_creation_interface() -> None:
     try:
         selected_items = st.session_state.selected_order_items
@@ -106,6 +118,46 @@ def process_model_order(model: str, selected_items: List[Dict]) -> None:
             if st.button("❌ Cancel"):
                 st.session_state.selected_order_items = []
                 st.rerun()
+
+        st.markdown("---")
+        st.subheader("Size × Color Production Table")
+
+        size_color_table = build_color_size_table(pattern_results, pattern_set)
+
+        st.markdown("""
+        <style>
+        .rotated-table {
+            overflow-x: auto;
+        }
+        .rotated-table table {
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .rotated-table th, .rotated-table td {
+            border: 1px solid var(--border-color, #ddd);
+            padding: 8px;
+            text-align: center;
+            color: var(--text-color, inherit);
+        }
+        .rotated-table th {
+            background-color: var(--secondary-background-color, #f0f2f6);
+            font-weight: bold;
+        }
+        .rotated-table th:not(:first-child) {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            white-space: nowrap;
+            min-height: 150px;
+            padding: 8px 4px;
+        }
+        .rotated-table tbody tr:hover {
+            background-color: var(--hover-color, rgba(128, 128, 128, 0.1));
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        html_table = size_color_table.to_html(index=False, classes='rotated-table', border=0)
+        st.markdown(f'<div class="rotated-table">{html_table}</div>', unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"❌ Error creating order: {str(e)}")
@@ -315,6 +367,42 @@ def create_order_summary_table(
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+def build_color_size_table(pattern_results, pattern_set):
+    all_sizes = {size for p in pattern_set.patterns for size in p.sizes}
+    all_colors = sorted(pattern_results.keys())
+
+    color_aliases = load_color_aliases()
+    size_alias_to_code = load_size_aliases_reverse()
+
+    def get_size_sort_key(size_str):
+        size_code = size_alias_to_code.get(size_str, size_str)
+        try:
+            return int(size_code)
+        except (ValueError, TypeError):
+            return 999
+
+    all_sizes_sorted = sorted(all_sizes, key=get_size_sort_key)
+
+    data = []
+    for size in all_sizes_sorted:
+        row = {"Size": size}
+        total_for_size = 0
+
+        for color in all_colors:
+            produced = pattern_results[color].get("produced", {})
+            qty = produced.get(size, 0)
+            color_name = color_aliases.get(color, color)
+            row[color_name] = qty
+            total_for_size += qty
+
+        row["TOTAL"] = total_for_size
+        data.append(row)
+
+    df = pd.DataFrame(data)
+
+    return df
 
 
 def save_order_to_database(model: str, order_table: pd.DataFrame, pattern_results: Dict, metadata: Dict) -> None:

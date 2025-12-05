@@ -134,6 +134,9 @@ class FileSource(DataSource):
             print(f"[ERROR] Failed to load size aliases from file: {e}")
             return {}
 
+    def load_color_aliases(self) -> Dict[str, str]:
+        return self.loader.load_color_aliases()
+
     def is_available(self) -> bool:
         return True
 
