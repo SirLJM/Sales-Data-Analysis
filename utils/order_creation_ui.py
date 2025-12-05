@@ -24,77 +24,92 @@ def load_size_aliases() -> Dict[str, str]:
 
 
 def render_order_creation_interface() -> None:
-    selected_items = st.session_state.selected_order_items
+    try:
+        selected_items = st.session_state.selected_order_items
 
-    models = list({item["model"] for item in selected_items})
+        if not selected_items:
+            st.warning("No items selected")
+            return
 
-    if len(models) > 1:
-        st.info(f"Selected items span {len(models)} models. Please select one model to process.")
-        selected_model = st.selectbox("Select model to create order:", options=models)
-    else:
-        selected_model = models[0]
+        models = list({item["model"] for item in selected_items})
 
-    if selected_model:
-        items_for_model = [item for item in selected_items if item["model"] == selected_model]
-        process_model_order(selected_model, items_for_model)
+        if len(models) > 1:
+            st.info(f"Selected items span {len(models)} models. Please select one model to process.")
+            selected_model = st.selectbox("Select model to create order:", options=models)
+        else:
+            selected_model = models[0]
+
+        if selected_model:
+            items_for_model = [item for item in selected_items if item["model"] == selected_model]
+            process_model_order(selected_model, items_for_model)
+
+    except Exception as e:
+        st.error(f"❌ Error rendering order creation interface: {str(e)}")
+        st.exception(e)
 
 
 def process_model_order(model: str, selected_items: List[Dict]) -> None:
     st.subheader(f"Order for Model: {model}")
 
-    pattern_set = lookup_pattern_set(model)
-    if pattern_set is None:
-        st.error(f"❌ Pattern set '{model}' not found")
-        st.info("Please create a pattern set in the Pattern Optimizer tab with name matching the model code")
-        if st.button("→ Go to Pattern Optimizer"):
-            st.info("Please navigate to the 'Size Pattern Optimizer' tab manually")
-        return
+    try:
+        pattern_set = lookup_pattern_set(model)
+        if pattern_set is None:
+            st.error(f"❌ Pattern set '{model}' not found")
+            st.info("Please create a pattern set in the Pattern Optimizer tab with name matching the model code")
+            if st.button("→ Go to Pattern Optimizer"):
+                st.info("Please navigate to the 'Size Pattern Optimizer' tab manually")
+            return
 
-    st.success(f"✅ Found pattern set: {pattern_set.name}")
+        st.success(f"✅ Found pattern set: {pattern_set.name}")
 
-    metadata = load_model_metadata_for_model(model)
-    display_model_metadata(metadata)
+        metadata = load_model_metadata_for_model(model)
+        display_model_metadata(metadata)
 
-    urgent_colors = find_urgent_colors_for_model(model)
-    selected_colors = [item["color"] for item in selected_items]
-    all_colors = sorted(set(selected_colors + urgent_colors))
+        urgent_colors = find_urgent_colors_for_model(model)
+        selected_colors = [item["color"] for item in selected_items]
+        all_colors = sorted(set(selected_colors + urgent_colors))
 
-    if urgent_colors:
-        st.info(f"**Urgent colors:** {', '.join(urgent_colors)}")
+        if urgent_colors:
+            st.info(f"**Urgent colors:** {', '.join(urgent_colors)}")
 
-    pattern_results = {}
-    for color in all_colors:
-        result = optimize_color_pattern(model, color, pattern_set)
-        pattern_results[color] = result
+        pattern_results = {}
+        for color in all_colors:
+            result = optimize_color_pattern(model, color, pattern_set)
+            pattern_results[color] = result
 
-    sales_history = load_last_4_months_sales(model, all_colors)
-    forecast_data = load_forecast_data_for_colors(model, all_colors)
+        sales_history = load_last_4_months_sales(model, all_colors)
+        forecast_data = load_forecast_data_for_colors(model, all_colors)
 
-    order_table = create_order_summary_table(
-        model, all_colors, pattern_results, sales_history, forecast_data, pattern_set
-    )
-
-    st.markdown("---")
-    st.subheader("Order Summary")
-    st.dataframe(order_table, hide_index=True, height=400, width="stretch")
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("💾 Save to Database"):
-            save_order_to_database(model, order_table, pattern_results, metadata)
-    with col2:
-        csv = order_table.to_csv(index=False)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        st.download_button(
-            "📥 Download CSV",
-            csv,
-            f"order_{model}_{timestamp}.csv",
-            "text/csv"
+        order_table = create_order_summary_table(
+            model, all_colors, pattern_results, sales_history, forecast_data, pattern_set
         )
-    with col3:
-        if st.button("❌ Cancel"):
-            st.session_state.selected_order_items = []
-            st.rerun()
+
+        st.markdown("---")
+        st.subheader("Order Summary")
+        st.dataframe(order_table, hide_index=True, height=400, width="stretch")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("💾 Save to Database"):
+                save_order_to_database(model, order_table, pattern_results, metadata)
+        with col2:
+            csv = order_table.to_csv(index=False)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            st.download_button(
+                "📥 Download CSV",
+                csv,
+                f"order_{model}_{timestamp}.csv",
+                "text/csv",
+                key=f"download_order_{model}"
+            )
+        with col3:
+            if st.button("❌ Cancel"):
+                st.session_state.selected_order_items = []
+                st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ Error creating order: {str(e)}")
+        st.exception(e)
 
 
 def find_urgent_colors_for_model(model: str) -> List[str]:

@@ -90,7 +90,7 @@ class SalesAnalyzer:
     def calculate_last_two_years_avg_sales(self, by_model: bool = False) -> pd.DataFrame:
         df = self.data.copy()
 
-        two_years_ago = datetime.today() - timedelta(days=730)
+        two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
         df_last_2_years = df[df["data"] >= two_years_ago].copy()
 
         df_last_2_years["year_month"] = df_last_2_years["data"].dt.to_period("M")
@@ -120,7 +120,7 @@ class SalesAnalyzer:
     ) -> pd.DataFrame:
         df = sku_summary.copy()
 
-        one_year_ago = datetime.today() - timedelta(days=365)
+        one_year_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=365)
 
         df["TYPE"] = "regular"
         df.loc[df["first_sale"] > one_year_ago, "TYPE"] = "new"
@@ -132,7 +132,7 @@ class SalesAnalyzer:
     def determine_seasonal_months(self) -> pd.DataFrame:
         df = self.data.copy()
 
-        two_years_ago = datetime.today() - timedelta(days=730)
+        two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
         df = df[df["data"] >= two_years_ago]
 
         df["month"] = df["data"].dt.month
@@ -231,32 +231,44 @@ class SalesAnalyzer:
         return df[[id_column] + base_cols]
 
     @staticmethod
+    def _calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Timestamp, pd.Timestamp]:
+        from datetime import datetime
+        today = datetime.now()
+
+        if today.day == 1:
+            # noinspection PyTypeChecker
+            forecast_start: pd.Timestamp = pd.Timestamp(today.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+        else:
+            # noinspection PyTypeChecker
+            forecast_start: pd.Timestamp = pd.Timestamp(
+                (today.replace(day=1) + pd.DateOffset(months=1)).replace(hour=0, minute=0, second=0, microsecond=0))
+
+        forecast_end: pd.Timestamp = forecast_start + pd.DateOffset(months=int(forecast_time_months))
+        return forecast_start, forecast_end
+
+    @staticmethod
     def calculate_forecast_metrics(
-            forecast_df: pd.DataFrame, file_date: datetime, lead_time_months: float = None
+            forecast_df: pd.DataFrame, forecast_time_months: float = None
     ) -> pd.DataFrame:
 
         if forecast_df.empty:
             columns = ["sku"]
-            if lead_time_months is not None:
+            if forecast_time_months is not None:
                 columns.append("FORECAST_LEADTIME")
             return pd.DataFrame(columns=columns)
 
         forecast_df["data"] = pd.to_datetime(forecast_df["data"])
 
-        if file_date is None:
-            file_date = forecast_df["data"].min()
+        if forecast_time_months is not None:
+            forecast_start, forecast_end = SalesAnalyzer._calculate_forecast_date_range(forecast_time_months)
 
-        if lead_time_months is not None:
-            lead_time_days = lead_time_months * 30.44
-            leadtime_end = file_date + pd.Timedelta(days=lead_time_days)
-
+            # noinspection PyTypeChecker
             forecast_leadtime = forecast_df[
-                (forecast_df["data"] >= file_date) & (forecast_df["data"] < leadtime_end)
+                (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
                 ]
 
-            forecast_leadtime_grouped = forecast_leadtime.groupby("sku", as_index=False)["forecast"]
-            # noinspection PyUnresolvedReferences
-            result = forecast_leadtime_grouped.sum().rename(columns={"forecast": "FORECAST_LEADTIME"})
+            result = forecast_leadtime.groupby("sku", as_index=False).agg({"forecast": "sum"})
+            result.rename(columns={"forecast": "FORECAST_LEADTIME"}, inplace=True)
             result["FORECAST_LEADTIME"] = result["FORECAST_LEADTIME"].fillna(0).round(2)
         else:
             result = pd.DataFrame({"sku": forecast_df["sku"].unique()})
@@ -391,8 +403,7 @@ class SalesAnalyzer:
     def calculate_order_priority(
             summary_df: pd.DataFrame,
             forecast_df: pd.DataFrame,
-            forecast_date: datetime,
-            lead_time_months: float = 1.36,
+            forecast_time_months: float = 5,
             settings: dict | None = None,
     ) -> pd.DataFrame:
         if settings is None:
@@ -403,7 +414,7 @@ class SalesAnalyzer:
         df = summary_df.copy()
 
         SalesAnalyzer._validate_required_columns(df)
-        df = SalesAnalyzer._add_forecast_leadtime(df, forecast_df, forecast_date, lead_time_months)
+        df = SalesAnalyzer._add_forecast_leadtime(df, forecast_df, forecast_time_months)
         df = SalesAnalyzer._add_sku_components(df)
         df = SalesAnalyzer._calculate_stockout_risk(df, config)
         df = SalesAnalyzer._calculate_revenue_impact(df)
@@ -438,25 +449,24 @@ class SalesAnalyzer:
 
     @staticmethod
     def _add_forecast_leadtime(
-            df: pd.DataFrame, forecast_df: pd.DataFrame, forecast_date: datetime, lead_time_months: float
+            df: pd.DataFrame, forecast_df: pd.DataFrame, forecast_time_months: float
     ) -> pd.DataFrame:
         if forecast_df.empty:
             df["FORECAST_LEADTIME"] = 0
             return df
 
-        if forecast_date is None:
-            forecast_date = pd.to_datetime(forecast_df["data"]).min()
+        forecast_start, forecast_end = SalesAnalyzer._calculate_forecast_date_range(forecast_time_months)
 
-        lead_time_days = int(lead_time_months * 30.44)
-        lead_time_end = forecast_date + pd.Timedelta(days=lead_time_days)
+        # noinspection PyTypeChecker
         forecast_window = forecast_df[
-            (forecast_df["data"] >= forecast_date) & (forecast_df["data"] < lead_time_end)
+            (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
             ]
 
         if forecast_window.empty:
             df["FORECAST_LEADTIME"] = 0
             return df
 
+        # noinspection PyUnresolvedReferences
         forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
         forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
         df = df.merge(forecast_sum, on="SKU", how="left")
@@ -563,13 +573,12 @@ class SalesAnalyzer:
     def generate_order_recommendations(
             summary_df: pd.DataFrame,
             forecast_df: pd.DataFrame,
-            forecast_date: datetime,
-            forecast_time_months: float = 1.36,
+            forecast_time_months: float = 5,
             top_n: int = 10,
             settings: dict | None = None,
     ) -> dict:
         priority_df = SalesAnalyzer.calculate_order_priority(
-            summary_df, forecast_df, forecast_date, forecast_time_months, settings
+            summary_df, forecast_df, forecast_time_months, settings
         )
 
         model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_df)
@@ -616,7 +625,7 @@ class SalesAnalyzer:
             return date - timedelta(days=days_since_wed)
 
         if reference_date is None:
-            reference_date = datetime.today()
+            reference_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 
         cutoff_date = reference_date - timedelta(days=lookback_days)
 

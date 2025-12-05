@@ -6,7 +6,7 @@ SETTINGS_FILE = "../settings.json"
 
 DEFAULT_SETTINGS = {
     "lead_time": 1.36,
-    "forecast_time": 1.36,
+    "forecast_time": 5,
     "sync_forecast_with_lead_time": False,
     "cv_thresholds": {"basic": 0.6, "seasonal": 1.0},
     "z_scores": {

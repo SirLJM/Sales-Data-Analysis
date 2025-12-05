@@ -332,6 +332,7 @@ with tab1:
             st.session_state.data_source = DataSourceFactory.create_data_source()
         return st.session_state.data_source
 
+
     @st.cache_data
     def load_data():
         data_source = get_data_source()
@@ -448,7 +449,7 @@ with tab1:
         if forecast_df is not None:
             try:
                 forecast_metrics = SalesAnalyzer.calculate_forecast_metrics(
-                    forecast_df, forecast_date, lead_time_months=st.session_state.settings["forecast_time"]
+                    forecast_df, forecast_time_months=st.session_state.settings["forecast_time"]
                 )
 
                 if group_by_model:
@@ -697,7 +698,11 @@ with tab1:
     download_label = "Download Model Summary CSV" if group_by_model else "Download SKU Summary CSV"
     download_filename = "model_summary.csv" if group_by_model else "sku_summary.csv"
     st.download_button(
-        download_label, display_data.to_csv(index=False), download_filename, TEXT_CSV
+        download_label,
+        display_data.to_csv(index=False),
+        download_filename,
+        TEXT_CSV,
+        key="download_tab1_summary"
     )
 
     if stock_loaded and use_forecast and forecast_df is not None:
@@ -1600,7 +1605,6 @@ with tab3:
                     recommendations = SalesAnalyzer.generate_order_recommendations(
                         summary_df=sku_summary,
                         forecast_df=forecast_df,
-                        forecast_date=forecast_date,
                         forecast_time_months=forecast_time,
                         top_n=top_n_recommendations,
                         settings=st.session_state.settings,
@@ -1742,8 +1746,6 @@ with tab3:
                     })
 
                 st.session_state.selected_order_items = selected_items
-            else:
-                st.session_state.selected_order_items = []
 
             if st.session_state.selected_order_items:
                 st.success(f"✓ {len(st.session_state.selected_order_items)} items selected")
@@ -1790,6 +1792,7 @@ with tab3:
                 recommendations["priority_skus"].to_csv(index=False),  # type: ignore[index]
                 "order_priority_report.csv",
                 TEXT_CSV,
+                key="download_tab3_priority_report"
             )
 
 # ========================================
@@ -1959,6 +1962,7 @@ with tab4:
                     csv,
                     f"weekly_new_products_{datetime.today().strftime('%Y%m%d')}.csv",
                     TEXT_CSV,
+                    key="download_tab4_weekly_analysis"
                 )
 
                 weekly_df["TOTAL_SALES"] = weekly_df[week_cols].sum(axis=1)
@@ -1985,10 +1989,73 @@ with tab4:
 with tab5:
     st.title("📋 Order Creation")
 
+    st.markdown("---")
+    st.subheader("📝 Manual Order Creation")
+
+    col_input, col_button = st.columns([3, 1])
+    with col_input:
+        manual_model = st.text_input(
+            "Enter Model Code",
+            placeholder="e.g., ABC12",
+            help="Enter a model code to create an order. Data will be pulled from Order Recommendations.",
+            key="manual_model_input"
+        )
+    with col_button:
+        st.write("")
+        st.write("")
+        create_clicked = st.button("Create Order", key="create_manual_order", type="primary")
+
+    if create_clicked:
+        if not manual_model:
+            st.warning("⚠️ Please enter a model code")
+        elif not st.session_state.get("recommendations_data"):
+            st.error("❌ No recommendations data available. Please generate recommendations in Tab 3 first.")
+        else:
+            recommendations = st.session_state.recommendations_data
+            priority_skus = recommendations.get("priority_skus")
+
+            if priority_skus is None:
+                st.error("❌ Priority SKUs data not found. Please regenerate recommendations in Tab 3.")
+            else:
+                model_color_summary = recommendations.get("model_color_summary")
+                if model_color_summary is None:
+                    st.error("❌ Model+Color summary data not found. Please regenerate recommendations in Tab 3.")
+                else:
+                    model_color_summary_copy = model_color_summary.copy()
+                    model_data = model_color_summary_copy[model_color_summary_copy["MODEL"] == manual_model.upper()]
+
+                    if model_data.empty:
+                        st.error(
+                            f"❌ Model '{manual_model.upper()}' not found in Order Recommendations. Please generate recommendations first.")
+                    else:
+                        selected_items = []
+                        for _, row in model_data.iterrows():
+                            size_str = row.get(SIZE_QTY, "")
+                            size_quantities = {}
+                            if size_str and pd.notna(size_str):
+                                for item in str(size_str).split(", "):
+                                    if ":" in item:
+                                        size_code, qty = item.split(":")
+                                        size_quantities[size_code.strip()] = int(qty.strip())
+
+                            selected_items.append({
+                                "model": row["MODEL"],
+                                "color": row["COLOR"],
+                                "priority_score": float(row.get("PRIORITY", 0)),
+                                "deficit": int(row.get("DEFICIT", 0)),
+                                "forecast": int(row.get("FORECAST", 0)),
+                                "sizes": size_quantities,
+                            })
+
+                        st.session_state.selected_order_items = selected_items
+                        st.success(
+                            f"✅ Created order for model {manual_model.upper()} with {len(selected_items)} colors")
+                        st.rerun()
+
+    st.markdown("---")
+
     if not st.session_state.get("selected_order_items"):
-        st.warning("⚠️ No items selected. Please go to Order Recommendations tab to select items.")
-        if st.button("← Go to Order Recommendations"):
-            st.info("Please switch to the 'Order Recommendations' tab manually")
+        st.info("ℹ️ No items selected. Use the manual input above or go to Order Recommendations tab to select items.")
     else:
         from utils.order_creation_ui import render_order_creation_interface
 
