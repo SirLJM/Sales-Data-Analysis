@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 from typing import Any
@@ -18,7 +20,7 @@ DEFAULT_SETTINGS = {
     },
     "new_product_threshold_months": 12,
     "weekly_analysis": {"lookback_days": 60},
-    "optimizer": {"min_order_per_pattern": 5},
+    "optimizer": {"min_order_per_pattern": 5, "algorithm_mode": "greedy_overshoot"},
     "order_recommendations": {
         "stockout_risk": {
             "zero_stock_penalty": 100,

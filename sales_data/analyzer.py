@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timedelta
 
 import numpy as np
@@ -46,7 +48,7 @@ class SalesAnalyzer:
         return last_week_start, last_week_end
 
     def aggregate_by_sku(self) -> pd.DataFrame:
-        self.data["year_month"] = self.data["data"].dt.to_period("M")
+        self.data["year_month"] = self.data["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
         first_sale = self.data.groupby("sku")["data"].min().reset_index()
         first_sale.columns = ["SKU", "first_sale"]
@@ -67,7 +69,7 @@ class SalesAnalyzer:
         return sku_summary.sort_values("SKU", ascending=False)
 
     def aggregate_by_model(self) -> pd.DataFrame:
-        self.data["year_month"] = self.data["data"].dt.to_period("M")
+        self.data["year_month"] = self.data["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
         first_sale = self.data.groupby("model")["data"].min().reset_index()
         first_sale.columns = ["MODEL", "first_sale"]
@@ -93,7 +95,7 @@ class SalesAnalyzer:
         two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
         df_last_2_years = df[df["data"] >= two_years_ago].copy()
 
-        df_last_2_years["year_month"] = df_last_2_years["data"].dt.to_period("M")
+        df_last_2_years["year_month"] = df_last_2_years["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
         if by_model:
             monthly_sales = df_last_2_years.groupby(["model", "year_month"], as_index=False)[
@@ -135,8 +137,8 @@ class SalesAnalyzer:
         two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
         df = df[df["data"] >= two_years_ago]
 
-        df["month"] = df["data"].dt.month
-        df["year"] = df["data"].dt.year
+        df["month"] = df["data"].dt.month  # type: ignore[assignment]
+        df["year"] = df["data"].dt.year  # type: ignore[assignment]
 
         monthly_sales = df.groupby(["sku", "year", "month"], as_index=False)["ilosc"].sum()
 
@@ -801,7 +803,7 @@ class SalesAnalyzer:
         model_color_sales.columns = ["model", "color", "sales"]
 
         monthly_sales = df.copy()
-        monthly_sales["month"] = monthly_sales["data"].dt.to_period("M")
+        monthly_sales["month"] = monthly_sales["data"].dt.to_period("M")  # type: ignore[attr-defined]
         monthly_agg = monthly_sales.groupby(["model", "month"], as_index=False)["ilosc"].sum()
 
         stats = monthly_agg.groupby("model", as_index=False).agg(
@@ -908,7 +910,8 @@ class SalesAnalyzer:
             color: str,
             pattern_set,
             size_aliases: dict[str, str],
-            min_per_pattern: int
+            min_per_pattern: int,
+            algorithm_mode: str = "greedy_overshoot"
     ) -> dict:
         from utils.pattern_optimizer_logic import optimize_patterns
 
@@ -929,6 +932,6 @@ class SalesAnalyzer:
             alias = size_aliases.get(size_code, size_code)
             size_quantities_with_aliases[alias] = size_quantities_with_aliases.get(alias, 0) + quantity
 
-        result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern)
+        result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern, algorithm_mode)
 
         return result

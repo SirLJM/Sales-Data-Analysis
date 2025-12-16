@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Final
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -14,25 +18,20 @@ from utils.pattern_optimizer_logic import (
 )
 from utils.settings_manager import load_settings, reset_settings, save_settings
 
-SIZE_QTY = "Sizes (Size:Qty)"
-
-MODEL_COLOR = "MODEL+COLOR"
-
-LAST_WEEK = "Last Week"
-
-TEXT_CSV = "text/csv"
-
-MATERIAL = "RODZAJ MATERIAŁU"
-
-SZWALNIA_D = "SZWALNIA DRUGA"
-
-SZWALNIA_G = "SZWALNIA GŁÓWNA"
-
-BELOW_ROP = "Below ROP"
-
-AVERAGE_SALES = "AVERAGE SALES"
-
-OVERSTOCKED__ = "OVERSTOCKED_%"
+CLASSIC_GREEDY: Final[str] = "Classic Greedy"
+GREEDY_OVERSHOOT: Final[str] = "Greedy Overshoot"
+VALUE: Final[str] = "VALUE"
+STOCK: Final[str] = "STOCK"
+SIZE_QTY: Final[str] = "Sizes (Size:Qty)"
+MODEL_COLOR: Final[str] = "MODEL+COLOR"
+LAST_WEEK: Final[str] = "Last Week"
+TEXT_CSV: Final[str] = "text/csv"
+MATERIAL: Final[str] = "RODZAJ MATERIAŁU"
+SZWALNIA_D: Final[str] = "SZWALNIA DRUGA"
+SZWALNIA_G: Final[str] = "SZWALNIA GŁÓWNA"
+BELOW_ROP: Final[str] = "Below ROP"
+AVERAGE_SALES: Final[str] = "AVERAGE SALES"
+OVERSTOCKED__: Final[str] = "OVERSTOCKED_%"
 
 st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊", layout="wide")
 
@@ -299,6 +298,21 @@ with tab1:
     with new_cols[3]:
         st.write("-")
 
+    st.sidebar.subheader("Pattern Optimizer")
+
+    algorithm_mode = st.sidebar.radio(
+        "Algorithm",
+        options=["greedy_overshoot", "greedy_classic"],
+        format_func=lambda x: GREEDY_OVERSHOOT if x == "greedy_overshoot" else CLASSIC_GREEDY,
+        index=0 if st.session_state.settings.get("optimizer", {}).get("algorithm_mode",
+                                                                      "greedy_overshoot") == "greedy_overshoot" else 1,
+        key="sidebar_algorithm_mode",
+        help="Greedy Overshoot: Better coverage with slightly higher excess. Classic Greedy: Minimal excess but may undercover.",
+    )
+    if "optimizer" not in st.session_state.settings:
+        st.session_state.settings["optimizer"] = {}
+    st.session_state.settings["optimizer"]["algorithm_mode"] = algorithm_mode
+
     st.sidebar.markdown("---")
     st.sidebar.write("**Current Parameters:**")
     st.sidebar.write(f"Lead Time: {lead_time} months")
@@ -314,6 +328,8 @@ with tab1:
         f"Seasonal: CV > {service_seasonal} : Z-Score IN season = {z_score_seasonal_1}, Z-Score OUT of season = {z_score_seasonal_2}"
     )
     st.sidebar.write(f"New: months < {service_new} : Z-Score = {z_score_new}")
+    algorithm_display = GREEDY_OVERSHOOT if algorithm_mode == "greedy_overshoot" else CLASSIC_GREEDY
+    st.sidebar.write(f"Optimizer Algorithm: {algorithm_display}")
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("View Options")
@@ -415,29 +431,29 @@ with tab1:
                 columns={
                     "sku": "SKU",
                     "nazwa": "DESCRIPTION",
-                    "available_stock": "STOCK",
+                    "available_stock": STOCK,
                     "cena_netto": "PRICE",
                 }
             )
 
-            stock_df["VALUE"] = stock_df["STOCK"] * stock_df["PRICE"]
+            stock_df[VALUE] = stock_df[STOCK] * stock_df["PRICE"]
 
             if group_by_model:
                 stock_df["MODEL"] = stock_df["SKU"].astype(str).str[:5]
                 stock_agg = stock_df.groupby("MODEL", as_index=False).agg(
-                    {"STOCK": "sum", "VALUE": "sum", "DESCRIPTION": "first"}
+                    {STOCK: "sum", VALUE: "sum", "DESCRIPTION": "first"}
                 )
                 summary = summary.merge(stock_agg, on="MODEL", how="left")
             else:
                 summary = summary.merge(
-                    stock_df[["SKU", "DESCRIPTION", "STOCK", "VALUE"]], on="SKU", how="left"
+                    stock_df[["SKU", "DESCRIPTION", STOCK, VALUE]], on="SKU", how="left"
                 )
 
-            summary["BELOW_ROP"] = summary["STOCK"] < summary["ROP"]
-            summary["DEFICIT"] = summary["ROP"] - summary["STOCK"]
+            summary["BELOW_ROP"] = summary[STOCK] < summary["ROP"]
+            summary["DEFICIT"] = summary["ROP"] - summary[STOCK]
             summary["DEFICIT"] = summary["DEFICIT"].apply(lambda x: max(0, x))
             summary[OVERSTOCKED__] = (
-                    (summary["STOCK"] - summary["ROP"]) / summary["ROP"] * 100
+                    (summary[STOCK] - summary["ROP"]) / summary["ROP"] * 100
             ).round(1)
 
             stock_loaded = True
@@ -488,7 +504,7 @@ with tab1:
             column_order = [
                 id_column,
                 "TYPE",
-                "STOCK",
+                STOCK,
                 "ROP",
                 "SS",
                 "FORECAST_LEADTIME",
@@ -499,7 +515,7 @@ with tab1:
                 AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
-                "VALUE",
+                VALUE,
                 "BELOW_ROP",
             ]
         else:
@@ -507,7 +523,7 @@ with tab1:
                 id_column,
                 "DESCRIPTION",
                 "TYPE",
-                "STOCK",
+                STOCK,
                 "ROP",
                 "SS",
                 "FORECAST_LEADTIME",
@@ -518,7 +534,7 @@ with tab1:
                 AVERAGE_SALES,
                 "LAST_2_YEARS_AVG",
                 "CV",
-                "VALUE",
+                VALUE,
                 "BELOW_ROP",
             ]
     else:
@@ -641,8 +657,8 @@ with tab1:
         total_deficit = 0
         valid_stock_count = 0
 
-        if "STOCK" in display_data.columns and "BELOW_ROP" in display_data.columns:
-            valid_stock = display_data[display_data["STOCK"].notna()]
+        if STOCK in display_data.columns and "BELOW_ROP" in display_data.columns:
+            valid_stock = display_data[display_data[STOCK].notna()]
             valid_stock_count = len(valid_stock)
             below_rop_count = int(valid_stock["BELOW_ROP"].sum())
 
@@ -686,8 +702,8 @@ with tab1:
     if stock_loaded and stock_df is not None:
         col1, col2, col3 = st.columns(3)
         col1.metric("Total SKUs", len(display_data))
-        total_stock = stock_df["STOCK"].sum()
-        total_value = stock_df["VALUE"].sum()
+        total_stock = stock_df[STOCK].sum()  # type: ignore[misc]
+        total_value = stock_df[VALUE].sum()  # type: ignore[misc]
         col2.metric("Total STOCK", f"{total_stock:,.0f}")
         col3.metric("Total Stock Value", f"{total_value:,.2f}")
     else:
@@ -714,7 +730,7 @@ with tab1:
             forecast_df_copy["model"] = forecast_df_copy["sku"].astype(str).str[:5]
             available_ids = sorted(
                 summary[
-                    (summary["STOCK"].notna())
+                    (summary[STOCK].notna())
                     & (summary["ROP"].notna())
                     & (summary[id_column].isin(forecast_df_copy["model"].unique()))
                     ][id_column].unique()
@@ -722,7 +738,7 @@ with tab1:
         else:
             available_ids = sorted(
                 summary[
-                    (summary["STOCK"].notna())
+                    (summary[STOCK].notna())
                     & (summary["ROP"].notna())
                     & (summary[id_column].isin(forecast_df["sku"].unique()))
                     ][id_column].unique()
@@ -756,7 +772,7 @@ with tab1:
                     st.warning(f"⚠️ {entity_name} '{selected_id}' not found or missing stock/forecast data.")
                 else:
                     entity_data = summary[summary[id_column] == selected_id].iloc[0]
-                    current_stock = entity_data["STOCK"]
+                    current_stock = entity_data[STOCK]
                     rop = entity_data["ROP"]
                     safety_stock = entity_data["SS"]
                     avg_sales = entity_data[AVERAGE_SALES]
@@ -1245,6 +1261,10 @@ with tab2:
     with col2:
         st.markdown('<div class="section-header">Optimization</div>', unsafe_allow_html=True)
 
+        current_algorithm = st.session_state.settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
+        algorithm_display = GREEDY_OVERSHOOT if current_algorithm == "greedy_overshoot" else CLASSIC_GREEDY
+        st.info(f"Using algorithm: **{algorithm_display}** (change in sidebar)")
+
         if st.button("Run Optimization", type="primary", width="content", key="run_optimization"):
             if not st.session_state.pattern_sets:
                 st.error("Please add at least one pattern set before optimizing!")
@@ -1264,10 +1284,14 @@ with tab2:
 
                 if active_set:
                     result = optimize_patterns(
-                        quantities, active_set.patterns, MIN_ORDER_PER_PATTERN
+                        quantities, active_set.patterns, MIN_ORDER_PER_PATTERN, current_algorithm
                     )
 
                     display_optimization_metrics(result)
+
+                    algorithm_display = "Greedy Overshoot" if result.get(
+                        "algorithm_used") == "greedy_overshoot" else "Classic Greedy"
+                    st.info(f"Algorithm used: **{algorithm_display}**")
 
                     has_violations = len(result["min_order_violations"]) > 0
 
@@ -1573,7 +1597,7 @@ with tab3:
                 st.rerun()
 
         if calculate_recommendations:
-            with st.spinner("Calculating order priorities..."):
+            with st.spinner("Calculating order priorities..."):  # type: ignore[arg-type]
                 try:
                     sku_summary = analyzer.aggregate_by_sku()
                     sku_summary = analyzer.classify_sku_type(
@@ -1598,7 +1622,7 @@ with tab3:
                     if stock_loaded:
                         sku_stock = stock_df.copy()
                         sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-                        sku_summary["STOCK"] = sku_summary["STOCK"].fillna(0)
+                        sku_summary[STOCK] = sku_summary[STOCK].fillna(0)
                         if "PRICE" in sku_stock.columns:
                             sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
 
@@ -1924,7 +1948,7 @@ with tab4:
 
     lookback_days = st.session_state.settings.get("weekly_analysis", {}).get("lookback_days", 60)
 
-    with st.spinner("Generating weekly analysis..."):
+    with st.spinner("Generating weekly analysis..."):  # type: ignore[arg-type]
         try:
             from datetime import datetime
 

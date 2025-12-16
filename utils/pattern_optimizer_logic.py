@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 from dataclasses import asdict, dataclass
@@ -153,13 +155,17 @@ def optimize_patterns(
     quantities: dict[str, int],
     patterns: list[Pattern],
     min_per_pattern: int = get_min_order_per_pattern(),
+    algorithm_mode: str = "greedy_overshoot",
 ) -> dict:
     if not patterns or not any(quantities.values()):
         return _get_empty_result(quantities)
 
     best_solution = _find_best_solution(quantities, patterns, min_per_pattern)
     if not best_solution:
-        best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
+        if algorithm_mode == "greedy_classic":
+            best_solution = greedy_classic(quantities, patterns, min_per_pattern)
+        else:
+            best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
 
     produced = _calculate_production(best_solution, patterns, quantities)
     excess = {size: produced[size] - quantities[size] for size in quantities}
@@ -173,6 +179,7 @@ def optimize_patterns(
         "total_excess": sum(excess.values()),
         "all_covered": all(produced[size] >= quantities[size] for size in quantities),
         "min_order_violations": min_violations,
+        "algorithm_used": algorithm_mode,
     }
 
 
@@ -276,6 +283,29 @@ def _determine_allocation_quantity(
     if allocation[pattern_id] == 0:
         return min_per_pattern
     return 1
+
+
+def greedy_classic(
+    quantities: dict[str, int], patterns: list[Pattern], min_per_pattern: int
+) -> dict[int, int]:
+    allocation = dict.fromkeys((p.id for p in patterns), 0)
+    remaining = quantities.copy()
+
+    max_iterations = 200
+    iteration = 0
+
+    while _has_remaining_demand(remaining) and iteration < max_iterations:
+        iteration += 1
+
+        best_pattern = _find_best_pattern_by_score(patterns, remaining, _calculate_pattern_score)
+        if not best_pattern:
+            break
+
+        to_add = _determine_allocation_quantity(allocation, best_pattern.id, min_per_pattern)
+        allocation[best_pattern.id] += to_add
+        _update_remaining(remaining, best_pattern, to_add)
+
+    return allocation
 
 
 def greedy_overshoot(

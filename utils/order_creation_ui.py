@@ -196,9 +196,10 @@ def optimize_color_pattern(model: str, color: str, pattern_set: PatternSet) -> D
     priority_skus = recommendations_data["priority_skus"]
     size_aliases = load_size_aliases()
     min_per_pattern = get_min_order_per_pattern()
+    algorithm_mode = st.session_state.settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
     return SalesAnalyzer.optimize_pattern_with_aliases(
-        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern
+        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode
     )
 
 

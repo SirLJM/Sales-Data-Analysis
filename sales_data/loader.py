@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 from datetime import datetime
 from pathlib import Path
@@ -384,8 +386,8 @@ class SalesDataLoader:
 
         print("\nConsolidation complete!")
         print(f"Total rows: {len(consolidated_df):,}")
-        print(f"Unique orders: {consolidated_df['order_id'].nunique():,}")
-        print(f"Unique products (SKUs): {consolidated_df['sku'].nunique():,}")
+        print(f"Unique orders: {consolidated_df['order_id'].nunique():,}")  # type: ignore[index]
+        print(f"Unique products (SKUs): {consolidated_df['sku'].nunique():,}")  # type: ignore[index]
 
         return consolidated_df
 
