@@ -413,6 +413,32 @@ class DatabaseSource(DataSource):
             print(f"[ERROR] Failed to load color aliases from database: {e}")
             return {}
 
+    def load_category_mappings(self) -> pd.DataFrame:
+        query = """
+            SELECT
+                model,
+                grupa,
+                podgrupa,
+                kategoria,
+                nazwa
+            FROM category_mappings
+            ORDER BY model
+        """
+
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+
+            if df.empty:
+                print("[WARN] No category mappings found in database")
+                return pd.DataFrame()
+
+            df.columns = ["Model", "Grupa", "Podgrupa", "Kategoria", "Nazwa"]
+            return df
+
+        except Exception as e:
+            raise ValueError(f"Failed to load category mappings from database: {str(e)}")
+
     def is_available(self) -> bool:
         return self._is_available
 

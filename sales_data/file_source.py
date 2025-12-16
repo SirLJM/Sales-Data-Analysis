@@ -137,6 +137,9 @@ class FileSource(DataSource):
     def load_color_aliases(self) -> Dict[str, str]:
         return self.loader.load_color_aliases()
 
+    def load_category_mappings(self) -> pd.DataFrame:
+        return self.loader.load_category_data()
+
     def is_available(self) -> bool:
         return True
 

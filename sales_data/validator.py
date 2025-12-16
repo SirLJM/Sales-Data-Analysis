@@ -27,6 +27,13 @@ class DataValidator:
         "RODZAJ MATERIAŁU",
         "GRAMATURA",
     }
+    CATEGORY_COLUMNS = {
+        "Model",
+        "Grupa",
+        "Podgrupa",
+        "Kategoria",
+        "Nazwa"
+    }
 
     @staticmethod
     def validate_sales_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
@@ -115,6 +122,30 @@ class DataValidator:
         return is_valid, errors
 
     @staticmethod
+    def validate_category_data(df: pd.DataFrame) -> bool:
+        if df is None or df.empty:
+            raise ValueError("Category data is empty")
+
+        missing_cols = DataValidator.CATEGORY_COLUMNS - set(df.columns)
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
+
+        null_models = df["Model"].isna().sum()
+        if null_models > 0:
+            raise ValueError(f"Found {null_models} rows with null Model codes")
+
+        invalid_models = df[df["Model"].str.len() != 5]
+        if not invalid_models.empty:
+            raise ValueError(f"Found {len(invalid_models)} models not 5 characters")
+
+        for col in ["Grupa", "Podgrupa", "Kategoria"]:
+            null_count = df[col].isna().sum()
+            if null_count > 0:
+                raise ValueError(f"Found {null_count} null values in {col}")
+
+        return True
+
+    @staticmethod
     def find_sheet_by_columns(
         file_path: Path, required_columns: set, data_type: str = "data"
     ) -> str | None:
@@ -167,6 +198,35 @@ class DataValidator:
             raise FileNotFoundError(f"File not found: {file_path}")
         except pd.errors.EmptyDataError:
             raise ValueError(f"File is empty: {file_path}")
+        except PermissionError:
+            raise PermissionError(f"Permission denied: {file_path}")
+        except Exception as e:
+            raise RuntimeError(f"An error occurred: {e}")
+
+    @staticmethod
+    def find_category_sheet(file_path: Path) -> str | None:
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+
+            if "Kategorie" in wb.sheetnames:
+                sheet = wb["Kategorie"]
+                headers = {cell.value for cell in sheet[1]}
+                if DataValidator.CATEGORY_COLUMNS.issubset(headers):
+                    wb.close()
+                    return "Kategorie"
+
+            for sheet_name in wb.sheetnames:
+                sheet = wb[sheet_name]
+                headers = {cell.value for cell in sheet[1] if cell.value}
+                if DataValidator.CATEGORY_COLUMNS.issubset(headers):
+                    wb.close()
+                    return sheet_name
+
+            wb.close()
+            return wb.sheetnames[0] if wb.sheetnames else "Sheet1"
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {file_path}")
         except PermissionError:
             raise PermissionError(f"Permission denied: {file_path}")
         except Exception as e:

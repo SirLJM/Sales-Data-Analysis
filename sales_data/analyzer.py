@@ -935,3 +935,114 @@ class SalesAnalyzer:
         result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern, algorithm_mode)
 
         return result
+
+    @staticmethod
+    def _calculate_percent_change(current: float, prior: float, difference: float) -> float:
+        if prior == 0 and current > 0:
+            return 999.0
+        elif prior > 0 and current == 0:
+            return -100.0
+        elif prior == 0 and current == 0:
+            return 0.0
+        else:
+            return (difference / prior) * 100
+
+    @staticmethod
+    def calculate_monthly_yoy_by_category(
+            sales_df: pd.DataFrame,
+            category_df: pd.DataFrame,
+            reference_date: datetime = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+        if reference_date is None:
+            reference_date = datetime.now()
+
+        current_year = reference_date.year
+        current_month = reference_date.month
+
+        last_complete_month = current_month - 1 if current_month > 1 else 12
+        year_for_range = current_year if current_month > 1 else current_year - 1
+
+        current_start = datetime(year_for_range, 1, 1)
+        current_end = datetime(year_for_range, last_complete_month, 1) + pd.DateOffset(months=1) - timedelta(seconds=1)
+
+        prior_start = current_start - pd.DateOffset(years=1)
+        prior_end = current_end - pd.DateOffset(years=1)
+
+        sales_df = sales_df.copy()
+        sales_df["data"] = pd.to_datetime(sales_df["data"])
+
+        current_sales = sales_df[(sales_df["data"] >= current_start) & (sales_df["data"] <= current_end)].copy()
+        prior_sales = sales_df[(sales_df["data"] >= prior_start) & (sales_df["data"] <= prior_end)].copy()
+
+        current_sales["model"] = current_sales["sku"].str[:5]
+        prior_sales["model"] = prior_sales["sku"].str[:5]
+
+        category_lookup = category_df[["Model", "Podgrupa", "Kategoria", "Nazwa"]].copy()
+        category_lookup["model"] = category_lookup["Model"].str.upper()
+        category_lookup = category_lookup[["model", "Podgrupa", "Kategoria", "Nazwa"]]
+
+        current_with_cat = current_sales.merge(category_lookup, on="model", how="left")
+        prior_with_cat = prior_sales.merge(category_lookup, on="model", how="left")
+
+        uncategorized_current = current_with_cat[current_with_cat["Podgrupa"].isna()]
+        uncategorized_count = uncategorized_current["model"].nunique()
+        uncategorized_sales = uncategorized_current["ilosc"].sum()
+
+        current_agg = current_with_cat.groupby(
+            ["Podgrupa", "Kategoria"], as_index=False, dropna=False
+        )["ilosc"].sum().rename(columns={"ilosc": "current_qty"})  # type: ignore[attr-defined]
+
+        prior_agg = prior_with_cat.groupby(
+            ["Podgrupa", "Kategoria"], as_index=False, dropna=False
+        )["ilosc"].sum().rename(columns={"ilosc": "prior_qty"})  # type: ignore[attr-defined]
+
+        kategoria_details = current_agg.merge(
+            prior_agg, on=["Podgrupa", "Kategoria"], how="outer"
+        ).fillna({"current_qty": 0, "prior_qty": 0})
+
+        kategoria_details["difference"] = kategoria_details["current_qty"] - kategoria_details["prior_qty"]
+
+        kategoria_details["percent_change"] = kategoria_details.apply(
+            lambda row: SalesAnalyzer._calculate_percent_change(
+                row["current_qty"], row["prior_qty"], row["difference"]
+            ),
+            axis=1
+        )
+
+        kategoria_details = kategoria_details.sort_values(["Podgrupa", "current_qty"], ascending=[True, False])
+
+        podgrupa_summary = kategoria_details.groupby("Podgrupa", as_index=False).agg({
+            "current_qty": "sum",
+            "prior_qty": "sum",
+            "difference": "sum"
+        })
+
+        podgrupa_summary["percent_change"] = podgrupa_summary.apply(
+            lambda row: SalesAnalyzer._calculate_percent_change(
+                row["current_qty"], row["prior_qty"], row["difference"]
+            ),
+            axis=1
+        )
+
+        podgrupa_summary = podgrupa_summary.sort_values("current_qty", ascending=False)
+
+        rising_count = len(kategoria_details[kategoria_details["difference"] > 0])
+        falling_count = len(kategoria_details[kategoria_details["difference"] < 0])
+
+        metadata = {
+            "current_start": current_start,
+            "current_end": current_end,
+            "prior_start": prior_start,
+            "prior_end": prior_end,
+            "current_label": f"{current_start.strftime('%b %Y')} - {current_end.strftime('%b %Y')}",
+            "prior_label": f"{prior_start.strftime('%b %Y')} - {prior_end.strftime('%b %Y')}",
+            "total_current": podgrupa_summary["current_qty"].sum(),
+            "total_prior": podgrupa_summary["prior_qty"].sum(),
+            "total_difference": podgrupa_summary["difference"].sum(),
+            "rising_count": rising_count,
+            "falling_count": falling_count,
+            "uncategorized_models": uncategorized_count,
+            "uncategorized_sales": uncategorized_sales
+        }
+
+        return podgrupa_summary, kategoria_details, metadata

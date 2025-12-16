@@ -484,3 +484,43 @@ class SalesDataLoader:
         except Exception as e:
             print(f"  Warning: Could not load color aliases: {e}")
             return {}
+
+    @staticmethod
+    def find_category_file() -> str:
+        data_dir = Path(__file__).parent.parent / "data"
+
+        exact_path = data_dir / "1. MODELE&KOLORY_NUMERACJA.xlsx"
+        if exact_path.exists():
+            return str(exact_path)
+
+        for file in data_dir.glob("*.xlsx"):
+            name_lower = file.name.lower()
+            if "modele" in name_lower and "kolory" in name_lower:
+                return str(file)
+
+        raise FileNotFoundError(
+            f"Category mapping file not found in {data_dir}. "
+            "Expected '1. MODELE&KOLORY_NUMERACJA.xlsx' or similar."
+        )
+
+    def load_category_data(self) -> pd.DataFrame:
+        import openpyxl
+
+        file_path = self.find_category_file()
+
+        try:
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            sheet_name = self.validator.find_category_sheet(Path(file_path))
+            wb.close()
+
+            df = pd.read_excel(file_path, sheet_name=sheet_name)
+            df = df[list(self.validator.CATEGORY_COLUMNS)]  # type: ignore[index]
+            df = df.dropna(subset=["Model"])
+            df["Model"] = df["Model"].astype(str).str.strip().str.upper()
+            df = df.drop_duplicates(subset=["Model"], keep="first")
+
+            self.validator.validate_category_data(df)
+            return df
+
+        except Exception as e:
+            raise ValueError(f"Failed to load category data from {file_path}: {str(e)}")

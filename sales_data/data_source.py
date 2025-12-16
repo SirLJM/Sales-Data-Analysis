@@ -52,6 +52,10 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
+    def load_category_mappings(self) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
     def is_available(self) -> bool:
         pass
 
