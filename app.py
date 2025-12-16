@@ -18,6 +18,8 @@ from utils.pattern_optimizer_logic import (
 )
 from utils.settings_manager import load_settings, reset_settings, save_settings
 
+ORDER_ID: Final[str] = "Order ID"
+ORDER_DATE: Final[str] = "Order Date"
 CLASSIC_GREEDY: Final[str] = "Classic Greedy"
 GREEDY_OVERSHOOT: Final[str] = "Greedy Overshoot"
 VALUE: Final[str] = "VALUE"
@@ -79,13 +81,14 @@ def display_star_product(star: dict, stock_data: pd.DataFrame, is_rising: bool):
         )
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
     [
         "📊 Sales & Inventory Analysis",
         "📦 Size Pattern Optimizer",
         "🎯 Order Recommendations",
         "📅 Weekly Analysis",
         "📋 Order Creation",
+        "📦 Order Tracking",
     ]
 )
 
@@ -1289,10 +1292,6 @@ with tab2:
 
                     display_optimization_metrics(result)
 
-                    algorithm_display = "Greedy Overshoot" if result.get(
-                        "algorithm_used") == "greedy_overshoot" else "Classic Greedy"
-                    st.info(f"Algorithm used: **{algorithm_display}**")
-
                     has_violations = len(result["min_order_violations"]) > 0
 
                     if result["all_covered"] and not has_violations:
@@ -1634,6 +1633,26 @@ with tab3:
                         settings=st.session_state.settings,
                     )
 
+                    from utils.order_manager import get_active_orders
+
+                    active_orders = get_active_orders()
+                    active_models = {order["model"] for order in active_orders}
+
+                    if active_models:
+                        priority_skus = recommendations["priority_skus"].copy()
+                        priority_skus = priority_skus[~priority_skus["MODEL"].isin(active_models)]
+
+                        model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(
+                            priority_skus
+                        )
+
+                        recommendations["priority_skus"] = priority_skus
+                        recommendations["model_color_summary"] = model_color_summary
+
+                        if active_models:
+                            st.info(
+                                f"ℹ️ Filtered out {len(active_models)} model(s) with active orders: {', '.join(sorted(active_models))}")
+
                     include_filter = st.session_state.szwalnia_include_filter
                     exclude_filter = st.session_state.szwalnia_exclude_filter
 
@@ -1784,6 +1803,14 @@ with tab3:
 
             model_color_summary = recommendations["model_color_summary"].copy()  # type: ignore[index]
 
+            color_data_source = get_data_source()
+            color_aliases = color_data_source.load_color_aliases()
+
+            if color_aliases:
+                model_color_summary["COLOR_NAME"] = model_color_summary["COLOR"].map(color_aliases).fillna(model_color_summary["COLOR"])
+            else:
+                model_color_summary["COLOR_NAME"] = model_color_summary["COLOR"]
+
             if model_metadata_df is not None:
                 model_color_summary = model_color_summary.merge(
                     model_metadata_df, left_on="MODEL", right_on="Model", how="left"
@@ -1794,10 +1821,10 @@ with tab3:
             display_cols = [
                 "MODEL",
                 "COLOR",
+                "COLOR_NAME",
                 "PRIORITY_SCORE",
                 "DEFICIT",
                 "FORECAST_LEADTIME",
-                "COVERAGE_GAP",
                 "URGENT",
             ]
 
@@ -2084,3 +2111,107 @@ with tab5:
         from utils.order_creation_ui import render_order_creation_interface
 
         render_order_creation_interface()
+
+# ========================================
+# TAB 6: ORDER TRACKING
+# ========================================
+
+with tab6:
+    st.title("📦 Order Tracking")
+
+    from utils.order_manager import get_active_orders, archive_order, add_manual_order
+    from datetime import datetime
+
+    st.markdown("---")
+    st.subheader("📝 Add Manual Order")
+
+    col_model, col_date, col_button = st.columns([2, 2, 1])
+    with col_model:
+        manual_order_model = st.text_input(
+            "Model Code",
+            placeholder="e.g., ABC12",
+            help="Enter the model code for manual order entry",
+            key="manual_order_model_input"
+        )
+    with col_date:
+        manual_order_date = st.date_input(
+            ORDER_DATE,
+            value=datetime.today(),
+            help="Date when the order was placed",
+            key="manual_order_date_input"
+        )
+    with col_button:
+        st.write("")
+        st.write("")
+        if st.button("Add Order", key="add_manual_order_btn", type="primary"):
+            if not manual_order_model:
+                st.warning("⚠️ Please enter a model code")
+            else:
+                order_id = f"ORD_{manual_order_model.upper()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                if add_manual_order(order_id, manual_order_model.upper(), manual_order_date):
+                    st.success(f"✅ Order {order_id} added to active orders")
+                    st.rerun()
+                else:
+                    st.error("❌ Failed to add order")
+
+    st.markdown("---")
+    st.subheader("📋 Active Orders")
+
+    active_orders = get_active_orders()
+
+    if not active_orders:
+        st.info("ℹ️ No active orders. Create orders in Tab 5 or add manual orders above.")
+    else:
+        order_list = []
+        today = datetime.today()
+        delivery_threshold_days = 42
+
+        for order in active_orders:
+            order_date = order.get("order_date")
+            if isinstance(order_date, str):
+                order_date = datetime.fromisoformat(order_date.replace('Z', '+00:00'))
+            elif not isinstance(order_date, datetime):
+                order_date = datetime.combine(order_date, datetime.min.time())
+
+            days_elapsed = (today - order_date).days
+            is_ready = days_elapsed >= delivery_threshold_days
+
+            order_list.append({
+                ORDER_ID: order["order_id"],
+                "Model": order["model"],
+                ORDER_DATE: order_date.strftime("%Y-%m-%d"),
+                "Days Elapsed": days_elapsed,
+                "Status": "🚚 Ready for Delivery" if is_ready else f"⏳ {delivery_threshold_days - days_elapsed} days left",
+                "Archive": False
+            })
+
+        orders_df = pd.DataFrame(order_list)
+
+        edited_orders = st.data_editor(
+            orders_df,
+            hide_index=True,
+            disabled=[ORDER_ID, "Model", ORDER_DATE, "Days Elapsed", "Status"],
+            column_config={
+                "Archive": st.column_config.CheckboxColumn(
+                    "Archive",
+                    help="Check to archive this order",
+                    default=False,
+                )
+            },
+            height=min(600, len(order_list) * 35 + 38),
+        )
+
+        selected_to_archive = edited_orders[edited_orders["Archive"] == True]
+
+        if not selected_to_archive.empty:
+            if st.button(f"Archive {len(selected_to_archive)} Order(s)", type="secondary"):
+                for _, row in selected_to_archive.iterrows():
+                    if archive_order(row[ORDER_ID]):
+                        st.success(f"✅ Archived order {row['Order ID']}")
+                    else:
+                        st.error(f"❌ Failed to archive order {row['Order ID']}")
+                st.rerun()
+
+        st.caption(f"📦 Total active orders: {len(active_orders)}")
+        st.caption(
+            f"🚚 Orders ready for delivery (should be in stock now) (>= {delivery_threshold_days} days): {len([o for o in order_list if o['Days Elapsed'] >= delivery_threshold_days])}")
