@@ -435,6 +435,7 @@ with tab1:
 
     stock_loaded = False
     stock_df = None
+    stock_df_sku_level = None
     if use_stock:
         stock_df, stock_filename = load_stock()
 
@@ -449,6 +450,8 @@ with tab1:
             )
 
             stock_df[VALUE] = stock_df[STOCK] * stock_df["PRICE"]
+
+            stock_df_sku_level = stock_df[["SKU", "DESCRIPTION", STOCK, "PRICE", VALUE]].copy()
 
             if group_by_model:
                 stock_df["MODEL"] = stock_df["SKU"].astype(str).str[:5]
@@ -2021,11 +2024,11 @@ with tab5:
                     sku_summary = sku_summary.merge(sku_last_two_years, on="SKU", how="left")
                     sku_summary["LAST_2_YEARS_AVG"] = sku_summary["LAST_2_YEARS_AVG"].fillna(0)
 
-                    if stock_loaded and stock_df is not None and "SKU" in stock_df.columns:
+                    if stock_loaded and stock_df_sku_level is not None:
                         stock_cols: list[str] = ["SKU", STOCK]
-                        if "PRICE" in stock_df.columns:
+                        if "PRICE" in stock_df_sku_level.columns:
                             stock_cols.append("PRICE")
-                        sku_stock = stock_df[stock_cols].copy()  # type: ignore[arg-type]
+                        sku_stock = stock_df_sku_level[stock_cols].copy()  # type: ignore[arg-type]
                         sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
                         sku_summary[STOCK] = sku_summary[STOCK].fillna(0)
                         if "PRICE" in stock_cols:
