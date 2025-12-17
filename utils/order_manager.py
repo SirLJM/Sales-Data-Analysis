@@ -10,6 +10,18 @@ DATA_ORDERS = "data/orders"
 
 load_dotenv()
 
+_engine = None
+
+
+def _get_engine():
+    global _engine
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        return None
+    if _engine is None:
+        _engine = create_engine(db_url, pool_pre_ping=True)
+    return _engine
+
 
 def save_order(order_data: Dict) -> bool:
     try:
@@ -26,11 +38,9 @@ def save_order(order_data: Dict) -> bool:
 
 
 def save_order_to_database(order_data: Dict) -> bool:
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
+    engine = _get_engine()
+    if not engine:
         return False
-
-    engine = create_engine(db_url)
 
     try:
         with engine.connect() as conn:
@@ -77,8 +87,6 @@ def save_order_to_database(order_data: Dict) -> bool:
     except Exception as e:
         print(f"Database error: {e}")
         return False
-    finally:
-        engine.dispose()
 
 
 def save_order_items_to_database(order_id: str, order_table: list, engine) -> None:
@@ -169,11 +177,10 @@ def get_active_orders() -> list:
 
 
 def get_active_orders_from_database() -> list:
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
+    engine = _get_engine()
+    if not engine:
         return []
 
-    engine = create_engine(db_url)
     try:
         with engine.connect() as conn:
             result = conn.execute(
@@ -196,8 +203,6 @@ def get_active_orders_from_database() -> list:
     except Exception as e:
         print(f"Database error getting active orders: {e}")
         return []
-    finally:
-        engine.dispose()
 
 
 def get_active_orders_from_files() -> list:
@@ -242,11 +247,10 @@ def archive_order(order_id: str) -> bool:
 
 
 def archive_order_in_database(order_id: str) -> bool:
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
+    engine = _get_engine()
+    if not engine:
         return False
 
-    engine = create_engine(db_url)
     try:
         with engine.connect() as conn:
             conn.execute(
@@ -265,8 +269,6 @@ def archive_order_in_database(order_id: str) -> bool:
     except Exception as e:
         print(f"Database error archiving order: {e}")
         return False
-    finally:
-        engine.dispose()
 
 
 def archive_order_in_file(order_id: str) -> bool:
@@ -327,11 +329,10 @@ def add_manual_order(order_id: str, model: str, order_date) -> bool:
 
 
 def add_manual_order_to_database(order_data: Dict) -> bool:
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
+    engine = _get_engine()
+    if not engine:
         return False
 
-    engine = create_engine(db_url)
     try:
         with engine.connect() as conn:
             conn.execute(
@@ -367,5 +368,3 @@ def add_manual_order_to_database(order_data: Dict) -> bool:
     except Exception as e:
         print(f"Database error adding manual order: {e}")
         return False
-    finally:
-        engine.dispose()

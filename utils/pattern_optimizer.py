@@ -104,7 +104,10 @@ def _get_empty_result(quantities: dict[str, int]) -> dict:
 
 
 def _find_best_solution(
-    quantities: dict[str, int], patterns: list[Pattern], min_per_pattern: int
+    quantities: dict[str, int],
+    patterns: list[Pattern],
+    min_per_pattern: int,
+    size_priorities: dict[str, float] | None = None,
 ) -> dict[int, int] | None:
     best_solution = None
     best_excess = float("inf")
@@ -112,7 +115,9 @@ def _find_best_solution(
     min_patterns = max(quantities.values()) // 2
 
     for total_patterns in range(min_patterns, min(max_total + 1, min_patterns + 100)):
-        solution = find_allocation_for_total(quantities, patterns, total_patterns, min_per_pattern)
+        solution = find_allocation_for_total(
+            quantities, patterns, total_patterns, min_per_pattern, size_priorities
+        )
 
         if solution:
             total_excess_calculated = calculate_total_excess(quantities, solution, patterns)
@@ -156,16 +161,17 @@ def optimize_patterns(
     patterns: list[Pattern],
     min_per_pattern: int = get_min_order_per_pattern(),
     algorithm_mode: str = "greedy_overshoot",
+    size_priorities: dict[str, float] | None = None,
 ) -> dict:
     if not patterns or not any(quantities.values()):
         return _get_empty_result(quantities)
 
-    best_solution = _find_best_solution(quantities, patterns, min_per_pattern)
+    best_solution = _find_best_solution(quantities, patterns, min_per_pattern, size_priorities)
     if not best_solution:
         if algorithm_mode == "greedy_classic":
-            best_solution = greedy_classic(quantities, patterns, min_per_pattern)
+            best_solution = greedy_classic(quantities, patterns, min_per_pattern, size_priorities)
         else:
-            best_solution = greedy_overshoot(quantities, patterns, min_per_pattern)
+            best_solution = greedy_overshoot(quantities, patterns, min_per_pattern, size_priorities)
 
     produced = _calculate_production(best_solution, patterns, quantities)
     excess = {size: produced[size] - quantities[size] for size in quantities}
@@ -183,35 +189,51 @@ def optimize_patterns(
     }
 
 
-def _calculate_pattern_score(pattern: Pattern, remaining: dict[str, int]) -> int:
+def _calculate_pattern_score(
+    pattern: Pattern, remaining: dict[str, int], size_priorities: dict[str, float] | None = None
+) -> int:
     score = 0
     for size, count in pattern.sizes.items():
         if remaining.get(size, 0) > 0:
-            score += min(count, remaining[size]) * 10
+            base_score = min(count, remaining[size]) * 10
+            if size_priorities and size in size_priorities:
+                priority_bonus = size_priorities[size] * count * 5
+                score += base_score + priority_bonus
+            else:
+                score += base_score
         else:
             score -= count
     return score
 
 
-def _calculate_greedy_score(pattern: Pattern, remaining: dict[str, int]) -> float:
+def _calculate_greedy_score(
+    pattern: Pattern, remaining: dict[str, int], size_priorities: dict[str, float] | None = None
+) -> float:
     score = 0.0
     for size, count in pattern.sizes.items():
         if remaining.get(size, 0) > 0:
-            score += min(count, remaining[size]) * 100
-            score += remaining[size] * 10
+            base_score = min(count, remaining[size]) * 100 + remaining[size] * 10
+            if size_priorities and size in size_priorities:
+                priority_bonus = size_priorities[size] * count * 50
+                score += base_score + priority_bonus
+            else:
+                score += base_score
         else:
             score -= count * 1
     return score
 
 
 def _find_best_pattern_by_score(
-    patterns: list[Pattern], remaining: dict[str, int], score_func
+    patterns: list[Pattern],
+    remaining: dict[str, int],
+    score_func,
+    size_priorities: dict[str, float] | None = None,
 ) -> Pattern | None:
     best_pattern = None
     best_score = -float("inf")
 
     for pattern in patterns:
-        score = score_func(pattern, remaining)
+        score = score_func(pattern, remaining, size_priorities)
         if score > best_score:
             best_score = score
             best_pattern = pattern
@@ -237,7 +259,11 @@ def _update_remaining(remaining: dict[str, int], pattern: Pattern, quantity: int
 
 
 def find_allocation_for_total(
-    quantities: dict[str, int], patterns: list[Pattern], total: int, min_per_pattern: int
+    quantities: dict[str, int],
+    patterns: list[Pattern],
+    total: int,
+    min_per_pattern: int,
+    size_priorities: dict[str, float] | None = None,
 ) -> dict[int, int] | None:
     allocation = dict.fromkeys((p.id for p in patterns), 0)
     remaining = quantities.copy()
@@ -254,7 +280,7 @@ def find_allocation_for_total(
             break
 
         best_pattern = _find_best_pattern_by_score(
-            valid_patterns, remaining, _calculate_pattern_score
+            valid_patterns, remaining, _calculate_pattern_score, size_priorities
         )
         if not best_pattern:
             break
@@ -286,7 +312,10 @@ def _determine_allocation_quantity(
 
 
 def greedy_classic(
-    quantities: dict[str, int], patterns: list[Pattern], min_per_pattern: int
+    quantities: dict[str, int],
+    patterns: list[Pattern],
+    min_per_pattern: int,
+    size_priorities: dict[str, float] | None = None,
 ) -> dict[int, int]:
     allocation = dict.fromkeys((p.id for p in patterns), 0)
     remaining = quantities.copy()
@@ -297,7 +326,9 @@ def greedy_classic(
     while _has_remaining_demand(remaining) and iteration < max_iterations:
         iteration += 1
 
-        best_pattern = _find_best_pattern_by_score(patterns, remaining, _calculate_pattern_score)
+        best_pattern = _find_best_pattern_by_score(
+            patterns, remaining, _calculate_pattern_score, size_priorities
+        )
         if not best_pattern:
             break
 
@@ -309,7 +340,10 @@ def greedy_classic(
 
 
 def greedy_overshoot(
-    quantities: dict[str, int], patterns: list[Pattern], min_per_pattern: int
+    quantities: dict[str, int],
+    patterns: list[Pattern],
+    min_per_pattern: int,
+    size_priorities: dict[str, float] | None = None,
 ) -> dict[int, int]:
     allocation = dict.fromkeys((p.id for p in patterns), 0)
     remaining = quantities.copy()
@@ -320,7 +354,9 @@ def greedy_overshoot(
     while _has_remaining_demand(remaining) and iteration < max_iterations:
         iteration += 1
 
-        best_pattern = _find_best_pattern_by_score(patterns, remaining, _calculate_greedy_score)
+        best_pattern = _find_best_pattern_by_score(
+            patterns, remaining, _calculate_greedy_score, size_priorities
+        )
         if not best_pattern:
             break
 

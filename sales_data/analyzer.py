@@ -422,7 +422,7 @@ class SalesAnalyzer:
         df = SalesAnalyzer._calculate_revenue_impact(df)
         df = SalesAnalyzer._apply_type_multipliers(df, config["type_multipliers"])
         df = SalesAnalyzer._calculate_priority_score(df, config)
-        df["URGENT"] = (df["STOCK"] <= 0) | ((df["STOCK"] < df["ROP"]) & (df["FORECAST_LEADTIME"] > df["STOCK"]))
+        df["URGENT"] = (df["STOCK"] == 0) & (df["FORECAST_LEADTIME"] > 0)
 
         return df.sort_values("PRIORITY_SCORE", ascending=False)
 
@@ -904,6 +904,45 @@ class SalesAnalyzer:
         return SalesAnalyzer._filter_and_pivot_sales(df, model, colors, months)
 
     @staticmethod
+    def calculate_size_priorities(
+            sales_df: pd.DataFrame,
+            model: str | None = None,
+            size_aliases: dict[str, str] | None = None
+    ) -> dict[str, float]:
+        if sales_df is None or sales_df.empty:
+            return {}
+
+        df = sales_df.copy()
+        if "SKU" not in df.columns:
+            return {}
+
+        df["size"] = df["SKU"].astype(str).str[7:9]
+
+        if model:
+            df["model"] = df["SKU"].astype(str).str[:5]
+            df = df[df["model"] == model]
+
+        size_col = "FORECAST_QTY" if "FORECAST_QTY" in df.columns else "TOTAL_QUANTITY"
+        if size_col not in df.columns:
+            return {}
+
+        size_sales = df.groupby("size")[size_col].sum()
+
+        if size_aliases:
+            aliased_sales = {}
+            for size, sales in size_sales.items():
+                # noinspection PyTypeChecker
+                alias = size_aliases.get(size, size)
+                aliased_sales[alias] = aliased_sales.get(alias, 0) + sales
+            size_sales = pd.Series(aliased_sales)
+
+        if size_sales.empty or size_sales.max() == 0:
+            return {}
+
+        normalized = size_sales / size_sales.max()
+        return normalized.to_dict()
+
+    @staticmethod
     def optimize_pattern_with_aliases(
             priority_skus: pd.DataFrame,
             model: str,
@@ -913,7 +952,7 @@ class SalesAnalyzer:
             min_per_pattern: int,
             algorithm_mode: str = "greedy_overshoot"
     ) -> dict:
-        from utils.pattern_optimizer_logic import optimize_patterns
+        from utils.pattern_optimizer import optimize_patterns
 
         size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(priority_skus, model, color)
 
@@ -932,7 +971,15 @@ class SalesAnalyzer:
             alias = size_aliases.get(size_code, size_code)
             size_quantities_with_aliases[alias] = size_quantities_with_aliases.get(alias, 0) + quantity
 
-        result = optimize_patterns(size_quantities_with_aliases, pattern_set.patterns, min_per_pattern, algorithm_mode)
+        size_priorities = SalesAnalyzer.calculate_size_priorities(priority_skus, model, size_aliases)
+
+        result = optimize_patterns(
+            size_quantities_with_aliases,
+            pattern_set.patterns,
+            min_per_pattern,
+            algorithm_mode,
+            size_priorities
+        )
 
         return result
 

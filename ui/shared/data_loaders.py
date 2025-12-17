@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+
+from ui.constants import Config
+from ui.shared.session_manager import get_data_source
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_data() -> pd.DataFrame:
+    data_source = get_data_source()
+    return data_source.load_sales_data()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_stock() -> tuple[pd.DataFrame | None, str | None]:
+    data_source = get_data_source()
+    stock_dataframe = data_source.load_stock_data()
+    if stock_dataframe is not None and not stock_dataframe.empty:
+        source = "database" if data_source.get_data_source_type() == "database" else "file"
+        return stock_dataframe, source
+    return None, None
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_forecast() -> tuple[pd.DataFrame | None, pd.Timestamp | None, str | None]:
+    data_source = get_data_source()
+    forecast_dataframe = data_source.load_forecast_data()
+    if forecast_dataframe is not None and not forecast_dataframe.empty:
+        loaded_forecast_date = None
+        if "generated_date" in forecast_dataframe.columns:
+            loaded_date = forecast_dataframe["generated_date"].iloc[0]
+            if loaded_date is not None and not isinstance(loaded_date, pd.Timestamp):
+                loaded_forecast_date = pd.Timestamp(loaded_date)
+            else:
+                loaded_forecast_date = loaded_date
+        source = "database" if data_source.get_data_source_type() == "database" else "file"
+        return forecast_dataframe, loaded_forecast_date, source
+    return None, None, None
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_model_metadata() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    return data_source.load_model_metadata()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_category_mappings() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    return data_source.load_category_mappings()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_size_aliases() -> dict[str, str]:
+    data_source = get_data_source()
+    return data_source.load_size_aliases()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_color_aliases() -> dict[str, str]:
+    data_source = get_data_source()
+    return data_source.load_color_aliases()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_size_aliases_reverse() -> dict[str, str]:
+    aliases = load_size_aliases()
+    return {v: k for k, v in aliases.items()}

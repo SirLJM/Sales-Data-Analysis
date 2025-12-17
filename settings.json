@@ -1,6 +1,6 @@
 {
   "data_source": {
-    "mode": "file",
+    "mode": "database",
     "fallback_to_file": true,
     "pool_size": 10,
     "pool_recycle": 3600,
