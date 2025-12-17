@@ -7,17 +7,18 @@ from dotenv import load_dotenv
 from .data_source import DataSource
 from .file_source import FileSource
 
-SOURCE_CONFIG_JSON = "data_source_config.json"
+SETTINGS_FILE = "settings.json"
 
 
 class DataSourceFactory:
 
     @staticmethod
     def _load_config():
-        config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
+        config_path = Path(__file__).parent.parent / SETTINGS_FILE
         if config_path.exists():
             with open(config_path, "r") as f:
-                return json.load(f)
+                settings = json.load(f)
+                return settings.get("data_source", {"mode": "file"})
         return {"mode": "file"}
 
     @staticmethod
@@ -75,11 +76,12 @@ class DataSourceFactory:
     def get_current_mode() -> str:
         load_dotenv()
 
-        config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
+        config_path = Path(__file__).parent.parent / SETTINGS_FILE
 
         if config_path.exists():
             with open(config_path, "r") as f:
-                config = json.load(f)
+                settings = json.load(f)
+                config = settings.get("data_source", {"mode": "file"})
         else:
             config = {"mode": "file"}
 
@@ -90,17 +92,20 @@ class DataSourceFactory:
         if mode not in ["file", "database"]:
             raise ValueError("Mode must be 'file' or 'database'")
 
-        config_path = Path(__file__).parent.parent / SOURCE_CONFIG_JSON
+        config_path = Path(__file__).parent.parent / SETTINGS_FILE
 
         if config_path.exists():
             with open(config_path, "r") as f:
-                config = json.load(f)
+                settings = json.load(f)
         else:
-            config = {}
+            settings = {"data_source": {}}
 
-        config["mode"] = mode
+        if "data_source" not in settings:
+            settings["data_source"] = {}
+
+        settings["data_source"]["mode"] = mode
 
         with open(config_path, "w") as f:
-            json.dump(config, f, indent=2)
+            json.dump(settings, f, indent=2)
 
         print(f"[OK] Data source mode switched to: {mode}")

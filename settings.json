@@ -1,4 +1,11 @@
 {
+  "data_source": {
+    "mode": "file",
+    "fallback_to_file": true,
+    "pool_size": 10,
+    "pool_recycle": 3600,
+    "echo_sql": false
+  },
   "lead_time": 1.36,
   "forecast_time": 5,
   "sync_forecast_with_lead_time": false,
@@ -18,7 +25,8 @@
     "lookback_days": 60
   },
   "optimizer": {
-    "min_order_per_pattern": 5
+    "min_order_per_pattern": 5,
+    "algorithm_mode": "greedy_overshoot"
   },
   "order_recommendations": {
     "stockout_risk": {

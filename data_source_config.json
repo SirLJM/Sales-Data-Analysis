@@ -1,7 +1,0 @@
-{
-  "mode": "database",
-  "fallback_to_file": true,
-  "pool_size": 10,
-  "pool_recycle": 3600,
-  "echo_sql": false
-}

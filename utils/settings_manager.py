@@ -7,6 +7,13 @@ from typing import Any
 SETTINGS_FILE = "../settings.json"
 
 DEFAULT_SETTINGS = {
+    "data_source": {
+        "mode": "file",
+        "fallback_to_file": True,
+        "pool_size": 10,
+        "pool_recycle": 3600,
+        "echo_sql": False,
+    },
     "lead_time": 1.36,
     "forecast_time": 5,
     "sync_forecast_with_lead_time": False,

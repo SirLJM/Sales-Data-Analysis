@@ -150,13 +150,19 @@ ORDER BY tablename;
 
 Once data is verified:
 
-1. Edit `src/data_source_config.json`:
+1. Edit `src/settings.json` (in the `data_source` section):
 
 ```json
 {
-  "mode": "database",
-  "connection_string": null,
-  "fallback_to_file": true
+  "data_source": {
+    "mode": "database",
+    "connection_string": null,
+    "fallback_to_file": true,
+    "pool_size": 10,
+    "pool_recycle": 3600,
+    "echo_sql": false
+  },
+  ...
 }
 ```
 
@@ -227,7 +233,7 @@ Schedule to run daily at 7 AM.
 
 ### Rollback to File Mode
 
-1. Edit `src/data_source_config.json`: `"mode": "file"`
+1. Edit `src/settings.json`: Set `"data_source": {"mode": "file"}`
 2. Restart app
 3. Files remain a source of truth
 

@@ -2346,7 +2346,7 @@ with tab6:
                     sku_summary["SIZE"] = sku_summary["SKU"].astype(str).str[7:9]
                     sku_summary["DEFICIT"] = (sku_summary["ROP"] - sku_summary[STOCK]).clip(lower=0)
 
-                    model_data = sku_summary[sku_summary["MODEL"] == model_code]
+                    model_data = sku_summary[sku_summary["MODEL"] == model_code].copy()
 
                     if model_data.empty:
                         st.error(f"❌ No data found for model '{model_code}'")

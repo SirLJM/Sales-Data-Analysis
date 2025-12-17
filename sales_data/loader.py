@@ -206,31 +206,47 @@ class SalesDataLoader:
     def _should_replace_forecast_file(new_file: Path, existing_file: Path) -> bool:
         return new_file.suffix == XLSX and existing_file.suffix == CSV
 
+    def _process_forecast_subdir(self, subdir: Path, seen_dates: dict[datetime, Path]) -> None:
+        try:
+            folder_date = datetime.strptime(subdir.name, "%Y-%m-%d")
+        except ValueError:
+            return
+
+        forecast_files = list(subdir.glob("forecast_*.csv")) + list(subdir.glob("forecast_*.xlsx"))
+
+        for file_path in forecast_files:
+            if folder_date not in seen_dates or self._should_replace_forecast_file(
+                    file_path, seen_dates[folder_date]
+            ):
+                seen_dates[folder_date] = file_path
+
+    def _process_direct_forecast_files(self, seen_dates: dict[datetime, Path]) -> None:
+        direct_files = list(self.forecast_dir.glob("forecast_*.csv")) + list(
+            self.forecast_dir.glob("forecast_*.xlsx")
+        )
+
+        for file_path in direct_files:
+            parsed_date = self._parse_forecast_filename(file_path.name)
+            if parsed_date and (parsed_date not in seen_dates or self._should_replace_forecast_file(
+                    file_path, seen_dates[parsed_date]
+            )):
+                seen_dates[parsed_date] = file_path
+
     def find_forecast_files(self) -> list[tuple[Path, datetime]]:
-        files_info: list[tuple[Path, datetime]] = []
         seen_dates: dict[datetime, Path] = {}
 
-        if self.forecast_dir.exists():
-            subdirs = [d for d in self.forecast_dir.iterdir() if d.is_dir()]
+        if not self.forecast_dir.exists():
+            return []
 
-            for subdir in subdirs:
-                try:
-                    folder_date = datetime.strptime(subdir.name, "%Y-%m-%d")
-                except ValueError:
-                    continue
+        subdirs = [d for d in self.forecast_dir.iterdir() if d.is_dir()]
 
-                forecast_files = list(subdir.glob("forecast_*.csv")) + list(
-                    subdir.glob("forecast_*.xlsx")
-                )
+        for subdir in subdirs:
+            self._process_forecast_subdir(subdir, seen_dates)
 
-                for file_path in forecast_files:
-                    if folder_date not in seen_dates or self._should_replace_forecast_file(
-                            file_path, seen_dates[folder_date]
-                    ):
-                        seen_dates[folder_date] = file_path
+        if not seen_dates:
+            self._process_direct_forecast_files(seen_dates)
 
-            files_info = [(path, date) for date, path in seen_dates.items()]
-
+        files_info = [(path, date) for date, path in seen_dates.items()]
         files_info.sort(key=lambda x: x[1])
 
         return files_info
