@@ -2021,16 +2021,20 @@ with tab5:
                     sku_summary = sku_summary.merge(sku_last_two_years, on="SKU", how="left")
                     sku_summary["LAST_2_YEARS_AVG"] = sku_summary["LAST_2_YEARS_AVG"].fillna(0)
 
-                    if stock_loaded and stock_df is not None:
-                        if "SKU" in stock_df.columns:
-                            stock_cols: list[str] = ["SKU", STOCK]
-                            if "PRICE" in stock_df.columns:
-                                stock_cols.append("PRICE")
-                            sku_stock = stock_df[stock_cols].copy()  # type: ignore[arg-type]
-                            sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-                            sku_summary[STOCK] = sku_summary[STOCK].fillna(0)
-                            if "PRICE" in stock_cols:
-                                sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
+                    if stock_loaded and stock_df is not None and "SKU" in stock_df.columns:
+                        stock_cols: list[str] = ["SKU", STOCK]
+                        if "PRICE" in stock_df.columns:
+                            stock_cols.append("PRICE")
+                        sku_stock = stock_df[stock_cols].copy()  # type: ignore[arg-type]
+                        sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
+                        sku_summary[STOCK] = sku_summary[STOCK].fillna(0)
+                        if "PRICE" in stock_cols:
+                            sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
+                    else:
+                        if STOCK not in sku_summary.columns:
+                            sku_summary[STOCK] = 0
+                        if "PRICE" not in sku_summary.columns:
+                            sku_summary["PRICE"] = 0
 
                     recommendations = SalesAnalyzer.generate_order_recommendations(
                         summary_df=sku_summary,
