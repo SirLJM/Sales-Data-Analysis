@@ -329,9 +329,13 @@ def _add_sales_history_to_row(row: Dict, sales_history: pd.DataFrame, color: str
 
 
 def _create_base_row(model: str, color: str, pattern_res: Dict, forecast: Dict, pattern_allocation_str: str) -> Dict:
+    color_aliases = load_color_aliases()
+    color_name = color_aliases.get(color, color)
+
     return {
         "Model": model,
         "Color": color,
+        "Color Name": color_name,
         "Priority": round(forecast.get("priority_score", 0), 1),
         "Patterns": pattern_allocation_str,
         TOTAL_PATTERNS: pattern_res.get("total_patterns", 0),
@@ -370,10 +374,46 @@ def create_order_summary_table(
     return pd.DataFrame(rows)
 
 
-def build_color_size_table(pattern_results, pattern_set):
-    all_sizes = {size for p in pattern_set.patterns for size in p.sizes}
-    all_colors = sorted(pattern_results.keys())
+def _get_all_model_colors(pattern_results):
+    from sales_data.data_source_factory import DataSourceFactory
 
+    ordered_colors = sorted(pattern_results.keys())
+    data_source = DataSourceFactory.create_data_source()
+    sales_df = data_source.load_sales_data()
+
+    if sales_df is None or sales_df.empty:
+        return ordered_colors
+
+    model_code = st.session_state.selected_order_items[0]["model"]
+    model_skus = sales_df[sales_df["sku"].astype(str).str[:5] == model_code]
+    return sorted(model_skus["sku"].astype(str).str[5:7].unique())
+
+
+def _get_pattern_count_for_color(pattern_results, color, pattern_id):
+    if color not in pattern_results:
+        return 0
+    allocation = pattern_results[color].get("allocation", {})
+    return allocation.get(pattern_id, 0)
+
+
+def _create_pattern_row(size, all_model_colors, color_aliases, pattern_results, pattern_id):
+    row = {"Size": size}
+    for color in all_model_colors:
+        color_name = color_aliases.get(color, color)
+        pattern_count = _get_pattern_count_for_color(pattern_results, color, pattern_id)
+        row[color_name] = pattern_count
+    return row
+
+
+def _create_empty_row(all_model_colors, color_aliases):
+    empty_row = {"Size": ""}
+    for color in all_model_colors:
+        color_name = color_aliases.get(color, color)
+        empty_row[color_name] = ""
+    return empty_row
+
+
+def build_color_size_table(pattern_results, pattern_set):
     color_aliases = load_color_aliases()
     size_alias_to_code = load_size_aliases_reverse()
 
@@ -384,26 +424,23 @@ def build_color_size_table(pattern_results, pattern_set):
         except (ValueError, TypeError):
             return 999
 
-    all_sizes_sorted = sorted(all_sizes, key=get_size_sort_key)
-
+    all_model_colors = _get_all_model_colors(pattern_results)
     data = []
-    for size in all_sizes_sorted:
-        row = {"Size": size}
-        total_for_size = 0
 
-        for color in all_colors:
-            produced = pattern_results[color].get("produced", {})
-            qty = produced.get(size, 0)
-            color_name = color_aliases.get(color, color)
-            row[color_name] = qty
-            total_for_size += qty
+    for pattern in pattern_set.patterns:
+        pattern_sizes = sorted(pattern.sizes.keys(), key=get_size_sort_key)
 
-        row["TOTAL"] = total_for_size
-        data.append(row)
+        for size in pattern_sizes:
+            row = _create_pattern_row(size, all_model_colors, color_aliases, pattern_results, pattern.id)
+            data.append(row)
 
-    df = pd.DataFrame(data)
+        empty_row = _create_empty_row(all_model_colors, color_aliases)
+        data.append(empty_row)
 
-    return df
+    if data and data[-1]["Size"] == "":
+        data.pop()
+
+    return pd.DataFrame(data)
 
 
 def save_order_to_database(model: str, order_table: pd.DataFrame, pattern_results: Dict, metadata: Dict) -> None:

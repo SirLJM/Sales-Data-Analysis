@@ -233,7 +233,7 @@ class SalesAnalyzer:
         return df[[id_column] + base_cols]
 
     @staticmethod
-    def _calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Timestamp, pd.Timestamp]:
+    def calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Timestamp, pd.Timestamp]:
         from datetime import datetime
         today = datetime.now()
 
@@ -262,7 +262,7 @@ class SalesAnalyzer:
         forecast_df["data"] = pd.to_datetime(forecast_df["data"])
 
         if forecast_time_months is not None:
-            forecast_start, forecast_end = SalesAnalyzer._calculate_forecast_date_range(forecast_time_months)
+            forecast_start, forecast_end = SalesAnalyzer.calculate_forecast_date_range(forecast_time_months)
 
             # noinspection PyTypeChecker
             forecast_leadtime = forecast_df[
@@ -457,7 +457,7 @@ class SalesAnalyzer:
             df["FORECAST_LEADTIME"] = 0
             return df
 
-        forecast_start, forecast_end = SalesAnalyzer._calculate_forecast_date_range(forecast_time_months)
+        forecast_start, forecast_end = SalesAnalyzer.calculate_forecast_date_range(forecast_time_months)
 
         # noinspection PyTypeChecker
         forecast_window = forecast_df[

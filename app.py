@@ -2275,8 +2275,8 @@ with tab6:
     with col_input:
         manual_model = st.text_input(
             "Enter Model Code",
-            placeholder="e.g., ABC12",
-            help="Enter a model code to create an order. Data will be pulled from Order Recommendations.",
+            placeholder="e.g., CH031",
+            help="Enter any model code (5 characters) to create an order. Data will be calculated from sales, stock, and forecast data.",
             key="manual_model_input"
         )
     with col_button:
@@ -2287,49 +2287,130 @@ with tab6:
     if create_clicked:
         if not manual_model:
             st.warning("⚠️ Please enter a model code")
-        elif not st.session_state.get("recommendations_data"):
-            st.error("❌ No recommendations data available. Please generate recommendations in Tab 5 first.")
         else:
-            recommendations = st.session_state.recommendations_data
-            priority_skus = recommendations.get("priority_skus")
+            model_code: str = manual_model.upper().strip()
 
-            if priority_skus is None:
-                st.error("❌ Priority SKUs data not found. Please regenerate recommendations in Tab 5.")
+            model_skus = df[df["sku"].astype(str).str[:5] == model_code]
+
+            if model_skus.empty:
+                st.error(f"❌ Model '{model_code}' not found in sales data. Please check the model code.")
             else:
-                model_color_summary = recommendations.get("model_color_summary")
-                if model_color_summary is None:
-                    st.error("❌ Model+Color summary data not found. Please regenerate recommendations in Tab 5.")
-                else:
-                    model_color_summary_copy = model_color_summary.copy()
-                    model_data = model_color_summary_copy[model_color_summary_copy["MODEL"] == manual_model.upper()]
+                with st.spinner(f"Loading data for model {model_code}..."):  # type: ignore[arg-type]
+                    sku_summary = analyzer.aggregate_by_sku()
+                    sku_summary = analyzer.classify_sku_type(
+                        sku_summary,
+                        cv_basic=st.session_state.settings["cv_thresholds"]["basic"],
+                        cv_seasonal=st.session_state.settings["cv_thresholds"]["seasonal"]
+                    )
+                    sku_summary = analyzer.calculate_safety_stock_and_rop(
+                        sku_summary,
+                        seasonal_data,
+                        z_basic=st.session_state.settings["z_scores"]["basic"],
+                        z_regular=st.session_state.settings["z_scores"]["regular"],
+                        z_seasonal_in=st.session_state.settings["z_scores"]["seasonal_in"],
+                        z_seasonal_out=st.session_state.settings["z_scores"]["seasonal_out"],
+                        z_new=st.session_state.settings["z_scores"]["new"],
+                        lead_time_months=st.session_state.settings["lead_time"],
+                    )
+
+                    if stock_loaded and stock_df_sku_level is not None:
+                        stock_cols_manual: list[str] = ["SKU", STOCK]
+                        if "PRICE" in stock_df_sku_level.columns:
+                            stock_cols_manual.append("PRICE")
+                        sku_stock_manual = stock_df_sku_level[stock_cols_manual].copy()  # type: ignore[arg-type]
+                        sku_summary = sku_summary.merge(sku_stock_manual, on="SKU", how="left")
+                        sku_summary[STOCK] = sku_summary[STOCK].fillna(0)
+                        if "PRICE" in stock_cols_manual:
+                            sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
+                    else:
+                        if STOCK not in sku_summary.columns:
+                            sku_summary[STOCK] = 0
+                        if "PRICE" not in sku_summary.columns:
+                            sku_summary["PRICE"] = 0
+
+                    if use_forecast and forecast_df is not None:
+                        forecast_time = st.session_state.settings["lead_time"]
+                        forecast_start, forecast_end = SalesAnalyzer.calculate_forecast_date_range(forecast_time)
+                        forecast_window = forecast_df[
+                            (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
+                            ]
+                        forecast_agg = forecast_window.groupby("sku", as_index=False)["forecast"].sum()
+                        forecast_agg = forecast_agg.rename(columns={"sku": "SKU", "forecast": "FORECAST_LEADTIME"})
+                        sku_summary = sku_summary.merge(forecast_agg, on="SKU", how="left")
+                        sku_summary["FORECAST_LEADTIME"] = sku_summary["FORECAST_LEADTIME"].fillna(0)
+                    else:
+                        sku_summary["FORECAST_LEADTIME"] = 0
+
+                    sku_summary["MODEL"] = sku_summary["SKU"].astype(str).str[:5]
+                    sku_summary["COLOR"] = sku_summary["SKU"].astype(str).str[5:7]
+                    sku_summary["SIZE"] = sku_summary["SKU"].astype(str).str[7:9]
+                    sku_summary["DEFICIT"] = (sku_summary["ROP"] - sku_summary[STOCK]).clip(lower=0)
+
+                    model_data = sku_summary[sku_summary["MODEL"] == model_code]
 
                     if model_data.empty:
-                        st.error(
-                            f"❌ Model '{manual_model.upper()}' not found in Order Recommendations. Please generate recommendations first.")
+                        st.error(f"❌ No data found for model '{model_code}'")
                     else:
+                        colors = model_data["COLOR"].unique()
                         selected_items = []
-                        for _, row in model_data.iterrows():
-                            size_str = row.get(SIZE_QTY, "")
+
+                        for color in colors:
+                            color_data = model_data[model_data["COLOR"] == color]
                             size_quantities = {}
-                            if size_str and pd.notna(size_str):
-                                for item in str(size_str).split(", "):
-                                    if ":" in item:
-                                        size_code, qty = item.split(":")
-                                        size_quantities[size_code.strip()] = int(qty.strip())
 
-                            selected_items.append({
-                                "model": row["MODEL"],
-                                "color": row["COLOR"],
-                                "priority_score": float(row.get("PRIORITY", 0)),
-                                "deficit": int(row.get("DEFICIT", 0)),
-                                "forecast": int(row.get("FORECAST", 0)),
-                                "sizes": size_quantities,
-                            })
+                            for _, row in color_data.iterrows():
+                                size_code = row["SIZE"]
+                                forecast_qty = int(row.get("FORECAST_LEADTIME", 0) or 0)
+                                stock_qty = int(row.get(STOCK, 0) or 0)
+                                rop_value = row.get("ROP", 0)
+                                rop = 0 if pd.isna(rop_value) else int(rop_value)
+                                deficit = max(0, rop - stock_qty)
 
-                        st.session_state.selected_order_items = selected_items
-                        st.success(
-                            f"✅ Created order for model {manual_model.upper()} with {len(selected_items)} colors")
-                        st.rerun()
+                                order_qty = max(forecast_qty, deficit)
+                                if order_qty > 0:
+                                    size_quantities[size_code] = order_qty
+
+                            if size_quantities:
+                                avg_priority = color_data["PRIORITY"].mean() if "PRIORITY" in color_data.columns else 0
+                                total_deficit = int(
+                                    color_data["DEFICIT"].sum()) if "DEFICIT" in color_data.columns else 0
+                                total_forecast = int(color_data["FORECAST_LEADTIME"].sum())
+
+                                selected_items.append({
+                                    "model": model_code,
+                                    "color": color,
+                                    "priority_score": float(avg_priority),
+                                    "deficit": total_deficit,
+                                    "forecast": total_forecast,
+                                    "sizes": size_quantities,
+                                })
+
+                        if selected_items:
+                            st.session_state.selected_order_items = selected_items
+
+                            if "PRIORITY" not in model_data.columns:
+                                model_data["PRIORITY"] = 0
+
+                            required_cols = ["SKU", "MODEL", "COLOR", "SIZE", "PRIORITY", "DEFICIT",
+                                           "FORECAST_LEADTIME", STOCK, "ROP", "SS", "TYPE"]
+                            available_cols = [col for col in required_cols if col in model_data.columns]
+                            priority_skus = model_data[available_cols].copy()
+
+                            priority_skus["PRIORITY_SCORE"] = priority_skus["PRIORITY"]
+                            priority_skus["URGENT"] = (priority_skus[STOCK] == 0) & (priority_skus["FORECAST_LEADTIME"] > 0)
+
+                            model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_skus)
+
+                            st.session_state.recommendations_data = {
+                                "priority_skus": priority_skus,
+                                "model_color_summary": model_color_summary
+                            }
+
+                            st.success(
+                                f"✅ Created order for model {model_code} with {len(selected_items)} colors")
+                            st.rerun()
+                        else:
+                            st.warning(f"⚠️ No items with positive forecast or deficit found for model '{model_code}'")
 
     st.markdown("---")
 
