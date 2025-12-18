@@ -44,13 +44,71 @@ class FileSource(DataSource):
 
         return self.loader.load_stock_file(stock_file)
 
+    def load_stock_history(
+        self, start_date: datetime | None = None, end_date: datetime | None = None
+    ) -> pd.DataFrame:
+        stock_files = self.loader.find_stock_files()
+        if not stock_files:
+            return pd.DataFrame()
+
+        filtered_files = [
+            (path, date) for path, date in stock_files
+            if (start_date is None or date >= start_date)
+            and (end_date is None or date <= end_date)
+        ]
+
+        if not filtered_files:
+            return pd.DataFrame()
+
+        all_stock_dfs = []
+        for file_path, snapshot_date in filtered_files:
+            try:
+                df = self.loader.load_stock_file(file_path)
+                df["snapshot_date"] = snapshot_date
+                all_stock_dfs.append(df)
+            except Exception as e:
+                logger.warning("Failed to load stock file %s: %s", file_path, e)
+
+        if not all_stock_dfs:
+            return pd.DataFrame()
+
+        return pd.concat(all_stock_dfs, ignore_index=True)
+
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
+        if generated_date is not None:
+            return self._load_forecast_by_generated_date(generated_date)
+
         forecast_result = self.loader.get_latest_forecast_file()
         if forecast_result is None:
             return pd.DataFrame()
 
         forecast_file, _ = forecast_result
         return self.loader.load_forecast_file(forecast_file)
+
+    def _load_forecast_by_generated_date(
+        self, target_date: datetime, tolerance_days: int = 7
+    ) -> pd.DataFrame:
+        forecast_files = self.loader.find_forecast_files()
+        if not forecast_files:
+            return pd.DataFrame()
+
+        matching_files = [
+            (path, date) for path, date in forecast_files
+            if abs((date - target_date).days) <= tolerance_days
+        ]
+
+        if not matching_files:
+            logger.warning(
+                "No forecast found within %d days of %s", tolerance_days, target_date
+            )
+            return pd.DataFrame()
+
+        closest_file = min(matching_files, key=lambda x: abs((x[1] - target_date).days))
+        logger.info("Loading forecast from %s (target: %s)", closest_file[1], target_date)
+
+        df = self.loader.load_forecast_file(closest_file[0])
+        df["generated_date"] = closest_file[1]
+        return df
 
     def get_sku_statistics(
             self, entity_type: str = "sku", force_recompute: bool = False

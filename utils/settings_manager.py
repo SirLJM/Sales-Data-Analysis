@@ -46,6 +46,12 @@ DEFAULT_SETTINGS = {
         },
         "demand_cap": 100,
     },
+    "forecast_accuracy": {
+        "default_analysis_months": 3,
+        "forecast_lookback_months": 4,
+        "mape_threshold_good": 20.0,
+        "mape_threshold_acceptable": 40.0,
+    },
 }
 
 

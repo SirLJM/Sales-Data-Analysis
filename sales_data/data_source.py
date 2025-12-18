@@ -19,6 +19,12 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
+    def load_stock_history(
+        self, start_date: datetime | None = None, end_date: datetime | None = None
+    ) -> pd.DataFrame:
+        pass
+
+    @abstractmethod
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
         pass
 

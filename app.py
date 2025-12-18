@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ui import sidebar
+from ui import tab_forecast_accuracy
 from ui import tab_monthly_analysis
 from ui import tab_order_creation
 from ui import tab_order_recommendations
@@ -16,7 +17,7 @@ st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊",
 
 initialize_session_state()
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Sales & Inventory Analysis",
     "📦 Size Pattern Optimizer",
     "📅 Weekly Analysis",
@@ -24,6 +25,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "🎯 Order Recommendations",
     "📋 Order Creation",
     "📦 Order Tracking",
+    "🎯 Forecast Accuracy",
 ])
 
 sidebar_options = sidebar.render_sidebar()
@@ -54,3 +56,6 @@ with tab6:
 
 with tab7:
     tab_order_tracking.render()
+
+with tab8:
+    tab_forecast_accuracy.render(context)

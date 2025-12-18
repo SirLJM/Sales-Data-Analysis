@@ -126,6 +126,50 @@ class DatabaseSource(DataSource):
             logger.error("Failed to load stock data: %s", e)
             return pd.DataFrame()
 
+    def load_stock_history(
+        self, start_date: datetime | None = None, end_date: datetime | None = None
+    ) -> pd.DataFrame:
+        query = """
+                SELECT sku,
+                       product_name    as nazwa,
+                       net_price       as cena_netto,
+                       gross_price     as cena_brutto,
+                       total_stock     as stock,
+                       available_stock,
+                       1               as aktywny,
+                       snapshot_date
+                FROM stock_snapshots
+                WHERE is_active = TRUE
+                """
+
+        params = {}
+
+        if start_date is not None:
+            query += " AND snapshot_date >= :start_date"
+            params["start_date"] = (
+                start_date.date() if isinstance(start_date, datetime) else start_date
+            )
+
+        if end_date is not None:
+            query += " AND snapshot_date <= :end_date"
+            params["end_date"] = (
+                end_date.date() if isinstance(end_date, datetime) else end_date
+            )
+
+        query += " ORDER BY snapshot_date, sku"
+
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn, params=params)
+
+            if not df.empty and "snapshot_date" in df.columns:
+                df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+
+            return df
+        except Exception as e:
+            logger.error("Failed to load stock history: %s", e)
+            return pd.DataFrame()
+
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
 
         if generated_date is not None:
