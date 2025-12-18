@@ -1,20 +1,22 @@
 from __future__ import annotations
 
-import traceback
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
 from ui.constants import ColumnNames, Config, Icons
+from utils.logging_config import get_logger
+
+logger = get_logger("tab_order_tracking")
 
 
 def render() -> None:
     try:
         _render_content()
     except Exception as e:
+        logger.exception("Error in Order Tracking")
         st.error(f"{Icons.ERROR} Error in Order Tracking: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content() -> None:

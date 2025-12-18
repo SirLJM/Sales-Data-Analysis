@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import traceback
 from typing import Any
 
 import pandas as pd
@@ -8,6 +7,9 @@ import streamlit as st
 
 from ui.constants import ColumnNames, Icons
 from ui.shared.sku_utils import extract_model
+from utils.logging_config import get_logger
+
+logger = get_logger("display_helpers")
 
 
 def display_metrics_row(metrics: list[tuple[str, Any, str | None]]) -> None:
@@ -49,10 +51,10 @@ def display_optimization_metrics(result: dict) -> None:
     ])
 
 
-def display_error(message: str, show_traceback: bool = True) -> None:
+def display_error(message: str, log_exception: bool = True) -> None:
     st.error(f"{Icons.ERROR} {message}")
-    if show_traceback:
-        st.code(traceback.format_exc())
+    if log_exception:
+        logger.exception(message)
 
 
 def display_success(message: str) -> None:

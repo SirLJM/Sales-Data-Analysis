@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import traceback
-
 import streamlit as st
 
 from ui.constants import AlgorithmModes, Config, Icons, SessionKeys
 from ui.shared.display_helpers import display_optimization_metrics
 from ui.shared.session_manager import get_settings
 from ui.shared.styles import PATTERN_SECTION_STYLE
+from utils.logging_config import get_logger
 from utils.pattern_optimizer import (
     Pattern,
     PatternSet,
@@ -17,13 +16,15 @@ from utils.pattern_optimizer import (
     save_pattern_sets,
 )
 
+logger = get_logger("tab_pattern_optimizer")
+
 
 def render() -> None:
     try:
         _render_content()
     except Exception as e:
+        logger.exception("Error in Pattern Optimizer")
         st.error(f"{Icons.ERROR} Error in Pattern Optimizer: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content() -> None:

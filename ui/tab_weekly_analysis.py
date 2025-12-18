@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import traceback
 from datetime import datetime
 
 import pandas as pd
@@ -12,14 +11,17 @@ from ui.shared.data_loaders import load_data, load_stock
 from ui.shared.display_helpers import display_star_product
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_color, extract_model
+from utils.logging_config import get_logger
+
+logger = get_logger("tab_weekly_analysis")
 
 
 def render(context: dict) -> None:
     try:
         _render_content(context)
     except Exception as e:
+        logger.exception("Error in Weekly Analysis")
         st.error(f"{Icons.ERROR} Error in Weekly Analysis: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content(context: dict) -> None:
@@ -82,8 +84,8 @@ def _render_top_sales_report(df: pd.DataFrame, stock_df: pd.DataFrame | None) ->
                 st.info("No falling products found")
 
     except Exception as e:
+        logger.exception("Error generating TOP SALES REPORT")
         st.error(f"{Icons.ERROR} Error generating TOP SALES REPORT: {e}")
-        st.code(traceback.format_exc())
 
 
 def _render_top_by_type(df: pd.DataFrame, stock_df: pd.DataFrame | None) -> None:
@@ -108,8 +110,8 @@ def _render_top_by_type(df: pd.DataFrame, stock_df: pd.DataFrame | None) -> None
         _display_top_5(col_basic, "Basic", Icons.BASIC, top_products["top_by_type"]["basic"], stock_df)
 
     except Exception as e:
+        logger.exception("Error generating Top 5 by Type")
         st.error(f"{Icons.ERROR} Error generating Top 5 by Type: {e}")
-        st.code(traceback.format_exc())
 
 
 def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, stock_df: pd.DataFrame | None) -> None:
@@ -164,8 +166,8 @@ def _render_new_products_monitoring(df: pd.DataFrame, stock_df: pd.DataFrame | N
             _display_zero_sales_warning(weekly_df)
 
         except Exception as e:
+            logger.exception("Error generating weekly analysis")
             st.error(f"{Icons.ERROR} Error generating weekly analysis: {e}")
-            st.code(traceback.format_exc())
 
 
 def _display_weekly_metrics(weekly_df: pd.DataFrame) -> None:

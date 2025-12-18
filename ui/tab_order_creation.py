@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import traceback
 from datetime import datetime
 
 import pandas as pd
@@ -12,17 +11,20 @@ from ui.shared.data_loaders import load_color_aliases, load_model_metadata, load
 from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
 from ui.shared.sku_utils import extract_color, extract_model, extract_size
 from ui.shared.styles import ROTATED_TABLE_STYLE
+from utils.logging_config import get_logger
 from utils.pattern_optimizer import PatternSet, get_min_order_per_pattern, load_pattern_sets
 
 TOTAL_PATTERNS = "Total Patterns"
+
+logger = get_logger("tab_order_creation")
 
 
 def render(context: dict) -> None:
     try:
         _render_content(context)
     except Exception as e:
+        logger.exception("Error in Order Creation")
         st.error(f"{Icons.ERROR} Error in Order Creation: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content(context: dict) -> None:
@@ -123,9 +125,9 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
                 stock_cols.append("PRICE")
             sku_stock = stock_df_sku_level[stock_cols].copy()
             sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-            sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].fillna(0)
+            sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].fillna(0).infer_objects(copy=False)
             if "PRICE" in stock_cols:
-                sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0)
+                sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0).infer_objects(copy=False)
         else:
             _add_default_stock_columns(sku_summary)
     else:
@@ -673,5 +675,5 @@ def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_resul
             st.error(f"{Icons.ERROR} Failed to save order")
 
     except Exception as e:
+        logger.exception("Error saving order")
         st.error(f"{Icons.ERROR} Error saving order: {e}")
-        st.code(traceback.format_exc())

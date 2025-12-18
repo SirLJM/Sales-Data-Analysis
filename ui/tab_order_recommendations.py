@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import traceback
-
 import pandas as pd
 import streamlit as st
 
@@ -9,14 +7,17 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.shared.data_loaders import load_color_aliases, load_model_metadata
 from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
+from utils.logging_config import get_logger
+
+logger = get_logger("tab_order_recommendations")
 
 
 def render(context: dict) -> None:
     try:
         _render_content(context)
     except Exception as e:
+        logger.exception("Error in Order Recommendations")
         st.error(f"{Icons.ERROR} Error in Order Recommendations: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content(context: dict) -> None:
@@ -285,8 +286,8 @@ def _generate_recommendations(context: dict) -> None:
                 f"{Icons.SUCCESS} Analyzed {len(recommendations['priority_skus'])} SKUs - scroll down to view results")
 
         except Exception as e:
+            logger.exception("Error generating recommendations")
             st.error(f"Error generating recommendations: {e}")
-            st.code(traceback.format_exc())
 
 
 def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: pd.DataFrame | None,

@@ -1,13 +1,19 @@
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+from utils.logging_config import get_logger
+
 from .data_source import DataSource
 from .file_source import FileSource
 
 SETTINGS_FILE = "settings.json"
+
+logger = get_logger("data_source_factory")
 
 
 class DataSourceFactory:
@@ -35,10 +41,10 @@ class DataSourceFactory:
         db_source = DatabaseSource(connection_string, pool_size, pool_recycle)
 
         if db_source.is_available():
-            print("[OK] Using database data source")
+            logger.info("Using database data source")
             return db_source
         else:
-            print("[WARN] Database unavailable, falling back to file mode")
+            logger.warning("Database unavailable, falling back to file mode")
             return FileSource()
 
     @staticmethod
@@ -46,15 +52,15 @@ class DataSourceFactory:
         connection_string = DataSourceFactory._get_connection_string(config)
 
         if not connection_string:
-            print("[WARN] No database connection string found, using file mode")
+            logger.warning("No database connection string found, using file mode")
             return FileSource()
 
         try:
             return DataSourceFactory._create_database_source(connection_string, config)
         except Exception as e:
-            print(f"[ERROR] Database connection failed: {e}")
+            logger.error("Database connection failed: %s", e)
             if config.get("fallback_to_file", True):
-                print("[INFO] Falling back to file mode")
+                logger.info("Falling back to file mode")
                 return FileSource()
             else:
                 raise
@@ -69,7 +75,7 @@ class DataSourceFactory:
         if mode == "database":
             return DataSourceFactory._handle_database_mode(config)
 
-        print("[INFO] Using file data source")
+        logger.info("Using file data source")
         return FileSource()
 
     @staticmethod
@@ -108,4 +114,4 @@ class DataSourceFactory:
         with open(config_path, "w") as f:
             json.dump(settings, f, indent=2)
 
-        print(f"[OK] Data source mode switched to: {mode}")
+        logger.info("Data source mode switched to: %s", mode)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 
@@ -20,7 +19,7 @@ ANY_XLSX = "*.xlsx"
 ANY_CSV = "*.csv"
 
 
-def load_size_aliases_from_excel(sizes_file_path: Path) -> Dict[str, str]:
+def load_size_aliases_from_excel(sizes_file_path: Path) -> dict[str, str]:
     df = pd.read_excel(sizes_file_path)
     df = df[["size", "metric"]].copy()
     df.columns = ["size_code", "size_alias"]
@@ -482,7 +481,7 @@ class SalesDataLoader:
             print(f"  Warning: Could not load model metadata: {e}")
             return None
 
-    def load_color_aliases(self) -> Dict[str, str]:
+    def load_color_aliases(self) -> dict[str, str]:
         file_path = self.find_model_metadata_file()
 
         if file_path is None:

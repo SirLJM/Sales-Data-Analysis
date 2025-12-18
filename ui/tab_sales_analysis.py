@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import traceback
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,14 +11,17 @@ from ui.shared.data_loaders import load_data, load_forecast, load_stock
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
 from ui.shared.styles import DATAFRAME_STYLE, SIDEBAR_STYLE
+from utils.logging_config import get_logger
+
+logger = get_logger("tab_sales_analysis")
 
 
 def render(context: dict) -> None:
     try:
         _render_content(context)
     except Exception as e:
+        logger.exception("Error in Sales Analysis")
         st.error(f"{Icons.ERROR} Error in Sales Analysis: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content(context: dict) -> None:

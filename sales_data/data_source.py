@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict
 
 import pandas as pd
 
@@ -44,11 +45,11 @@ class DataSource(ABC):
         pass
 
     @abstractmethod
-    def load_size_aliases(self) -> Dict[str, str]:
+    def load_size_aliases(self) -> dict[str, str]:
         pass
 
     @abstractmethod
-    def load_color_aliases(self) -> Dict[str, str]:
+    def load_color_aliases(self) -> dict[str, str]:
         pass
 
     @abstractmethod

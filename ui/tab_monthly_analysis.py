@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import traceback
-
 import pandas as pd
 import streamlit as st
 
@@ -9,14 +7,17 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
 from ui.shared.data_loaders import load_category_mappings, load_data
 from ui.shared.session_manager import get_session_value, set_session_value
+from utils.logging_config import get_logger
+
+logger = get_logger("tab_monthly_analysis")
 
 
 def render() -> None:
     try:
         _render_content()
     except Exception as e:
+        logger.exception("Error in Monthly Analysis")
         st.error(f"{Icons.ERROR} Error in Monthly Analysis: {str(e)}")
-        st.code(traceback.format_exc())
 
 
 def _render_content() -> None:

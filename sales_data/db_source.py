@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import hashlib
 import json
 from datetime import datetime
-from typing import Dict
 
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import QueuePool
 
-from sales_data.data_source import DataSource
+from utils.logging_config import get_logger
+
+from .data_source import DataSource
+
+logger = get_logger("db_source")
 
 
 class DatabaseSource(DataSource):
@@ -31,7 +36,7 @@ class DatabaseSource(DataSource):
                 conn.execute(text("SELECT 1"))
             return True
         except Exception as e:
-            print(f"Database connection failed: {e}")
+            logger.error("Database connection failed: %s", e)
             return False
 
     def load_sales_data(
@@ -118,7 +123,7 @@ class DatabaseSource(DataSource):
 
             return df
         except Exception as e:
-            print(f"[ERROR] Failed to load stock data: {e}")
+            logger.error("Failed to load stock data: %s", e)
             return pd.DataFrame()
 
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
@@ -163,7 +168,7 @@ class DatabaseSource(DataSource):
 
             return df
         except Exception as e:
-            print(f"[ERROR] Failed to load forecast data: {e}")
+            logger.error("Failed to load forecast data: %s", e)
             return pd.DataFrame()
 
     def get_sku_statistics(
@@ -211,7 +216,7 @@ class DatabaseSource(DataSource):
         if not df.empty and "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
-                print("Settings changed, recomputing statistics...")
+                logger.info("Settings changed, recomputing statistics...")
                 return self._compute_sku_statistics(entity_type)
 
         return df
@@ -262,7 +267,7 @@ class DatabaseSource(DataSource):
         if not df.empty and "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
-                print("Settings changed, recomputing priorities...")
+                logger.info("Settings changed, recomputing priorities...")
                 return self._compute_order_priorities(top_n)
 
         return df
@@ -290,11 +295,12 @@ class DatabaseSource(DataSource):
             df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
         if df.empty and not force_recompute:
-            print(
-                f"[WARN] Materialized view mv_valid_monthly_aggs is empty for {entity_type}, falling back to file computation")
+            logger.warning(
+                "Materialized view mv_valid_monthly_aggs is empty for %s, falling back to file computation",
+                entity_type)
             return self._compute_monthly_aggregations(entity_type)
 
-        print(f"[OK] Using database monthly aggregations for {entity_type}: {len(df)} rows")
+        logger.debug("Using database monthly aggregations for %s: %d rows", entity_type, len(df))
         return df
 
     @staticmethod
@@ -351,7 +357,7 @@ class DatabaseSource(DataSource):
                 df = pd.read_sql_query(text(query), conn)
 
             if df.empty:
-                print("[WARN] No model metadata found in database")
+                logger.warning("No model metadata found in database")
                 return None
 
             df.columns = [
@@ -362,16 +368,15 @@ class DatabaseSource(DataSource):
                 "GRAMATURA",
             ]
 
-            print("\nLoading model metadata from database")
-            print(f"  Loaded {len(df):,} models with metadata")
+            logger.debug("Loaded %d models with metadata from database", len(df))
 
             return df
 
         except Exception as e:
-            print(f"[ERROR] Failed to load model metadata from database: {e}")
+            logger.error("Failed to load model metadata from database: %s", e)
             return None
 
-    def load_size_aliases(self) -> Dict[str, str]:
+    def load_size_aliases(self) -> dict[str, str]:
         query = """
                 SELECT size_code, size_alias
                 FROM size_aliases
@@ -383,16 +388,16 @@ class DatabaseSource(DataSource):
                 df = pd.read_sql_query(text(query), conn)
 
             if df.empty:
-                print("[WARN] No size aliases found in database")
+                logger.warning("No size aliases found in database")
                 return {}
 
             return dict(zip(df["size_code"], df["size_alias"]))
 
         except Exception as e:
-            print(f"[ERROR] Failed to load size aliases from database: {e}")
+            logger.error("Failed to load size aliases from database: %s", e)
             return {}
 
-    def load_color_aliases(self) -> Dict[str, str]:
+    def load_color_aliases(self) -> dict[str, str]:
         query = """
                 SELECT color_code, color_name
                 FROM color_aliases
@@ -404,13 +409,13 @@ class DatabaseSource(DataSource):
                 df = pd.read_sql_query(text(query), conn)
 
             if df.empty:
-                print("[WARN] No color aliases found in database")
+                logger.warning("No color aliases found in database")
                 return {}
 
             return dict(zip(df["color_code"], df["color_name"]))
 
         except Exception as e:
-            print(f"[ERROR] Failed to load color aliases from database: {e}")
+            logger.error("Failed to load color aliases from database: %s", e)
             return {}
 
     def load_category_mappings(self) -> pd.DataFrame:
@@ -430,7 +435,7 @@ class DatabaseSource(DataSource):
                 df = pd.read_sql_query(text(query), conn)
 
             if df.empty:
-                print("[WARN] No category mappings found in database")
+                logger.warning("No category mappings found in database")
                 return pd.DataFrame()
 
             df.columns = ["Model", "Grupa", "Podgrupa", "Kategoria", "Nazwa"]

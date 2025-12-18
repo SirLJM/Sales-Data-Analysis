@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
+
+from utils.logging_config import get_logger
 
 from .analyzer import SalesAnalyzer
 from .data_source import DataSource
 from .loader import SalesDataLoader, load_size_aliases_from_excel
+
+logger = get_logger("file_source")
 
 
 class FileSource(DataSource):
@@ -123,18 +128,18 @@ class FileSource(DataSource):
     def load_model_metadata(self) -> pd.DataFrame | None:
         return self.loader.load_model_metadata()
 
-    def load_size_aliases(self) -> Dict[str, str]:
+    def load_size_aliases(self) -> dict[str, str]:
         try:
             sizes_file = Path(__file__).parent.parent / "data" / "sizes.xlsx"
             if sizes_file.exists():
                 return load_size_aliases_from_excel(sizes_file)
-            print(f"[WARN] Size aliases file not found: {sizes_file}")
+            logger.warning("Size aliases file not found: %s", sizes_file)
             return {}
         except Exception as e:
-            print(f"[ERROR] Failed to load size aliases from file: {e}")
+            logger.error("Failed to load size aliases from file: %s", e)
             return {}
 
-    def load_color_aliases(self) -> Dict[str, str]:
+    def load_color_aliases(self) -> dict[str, str]:
         return self.loader.load_color_aliases()
 
     def load_category_mappings(self) -> pd.DataFrame:
