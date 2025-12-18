@@ -15,6 +15,7 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 - [Configuration Parameters](#configuration-parameters)
 - [Data Requirements](#data-requirements)
 - [Architecture](#architecture)
+- [Business Guide](#business-guide)
 
 ---
 
@@ -537,12 +538,10 @@ Located at `src/settings.json`, all parameters can be adjusted in the UI sidebar
   "lead_time": 1.36,
   "forecast_time": 5,
   "sync_forecast_with_lead_time": false,
-
   "cv_thresholds": {
     "basic": 0.6,
     "seasonal": 1.0
   },
-
   "z_scores": {
     "basic": 2.5,
     "regular": 1.645,
@@ -550,14 +549,11 @@ Located at `src/settings.json`, all parameters can be adjusted in the UI sidebar
     "seasonal_out": 1.5,
     "new": 1.8
   },
-
   "new_product_threshold_months": 12,
-
   "optimizer": {
     "min_order_per_pattern": 5,
     "algorithm_mode": "greedy_overshoot"
   },
-
   "order_recommendations": {
     "stockout_risk": {
       "zero_stock_penalty": 100,
@@ -744,6 +740,208 @@ Switch modes by setting `DATA_SOURCE_MODE` in `.env`:
 DATA_SOURCE_MODE=file      # Use Excel/CSV files
 DATA_SOURCE_MODE=database  # Use PostgreSQL
 ```
+
+---
+
+## Business Guide
+
+This section explains how to use Stock Monitor 3 from a business perspective, without requiring technical knowledge.
+
+### Understanding Your Inventory Health
+
+#### What the Numbers Mean
+
+**Safety Stock (SS)** - Your insurance policy against running out of stock
+
+- Think of it as a buffer that protects you from unexpected demand spikes
+- Higher SS = fewer stockouts but more money tied up in inventory
+- Lower SS = less capital required but higher risk of losing sales
+
+**Reorder Point (ROP)** - Your "order now" alarm
+
+- When inventory drops to this level, it's time to place an order
+- Accounts for both your lead time AND safety buffer
+- Items below ROP need immediate attention
+
+**Coefficient of Variation (CV)** - How predictable is demand?
+
+- Low CV (under 0.6): Very predictable, steady sellers - your "bread and butter"
+- Medium CV (0.6–1.0): Somewhat variable - normal products
+- High CV (over 1.0): Highly unpredictable - often seasonal items
+
+### Product Categories Explained
+
+| Category     | What It Means                  | Business Implication                          |
+|--------------|--------------------------------|-----------------------------------------------|
+| **Basic**    | Steady, predictable sellers    | Stock consistently; low risk of overstock     |
+| **Regular**  | Normal variability             | Standard inventory management                 |
+| **Seasonal** | Sales spike in certain periods | Build stock before season; reduce after       |
+| **New**      | Less than 12 months of history | Monitor closely; limited data for forecasting |
+
+### Daily Workflow Recommendations
+
+#### Morning Check (5 minutes)
+
+1. Open **Tab 1: Sales Analysis**
+2. Filter by "Below ROP" to see critical items
+3. Note any urgent items (zero stock with demand)
+
+#### Weekly Planning (30 minutes)
+
+1. **Tab 5: Order Recommendations** - Generate top 20–30 priorities
+2. Review the priority list - highest scores need action first
+3. Check "Urgent" flagged items (zero stock situations)
+4. **Tab 6: Order Creation** - Create orders for selected items
+
+#### Monthly Review (1 hour)
+
+1. **Tab 3: Weekly Analysis** - Identify rising and falling products
+2. **Tab 4: Monthly Analysis** - Check category performance vs. last year
+3. Review and adjust settings if needed (lead time, Z-scores)
+
+### Reading the Priority Score
+
+The priority score (0–150+) tells you what to order first:
+
+| Score Range  | Urgency  | Action                                 |
+|--------------|----------|----------------------------------------|
+| **80+**      | Critical | Order immediately - high stockout risk |
+| **50-80**    | High     | Order this week                        |
+| **30-50**    | Medium   | Plan for next order cycle              |
+| **Under 30** | Low      | Monitor, no immediate action           |
+
+**What drives high scores:**
+
+- Zero stock with expected demand = highest urgency
+- Stock below ROP = moderate urgency
+- High forecast demand = increasing score
+- Seasonal/New products = boosted priority (time-sensitive)
+
+### Making Smarter Ordering Decisions
+
+#### When to Increase Safety Stock
+
+- Products with frequent stockouts
+- High-margin items where lost sales hurt
+- Seasonal items entering their peak period
+- Unreliable suppliers with variable lead times
+
+#### When to Decrease Safety Stock
+
+- Slow-moving items tying up capital
+- Products being phased out
+- Items with very stable, predictable demand
+- Seasonal items leaving their peak period
+
+#### Understanding the Trade-offs
+
+| More Safety Stock    | Less Safety Stock     |
+|----------------------|-----------------------|
+| Fewer stockouts      | More stockouts        |
+| Higher service level | Lower service level   |
+| More capital tied up | Less capital required |
+| Risk of obsolescence | Risk of lost sales    |
+
+### Seasonal Planning
+
+The system automatically detects seasonal patterns, but here's how to use that information:
+
+**Before Peak Season:**
+
+1. Check which items are classified as "Seasonal"
+2. Note their in-season months (visible in detailed analysis)
+3. Build inventory 1–2 months before the season starts
+4. Use a higher Z-score (in-season setting) during peak
+
+**After Peak Season:**
+
+1. System automatically switches to out-of-season Z-score
+2. Lower safety stock reduces capital tied up
+3. Monitor for excess inventory that may need clearance
+
+### Pattern Optimizer for Production
+
+If you manufacture or order in cutting patterns:
+
+**Setting Up Patterns:**
+
+1. Create a pattern set for each product type (e.g., "Adults", "Kids")
+2. Define the sizes available (XL, L, M, S, XS)
+3. Add patterns that match your production capabilities
+
+**Reading Optimization Results:**
+
+- **Allocation**: How many of each pattern to produce
+- **Excess**: Overproduction per size (minimize this)
+- **All Covered**: Green = all sizes fulfilled; Red = some sizes short
+
+**Tip:** Name pattern sets to match model codes for automatic matching during order creation.
+
+### Key Performance Indicators to Watch
+
+| KPI               | What to Monitor            | Target     |
+|-------------------|----------------------------|------------|
+| Items Below ROP   | Count of critical items    | Minimize   |
+| Stockout Rate     | Items at zero with demand  | Under 5%   |
+| Overstock Items   | Stock > 6 months of demand | Under 10%  |
+| Forecast Accuracy | Actual vs predicted demand | Within 20% |
+
+### Common Business Scenarios
+
+#### Scenario 1: New Product Launch
+
+1. System classifies as "New" (higher priority multiplier)
+2. Limited history means forecasts are less reliable
+3. **Action:** Monitor weekly, adjust orders based on actual sales
+
+#### Scenario 2: Seasonal Spike Coming
+
+1. Check which items have upcoming "in-season" months
+2. Review current stock vs. increased ROP (in-season calculation)
+3. **Action:** Pre-order to build inventory before the rush
+
+#### Scenario 3: Slow-Moving Inventory
+
+1. Filter Tab 1 by "Overstock" to find excess
+2. Check if items are Basic (predictable) or declining
+3. **Action:** Consider promotions, reduce future orders
+
+#### Scenario 4: Supplier Delay
+
+1. Increase lead time setting temporarily
+2. System recalculates higher SS and ROP
+3. **Action:** Order earlier to compensate for longer delivery
+
+### Adjusting Settings for Your Business
+
+**Conservative Approach** (fewer stockouts, more inventory):
+
+- Higher Z-scores (2.0+ for basic, 2.5+ for seasonal)
+- Higher stockout risk weight (0.6–0.7)
+- Lower demand cap
+
+**Aggressive Approach** (less inventory, accept some stockouts):
+
+- Lower Z-scores (1.5 for basic, 1.8 for seasonal)
+- Higher demand forecast weight (0.3–0.4)
+- Higher demand cap
+
+**Balanced Approach** (default):
+
+- Standard Z-scores as configured
+- Equal weight distribution
+- Suitable for most businesses
+
+### Quick Reference Card
+
+| I Want To...              | Go To... | Do This...                                    |
+|---------------------------|----------|-----------------------------------------------|
+| See what needs ordering   | Tab 5    | Generate recommendations, sort by priority    |
+| Check a specific product  | Tab 1    | Search by SKU/Model, view projection chart    |
+| Find trending products    | Tab 3    | Check Rising/Falling Stars                    |
+| Compare to last year      | Tab 4    | Review category YoY performance               |
+| Create a production order | Tab 6    | Select items from Tab 5 or enter model        |
+| Set up cutting patterns   | Tab 2    | Create pattern set, define sizes and patterns |
 
 ---
 
