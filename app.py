@@ -19,13 +19,13 @@ initialize_session_state()
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Sales & Inventory Analysis",
-    "📦 Size Pattern Optimizer",
+    "✂️ Size Pattern Optimizer",
     "📅 Weekly Analysis",
     "📆 Monthly Analysis",
     "🎯 Order Recommendations",
     "📋 Order Creation",
-    "📦 Order Tracking",
-    "🎯 Forecast Accuracy",
+    "🚚 Order Tracking",
+    "📈 Forecast Accuracy",
 ])
 
 sidebar_options = sidebar.render_sidebar()

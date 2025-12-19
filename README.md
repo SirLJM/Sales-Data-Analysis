@@ -21,15 +21,17 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 
 ## Features Overview
 
-| Feature                   | Description                                                           |
-|---------------------------|-----------------------------------------------------------------------|
-| **Sales Analysis**        | Statistical analysis with Safety Stock and Reorder Point calculations |
-| **Stock Projection**      | Visual forecasting of when items will reach critical levels           |
-| **Pattern Optimizer**     | Cutting pattern optimization for manufacturing                        |
-| **Order Recommendations** | Priority-based ordering system with intelligent scoring               |
-| **Weekly Analysis**       | Week-over-week sales comparison and trending                          |
-| **Monthly Analysis**      | Year-over-year category performance                                   |
-| **Order Creation**        | Transform recommendations into production orders                      |
+| Feature                   | Description                                                                |
+|---------------------------|----------------------------------------------------------------------------|
+| **Sales Analysis**        | Statistical analysis with Safety Stock and Reorder Point calculations      |
+| **Stock Projection**      | Visual forecasting of when items will reach critical levels                |
+| **Pattern Optimizer**     | Cutting pattern optimization for manufacturing                             |
+| **Order Recommendations** | Priority-based ordering with facility filters and active order filtering   |
+| **Weekly Analysis**       | Week-over-week sales comparison and trending                               |
+| **Monthly Analysis**      | Year-over-year category performance                                        |
+| **Order Creation**        | Transform recommendations into production orders with manual entry support |
+| **Order Tracking**        | Track, manage, and archive production orders with delivery countdown       |
+| **Forecast Accuracy**     | Monitor forecast quality vs actual sales with accuracy metrics             |
 
 ---
 
@@ -198,18 +200,31 @@ Year-over-year category-level performance comparison.
 1. Analyzes all SKUs considering current stock, ROP, forecast demand, and product type
 2. Calculates a priority score for each item
 3. Aggregates by MODEL+COLOR for ordering
-4. Shows top N recommendations with size breakdowns
+4. Automatically filters out models with active orders
+5. Shows top N recommendations with size breakdowns
+
+**Facility Filters:**
+
+- **Include Facilities**: Show only items from selected production facilities
+- **Exclude Facilities**: Hide items from selected facilities (takes precedence over include)
+- Filters use model metadata (SZWALNIA GŁÓWNA) to match production facility
 
 **Output Table:**
 | Column | Description |
 |--------|-------------|
 | Model | 5-character model code |
 | Color | 2-character color code |
+| Color Name | Human-readable color name from aliases |
 | Priority | Calculated priority score (higher = more urgent) |
 | Deficit | How much below ROP |
 | Forecast | Predicted demand during lead time |
 | Sizes | Size breakdown (e.g., "08:15, 12:25, 13:30") |
-| Urgent | Flag for zero-stock items with demand |
+| Szwalnia | Production facility (if metadata available) |
+
+**Active Order Filtering:**
+
+Items are automatically excluded from recommendations if they have an active order in the Order Tracking tab. This
+prevents duplicate ordering.
 
 ---
 
@@ -217,10 +232,15 @@ Year-over-year category-level performance comparison.
 
 Transform recommendations into actionable production orders.
 
+**Two Entry Methods:**
+
+1. **From Recommendations**: Select items in Tab 5 using checkboxes, then navigate to this tab
+2. **Manual Entry**: Enter any model code directly in the "Manual Order Creation" section
+
 **Workflow:**
 
-1. Select items in Tab 5 using checkboxes
-2. Click "Create Order" or enter model code manually
+1. Enter model code manually OR select items from Tab 5
+2. Click "Create Order"
 3. System automatically:
     - Loads pattern set matching the model name
     - Displays production metadata (facility, material, weight)
@@ -232,9 +252,88 @@ Transform recommendations into actionable production orders.
 
 - Pattern allocation (e.g., "Adult:2, Kids:3")
 - Total patterns and excess production
-- SS, ROP, forecast, deficit values
-- Monthly sales history
+- Stock, SS, ROP, forecast, deficit, coverage gap values
+- Monthly sales history (last 4 months)
 - Size breakdown with aliases (e.g., "XS:10, S:15, M:20")
+
+**Size × Color Production Table:**
+
+A visual matrix showing pattern allocations across all colors for the model, with sizes in rows and colors in columns.
+
+**Actions:**
+
+- **Save to Database**: Stores order with full JSON data
+- **Download CSV**: Export order summary as CSV file
+- **Cancel**: Clear selections and start over
+
+---
+
+### Tab 7: Order Tracking
+
+Track and manage created production orders with delivery countdown.
+
+**Features:**
+
+- **Manual Order Entry**: Add orders directly by entering model code and date
+- **Active Orders List**: View all orders with status and days elapsed
+- **Delivery Countdown**: Shows days until expected delivery (default threshold: 41 days)
+- **Archive Function**: Move completed orders to the archive
+
+**Order Status Indicators:**
+
+- **Ready for Delivery**: Order has exceeded delivery threshold days
+- **X days left**: Countdown to expected delivery
+
+**Table Columns:**
+| Column | Description |
+|--------|-------------|
+| Order ID | Unique order identifier (ORD_MODEL_TIMESTAMP) |
+| Model | 5-character model code |
+| Order Date | When the order was placed |
+| Days Elapsed | Days since order placement |
+| Status | Delivery status with countdown |
+| Archive | Checkbox to archive completed orders |
+
+**Workflow:**
+
+1. Orders appear automatically when saved from Tab 6
+2. Track delivery progress via days elapsed
+3. When the order arrives (>= threshold days), the status shows "Ready for Delivery"
+4. Archive orders to remove from an active list
+
+---
+
+### Tab 8: Forecast Accuracy
+
+Monitor forecast quality by comparing historical forecasts against actual sales.
+
+**Parameters:**
+
+- **Analysis Period**: Date range to analyze (minimum = lead time)
+- **Forecast Lookback**: Months before analysis starts to find a forecast file
+- **View Level**: SKU or Model level accuracy
+
+**Metrics:**
+
+| Metric             | Description                                                                   |
+|--------------------|-------------------------------------------------------------------------------|
+| MAPE               | Mean Absolute Percentage Error (lower is better)                              |
+| BIAS               | Forecast direction: positive = over-forecasting, negative = under-forecasting |
+| Missed Opportunity | Forecast quantity during stockout periods                                     |
+| Volume Accuracy    | How close total forecast was to total actual sales                            |
+
+**Color-Coded Thresholds:**
+
+- Green (< 20% MAPE): Good accuracy
+- Yellow (20-40% MAPE): Acceptable accuracy
+- Red (> 40% MAPE): Poor accuracy
+
+**Views:**
+
+- **Accuracy by Item**: Detailed table with search and sorting
+- **Accuracy by Product Type**: Bar chart comparing MAPE across product types
+- **Trend Chart**: Weekly MAPE trend over time
+- **Item Detail View**: Deep dive into individual SKU/Model accuracy
 
 ---
 
@@ -535,6 +634,13 @@ Located at `src/settings.json`, all parameters can be adjusted in the UI sidebar
 
 ```json
 {
+  "data_source": {
+    "mode": "database",
+    "fallback_to_file": true,
+    "pool_size": 10,
+    "pool_recycle": 3600,
+    "echo_sql": false
+  },
   "lead_time": 1.36,
   "forecast_time": 5,
   "sync_forecast_with_lead_time": false,
@@ -550,6 +656,9 @@ Located at `src/settings.json`, all parameters can be adjusted in the UI sidebar
     "new": 1.8
   },
   "new_product_threshold_months": 12,
+  "weekly_analysis": {
+    "lookback_days": 60
+  },
   "optimizer": {
     "min_order_per_pattern": 5,
     "algorithm_mode": "greedy_overshoot"
@@ -577,16 +686,20 @@ Located at `src/settings.json`, all parameters can be adjusted in the UI sidebar
 
 ### Parameter Descriptions
 
-| Parameter                      | Default | Description                                |
-|--------------------------------|---------|--------------------------------------------|
-| `lead_time`                    | 1.36    | Months between order placement and receipt |
-| `forecast_time`                | 5       | Months to look ahead for demand            |
-| `cv_thresholds.basic`          | 0.6     | CV below this = basic product              |
-| `cv_thresholds.seasonal`       | 1.0     | CV above this = seasonal product           |
-| `z_scores.*`                   | varies  | Service level factors by product type      |
-| `new_product_threshold_months` | 12      | Products younger than this are "new"       |
-| `min_order_per_pattern`        | 5       | Minimum units per pattern order            |
-| `demand_cap`                   | 100     | Maximum demand value for scoring           |
+| Parameter                       | Default          | Description                                      |
+|---------------------------------|------------------|--------------------------------------------------|
+| `data_source.mode`              | database         | Data source mode: "file" or "database"           |
+| `data_source.fallback_to_file`  | true             | Fall back to file mode if database unavailable   |
+| `lead_time`                     | 1.36             | Months between order placement and receipt       |
+| `forecast_time`                 | 5                | Months to look ahead for demand                  |
+| `cv_thresholds.basic`           | 0.6              | CV below this = basic product                    |
+| `cv_thresholds.seasonal`        | 1.0              | CV above this = seasonal product                 |
+| `z_scores.*`                    | varies           | Service level factors by product type            |
+| `new_product_threshold_months`  | 12               | Products younger than this are "new"             |
+| `weekly_analysis.lookback_days` | 60               | Days to look back for new products monitor       |
+| `min_order_per_pattern`         | 5                | Minimum units per pattern order                  |
+| `algorithm_mode`                | greedy_overshoot | Optimizer algorithm: greedy_overshoot or classic |
+| `demand_cap`                    | 100              | Maximum demand value for scoring                 |
 
 ---
 
@@ -659,33 +772,51 @@ src/
 │   ├── file_source.py          # File-based implementation
 │   ├── db_source.py            # Database implementation
 │   ├── data_source_factory.py  # Factory pattern
+│   ├── loader.py               # File I/O operations
+│   ├── validator.py            # Data schema validation
 │   └── analysis/               # Analysis modules
 │       ├── aggregation.py      # SKU/Model aggregation
 │       ├── classification.py   # Product type classification
+│       ├── forecast_accuracy.py # Forecast accuracy metrics
 │       ├── inventory_metrics.py # SS, ROP calculations
 │       ├── order_priority.py   # Priority scoring
+│       ├── pattern_helpers.py  # Pattern optimization helpers
 │       ├── projection.py       # Stock projection
 │       ├── reports.py          # Weekly/monthly analysis
 │       └── utils.py            # Shared utilities
 │
 ├── ui/                         # Presentation layer
+│   ├── sidebar.py              # Sidebar configuration
+│   ├── constants.py            # UI constants and config
 │   ├── tab_sales_analysis.py
 │   ├── tab_pattern_optimizer.py
 │   ├── tab_weekly_analysis.py
 │   ├── tab_monthly_analysis.py
 │   ├── tab_order_recommendations.py
 │   ├── tab_order_creation.py
+│   ├── tab_order_tracking.py
+│   ├── tab_forecast_accuracy.py
 │   └── shared/                 # Shared UI components
+│       ├── data_loaders.py     # Cached data loading
+│       ├── display_helpers.py  # Display utilities
+│       ├── forecast_accuracy_loader.py
+│       ├── session_manager.py  # Session state management
+│       ├── sku_utils.py        # SKU parsing utilities
+│       └── styles.py           # CSS styles
 │
 ├── utils/                      # Utilities
 │   ├── pattern_optimizer.py    # Pattern optimization
 │   ├── settings_manager.py     # Configuration management
-│   ├── order_manager.py        # Order persistence
-│   └── order_repository.py     # Repository pattern
+│   ├── order_manager.py        # Order persistence facade
+│   ├── order_repository.py     # Repository pattern (abstract)
+│   ├── order_repository_factory.py # Repository factory
+│   ├── import_utils.py         # Import helpers
+│   └── logging_config.py       # Logging setup
 │
 └── migration/                  # Database setup (optional)
     ├── setup_database.py
     ├── import_all.py
+    ├── populate_cache.py
     └── sql/                    # SQL scripts
 ```
 
@@ -785,19 +916,23 @@ This section explains how to use Stock Monitor 3 from a business perspective, wi
 1. Open **Tab 1: Sales Analysis**
 2. Filter by "Below ROP" to see critical items
 3. Note any urgent items (zero stock with demand)
+4. Check **Tab 7: Order Tracking** for orders ready for delivery
 
 #### Weekly Planning (30 minutes)
 
 1. **Tab 5: Order Recommendations** - Generate top 20–30 priorities
-2. Review the priority list - highest scores need action first
-3. Check "Urgent" flagged items (zero stock situations)
-4. **Tab 6: Order Creation** - Create orders for selected items
+2. Use facility filters to focus on specific production facilities
+3. Review the priority list - highest scores need action first
+4. Select items and navigate to **Tab 6: Order Creation**
+5. Review pattern allocations and save orders
+6. Archive delivered orders in **Tab 7**
 
 #### Monthly Review (1 hour)
 
 1. **Tab 3: Weekly Analysis** - Identify rising and falling products
 2. **Tab 4: Monthly Analysis** - Check category performance vs. last year
-3. Review and adjust settings if needed (lead time, Z-scores)
+3. **Tab 8: Forecast Accuracy** - Review forecast quality (target < 20% MAPE)
+4. Review and adjust settings if needed (lead time, Z-scores)
 
 ### Reading the Priority Score
 
@@ -879,12 +1014,15 @@ If you manufacture or order in cutting patterns:
 
 ### Key Performance Indicators to Watch
 
-| KPI               | What to Monitor            | Target     |
-|-------------------|----------------------------|------------|
-| Items Below ROP   | Count of critical items    | Minimize   |
-| Stockout Rate     | Items at zero with demand  | Under 5%   |
-| Overstock Items   | Stock > 6 months of demand | Under 10%  |
-| Forecast Accuracy | Actual vs predicted demand | Within 20% |
+| KPI             | What to Monitor                 | Target    | Where to Check |
+|-----------------|---------------------------------|-----------|----------------|
+| Items Below ROP | Count of critical items         | Minimize  | Tab 1 filter   |
+| Stockout Rate   | Items at zero with demand       | Under 5%  | Tab 5 urgent   |
+| Overstock Items | Stock > 6 months of demand      | Under 10% | Tab 1 filter   |
+| Forecast MAPE   | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
+| Forecast Bias   | Over/under forecasting tendency | Near 0%   | Tab 8          |
+| Active Orders   | Orders in production            | Track     | Tab 7          |
+| Orders Ready    | Orders past delivery threshold  | Process   | Tab 7          |
 
 ### Common Business Scenarios
 
@@ -912,6 +1050,22 @@ If you manufacture or order in cutting patterns:
 2. System recalculates higher SS and ROP
 3. **Action:** Order earlier to compensate for longer delivery
 
+#### Scenario 5: Poor Forecast Accuracy
+
+1. Open **Tab 8: Forecast Accuracy**
+2. Generate a report for the last 90 days
+3. Check MAPE by product type - identify problem areas
+4. Review BIAS - positive = over-forecasting, negative = under-forecasting
+5. **Action:** Adjust forecasting model or safety stock for affected items
+
+#### Scenario 6: Order Delivery Tracking
+
+1. Open **Tab 7: Order Tracking**
+2. Review orders with "Ready for Delivery" status
+3. Verify delivery arrival and update stock
+4. Archive processed orders to keep the list clean
+5. **Action:** Check Tab 5 - archived models will reappear in recommendations if needed
+
 ### Adjusting Settings for Your Business
 
 **Conservative Approach** (fewer stockouts, more inventory):
@@ -934,14 +1088,19 @@ If you manufacture or order in cutting patterns:
 
 ### Quick Reference Card
 
-| I Want To...              | Go To... | Do This...                                    |
-|---------------------------|----------|-----------------------------------------------|
-| See what needs ordering   | Tab 5    | Generate recommendations, sort by priority    |
-| Check a specific product  | Tab 1    | Search by SKU/Model, view projection chart    |
-| Find trending products    | Tab 3    | Check Rising/Falling Stars                    |
-| Compare to last year      | Tab 4    | Review category YoY performance               |
-| Create a production order | Tab 6    | Select items from Tab 5 or enter model        |
-| Set up cutting patterns   | Tab 2    | Create pattern set, define sizes and patterns |
+| I Want To...                  | Go To... | Do This...                                      |
+|-------------------------------|----------|-------------------------------------------------|
+| See what needs ordering       | Tab 5    | Generate recommendations, use facility filters  |
+| Check a specific product      | Tab 1    | Search by SKU/Model, view projection chart      |
+| Find trending products        | Tab 3    | Check Rising/Falling Stars                      |
+| Compare to last year          | Tab 4    | Review category YoY performance                 |
+| Create a production order     | Tab 6    | Select items from Tab 5 or enter model manually |
+| Set up cutting patterns       | Tab 2    | Create pattern set, define sizes and patterns   |
+| Track order delivery          | Tab 7    | View active orders, check days elapsed          |
+| Add manual order              | Tab 7    | Enter model code and date                       |
+| Archive completed order       | Tab 7    | Check archive checkbox, click Archive button    |
+| Check forecast quality        | Tab 8    | Set date range, generate accuracy report        |
+| Filter by production facility | Tab 5    | Use Include/Exclude facility filters            |
 
 ---
 
@@ -951,8 +1110,12 @@ If you manufacture or order in cutting patterns:
 2. **Tune Z-scores**: Higher Z-scores = more safety stock = fewer stockouts but more capital
 3. **Watch CV Thresholds**: Adjust based on your product mix characteristics
 4. **Review Seasonal Products**: Verify seasonal items are correctly classified
-5. **Pattern Sets**: Create pattern sets that match your actual manufacturing capabilities
+5. **Pattern Sets**: Create pattern sets that match your actual manufacturing capabilities (name = model code)
 6. **Weekly Review**: Check order recommendations weekly for optimal inventory
+7. **Use Facility Filters**: Focus on one production facility at a time for efficient ordering
+8. **Track Orders**: Keep Tab 7 updated - archive delivered orders to prevent duplicate recommendations
+9. **Monitor Forecast Accuracy**: Check Tab 8 monthly - target MAPE under 20%
+10. **Manual Orders**: Use Tab 7 for orders placed outside the system to maintain accurate filtering
 
 ---
 
@@ -967,6 +1130,12 @@ If you manufacture or order in cutting patterns:
 
 - Both stock AND forecast data must be loaded
 - Check that SKUs in the forecast match SKUs in sales data
+- Check if facility filters are excluding all items
+
+**Items missing from recommendations:**
+
+- Model may have an active order in Tab 7 - archive it if delivered
+- Check facility filters - model may be excluded
 
 **Pattern optimization fails:**
 
@@ -977,6 +1146,17 @@ If you manufacture or order in cutting patterns:
 
 - Adjust weights in the sidebar (should sum to ~1.0)
 - Review type multipliers for your business context
+
+**Forecast accuracy shows no data:**
+
+- Ensure an analysis period is at least as long as the lead time
+- Check that a forecast file exists for the lookback period
+- Verify SKUs match between sales and forecast data
+
+**Order tracking issues:**
+
+- Orders only filter recommendations by model code
+- Archive orders when items are received to re-enable recommendations
 
 ---
 
