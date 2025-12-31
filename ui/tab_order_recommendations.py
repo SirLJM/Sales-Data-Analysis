@@ -183,7 +183,9 @@ def _render_facility_filters() -> None:
         st.info("Model metadata not available. Showing all items.")
         return
 
-    unique_facilities = sorted(model_metadata_df[ColumnNames.SZWALNIA_G].dropna().unique().tolist())
+    unique_facilities = sorted(
+        model_metadata_df[ColumnNames.SZWALNIA_G].dropna().str.strip().unique().tolist()
+    )
     col_include, col_exclude = st.columns(2)
 
     with col_include:
@@ -388,6 +390,8 @@ def _apply_facility_filters(recommendations: dict) -> dict:
         right_on="Model",
         how="left",
     )
+
+    priority_skus[ColumnNames.SZWALNIA_G] = priority_skus[ColumnNames.SZWALNIA_G].str.strip()
 
     if include_filter:
         priority_skus = priority_skus[priority_skus[ColumnNames.SZWALNIA_G].isin(include_filter)]

@@ -27,7 +27,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📋 Weekly Analysis",
     "📆 Monthly Analysis",
     "🎯 Order Recommendations",
-    "📋 Order Creation",
+    "🛒 Order Creation",
     "🚚 Order Tracking",
     "📈 Forecast Accuracy",
 ])

@@ -4,7 +4,7 @@ import streamlit as st
 
 from ui.constants import AlgorithmModes, Config, Icons, SessionKeys
 from ui.shared.display_helpers import display_optimization_metrics
-from ui.shared.session_manager import get_settings
+from ui.shared.session_manager import get_data_source, get_settings
 from ui.shared.styles import PATTERN_SECTION_STYLE
 from utils.logging_config import get_logger
 from utils.pattern_optimizer import (
@@ -99,19 +99,135 @@ def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) 
             quantities[size] = st.number_input(size, min_value=0, value=0, step=1, key=f"qty_{size}")
 
     st.markdown('<div class="section-header">Sales History (last 4 months)</div>', unsafe_allow_html=True)
-    st.caption("Enter total sales per size. Sizes with < 3 sales will be excluded from order.")
+    st.caption("Enter total sales per size or load automatically. Sizes with < 3 sales will be excluded.")
+
+    sales_history = _render_sales_history_section(sizes, active_set)
+
+    return quantities, sales_history
+
+
+def _render_sales_history_section(sizes: list[str], active_set: PatternSet | None) -> dict[str, int]:
+    col_model, col_load = st.columns([3, 1])
+
+    with col_model:
+        model_code = st.text_input(
+            "Model", placeholder="e.g., CH031", key="sales_history_model"
+        )
+    with col_load:
+        st.write("")
+        st.write("")
+        load_clicked = st.button("Load", key="load_sales_history")
+
+    if load_clicked and model_code:
+        loaded_history = _load_sales_history_for_model(model_code.upper(), active_set)
+        if loaded_history:
+            st.session_state["loaded_sales_history"] = loaded_history
+            st.success(f"Loaded sales history for {model_code.upper()} (all colors)")
+        else:
+            st.warning(f"No sales data found for {model_code.upper()}")
+
+    loaded = st.session_state.get("loaded_sales_history", {})
 
     sales_history = {}
+    num_cols = min(len(sizes), 5)
     cols = st.columns(num_cols)
 
     for i, size in enumerate(sizes):
         col_idx = i % num_cols
         with cols[col_idx]:
+            default_value = loaded.get(size, 0)
             sales_history[size] = st.number_input(
-                f"{size} sales", min_value=0, value=0, step=1, key=f"sales_{size}"
+                f"{size} sales", min_value=0, value=default_value, step=1, key=f"sales_{size}"
             )
 
-    return quantities, sales_history
+    return sales_history
+
+
+def _load_sales_history_for_model(model: str, active_set: PatternSet | None) -> dict[str, int]:
+    try:
+        data_source = get_data_source()
+        monthly_agg = data_source.get_monthly_aggregations()
+
+        if monthly_agg is None or monthly_agg.empty:
+            return {}
+
+        size_aliases = _build_size_aliases(active_set)
+
+        history = _calculate_model_size_sales_history(monthly_agg, model, size_aliases, months=4)
+
+        return history
+    except Exception as e:
+        logger.warning("Failed to load sales history: %s", e)
+        return {}
+
+
+def _calculate_model_size_sales_history(
+    monthly_agg, model: str, size_aliases: dict[str, str] | None, months: int = 4
+) -> dict[str, int]:
+    df = monthly_agg.copy()
+
+    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    if sku_col is None:
+        return {}
+
+    df["_model"] = df[sku_col].astype(str).str[:5]
+    df["_size"] = df[sku_col].astype(str).str[7:9]
+
+    filtered = df[df["_model"] == model]
+    if filtered.empty:
+        return {}
+
+    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+
+    if month_col is None or qty_col is None:
+        return {}
+
+    sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
+    recent = filtered[filtered[month_col].isin(sorted_months)]
+
+    size_sales = recent.groupby("_size")[qty_col].sum().to_dict()
+
+    if size_aliases:
+        aliased = {}
+        for size_code, sales in size_sales.items():
+            alias = size_aliases.get(str(size_code), str(size_code))
+            aliased[alias] = aliased.get(alias, 0) + int(sales)
+        return aliased
+
+    return {str(k): int(v) for k, v in size_sales.items()}
+
+
+def _find_column(df, candidates: list[str]) -> str | None:
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
+def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
+    if not active_set:
+        return {}
+
+    try:
+        data_source = get_data_source()
+        all_aliases = data_source.load_size_aliases()
+
+        if not all_aliases:
+            return {}
+
+        reverse_aliases = {v: k for k, v in all_aliases.items()}
+        size_aliases = {}
+
+        for size_name in active_set.size_names:
+            if size_name in reverse_aliases:
+                size_code = reverse_aliases[size_name]
+                size_aliases[size_code] = size_name
+
+        return size_aliases
+    except Exception as e:
+        logger.warning("Failed to build size aliases: %s", e)
+        return {}
 
 
 def _render_pattern_sets_section() -> None:

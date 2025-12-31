@@ -47,11 +47,11 @@ def import_model_metadata(connection_string: str) -> None:
 
         batch_data = [
             {
-                "model": str(row["Model"]),
-                "primary_production": str(row["SZWALNIA GŁÓWNA"]) if pd.notna(row["SZWALNIA GŁÓWNA"]) else "",
-                "secondary_production": str(row["SZWALNIA DRUGA"]) if pd.notna(row["SZWALNIA DRUGA"]) else "",
-                "material_type": str(row["RODZAJ MATERIAŁU"]) if pd.notna(row["RODZAJ MATERIAŁU"]) else "",
-                "material_weight": str(row["GRAMATURA"]) if pd.notna(row["GRAMATURA"]) else "",
+                "model": str(row["Model"]).strip(),
+                "primary_production": str(row["SZWALNIA GŁÓWNA"]).strip() if pd.notna(row["SZWALNIA GŁÓWNA"]) else "",
+                "secondary_production": str(row["SZWALNIA DRUGA"]).strip() if pd.notna(row["SZWALNIA DRUGA"]) else "",
+                "material_type": str(row["RODZAJ MATERIAŁU"]).strip() if pd.notna(row["RODZAJ MATERIAŁU"]) else "",
+                "material_weight": str(row["GRAMATURA"]).strip() if pd.notna(row["GRAMATURA"]) else "",
             }
             for row in df.to_dict('records')
         ]
