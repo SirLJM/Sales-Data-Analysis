@@ -68,3 +68,27 @@ def load_color_aliases() -> dict[str, str]:
 def load_size_aliases_reverse() -> dict[str, str]:
     aliases = load_size_aliases()
     return {v: k for k, v in aliases.items()}
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_unique_facilities() -> list[str]:
+    metadata = load_model_metadata()
+    if metadata is None or metadata.empty:
+        return []
+    col_name = "SZWALNIA GŁÓWNA"
+    if col_name not in metadata.columns:
+        return []
+    facilities = metadata[col_name].dropna().unique().tolist()
+    return [f for f in facilities if f]
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_unique_categories() -> list[str]:
+    mappings = load_category_mappings()
+    if mappings is None or mappings.empty:
+        return []
+    col_name = "kategoria"
+    if col_name not in mappings.columns:
+        return []
+    categories = mappings[col_name].dropna().unique().tolist()
+    return [c for c in categories if c]

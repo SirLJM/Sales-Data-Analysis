@@ -60,6 +60,10 @@ def calculate_last_two_years_avg_sales(data: pd.DataFrame, by_model: bool = Fals
     two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
     df_last_2_years = df[df["data"] >= two_years_ago].copy()
 
+    if df_last_2_years.empty:
+        col_name = "MODEL" if by_model else "SKU"
+        return pd.DataFrame(columns=[col_name, "LAST_2_YEARS_AVG"])
+
     df_last_2_years["year_month"] = df_last_2_years["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
     if by_model:

@@ -44,6 +44,58 @@ def calculate_size_priorities(
     return normalized.to_dict()
 
 
+def calculate_size_sales_history(
+    monthly_agg: pd.DataFrame,
+    model: str,
+    color: str,
+    size_aliases: dict[str, str] | None = None,
+    months: int = 4,
+) -> dict[str, int]:
+    if monthly_agg is None or monthly_agg.empty:
+        return {}
+
+    df = monthly_agg.copy()
+
+    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    if sku_col is None:
+        return {}
+
+    df["_model"] = df[sku_col].astype(str).str[:5]
+    df["_color"] = df[sku_col].astype(str).str[5:7]
+    df["_size"] = df[sku_col].astype(str).str[7:9]
+
+    filtered = df[(df["_model"] == model) & (df["_color"] == color)]
+    if filtered.empty:
+        return {}
+
+    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+
+    if month_col is None or qty_col is None:
+        return {}
+
+    sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
+    recent = filtered[filtered[month_col].isin(sorted_months)]
+
+    size_sales = recent.groupby("_size")[qty_col].sum().to_dict()
+
+    if size_aliases:
+        aliased = {}
+        for size_code, sales in size_sales.items():
+            alias = size_aliases.get(str(size_code), str(size_code))
+            aliased[alias] = aliased.get(alias, 0) + int(sales)
+        return aliased
+
+    return {str(k): int(v) for k, v in size_sales.items()}
+
+
+def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    for col in candidates:
+        if col in df.columns:
+            return col
+    return None
+
+
 def optimize_pattern_with_aliases(
     priority_skus: pd.DataFrame,
     model: str,
@@ -51,7 +103,8 @@ def optimize_pattern_with_aliases(
     pattern_set,
     size_aliases: dict[str, str],
     min_per_pattern: int,
-    algorithm_mode: str = "greedy_overshoot"
+    algorithm_mode: str = "greedy_overshoot",
+    size_sales_history: dict[str, int] | None = None,
 ) -> dict:
     from utils.pattern_optimizer import optimize_patterns
 
@@ -79,7 +132,8 @@ def optimize_pattern_with_aliases(
         pattern_set.patterns,
         min_per_pattern,
         algorithm_mode,
-        size_priorities
+        size_priorities,
+        size_sales_history,
     )
 
     return result

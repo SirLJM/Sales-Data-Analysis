@@ -9,6 +9,8 @@ from ui.shared.data_loaders import (
     load_size_aliases,
     load_size_aliases_reverse,
     load_stock,
+    load_unique_categories,
+    load_unique_facilities,
 )
 from ui.shared.display_helpers import (
     create_download_button,

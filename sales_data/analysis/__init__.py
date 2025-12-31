@@ -19,7 +19,11 @@ from .order_priority import (
     generate_order_recommendations,
     get_size_quantities_for_model_color,
 )
-from .pattern_helpers import calculate_size_priorities, optimize_pattern_with_aliases
+from .pattern_helpers import (
+    calculate_size_priorities,
+    calculate_size_sales_history,
+    optimize_pattern_with_aliases,
+)
 from .projection import (
     calculate_model_stock_projection,
     calculate_stock_projection,
@@ -51,6 +55,7 @@ __all__ = [
     "calculate_order_priority",
     "calculate_safety_stock_and_rop",
     "calculate_size_priorities",
+    "calculate_size_sales_history",
     "calculate_stock_projection",
     "calculate_top_products_by_type",
     "calculate_top_sales_report",

@@ -91,6 +91,40 @@ def save_pattern_sets(pattern_sets: list[PatternSet], file_path: str | None = No
         json.dump([ps.to_dict() for ps in pattern_sets], f, indent=2)
 
 
+MIN_SALES_THRESHOLD = 3
+
+
+def filter_low_sales_sizes(
+    quantities: dict[str, int],
+    size_sales_history: dict[str, int] | None,
+) -> tuple[dict[str, int], list[str]]:
+    if size_sales_history is None:
+        return quantities, []
+
+    excluded_sizes = []
+    filtered_quantities = {}
+
+    for size, qty in quantities.items():
+        sales = size_sales_history.get(size, 0)
+        if sales < MIN_SALES_THRESHOLD:
+            excluded_sizes.append(size)
+        else:
+            filtered_quantities[size] = qty
+
+    return filtered_quantities, excluded_sizes
+
+
+def calculate_size_priorities(size_sales_history: dict[str, int] | None) -> dict[str, float] | None:
+    if size_sales_history is None or not size_sales_history:
+        return None
+
+    total_sales = sum(size_sales_history.values())
+    if total_sales == 0:
+        return None
+
+    return {size: sales / total_sales for size, sales in size_sales_history.items()}
+
+
 def _get_empty_result(quantities: dict[str, int]) -> dict:
     return {
         "allocation": {},
@@ -162,20 +196,35 @@ def optimize_patterns(
     min_per_pattern: int = get_min_order_per_pattern(),
     algorithm_mode: str = "greedy_overshoot",
     size_priorities: dict[str, float] | None = None,
+    size_sales_history: dict[str, int] | None = None,
 ) -> dict:
     if not patterns or not any(quantities.values()):
         return _get_empty_result(quantities)
 
-    best_solution = _find_best_solution(quantities, patterns, min_per_pattern, size_priorities)
+    filtered_quantities, excluded_sizes = filter_low_sales_sizes(quantities, size_sales_history)
+
+    if not any(filtered_quantities.values()):
+        result = _get_empty_result(quantities)
+        result["excluded_sizes"] = excluded_sizes
+        return result
+
+    if size_priorities is None and size_sales_history is not None:
+        size_priorities = calculate_size_priorities(size_sales_history)
+
+    best_solution = _find_best_solution(filtered_quantities, patterns, min_per_pattern, size_priorities)
     if not best_solution:
         if algorithm_mode == "greedy_classic":
-            best_solution = greedy_classic(quantities, patterns, min_per_pattern, size_priorities)
+            best_solution = greedy_classic(filtered_quantities, patterns, min_per_pattern, size_priorities)
         else:
-            best_solution = greedy_overshoot(quantities, patterns, min_per_pattern, size_priorities)
+            best_solution = greedy_overshoot(filtered_quantities, patterns, min_per_pattern, size_priorities)
 
-    produced = _calculate_production(best_solution, patterns, quantities)
-    excess = {size: produced[size] - quantities[size] for size in quantities}
+    produced = _calculate_production(best_solution, patterns, filtered_quantities)
+    excess = {size: produced[size] - filtered_quantities[size] for size in filtered_quantities}
     min_violations = _find_violations(best_solution, patterns, min_per_pattern)
+
+    for size in excluded_sizes:
+        produced[size] = 0
+        excess[size] = 0
 
     return {
         "allocation": best_solution,
@@ -183,9 +232,10 @@ def optimize_patterns(
         "excess": excess,
         "total_patterns": sum(best_solution.values()),
         "total_excess": sum(excess.values()),
-        "all_covered": all(produced[size] >= quantities[size] for size in quantities),
+        "all_covered": all(produced.get(size, 0) >= filtered_quantities.get(size, 0) for size in filtered_quantities),
         "min_order_violations": min_violations,
         "algorithm_used": algorithm_mode,
+        "excluded_sizes": excluded_sizes,
     }
 
 

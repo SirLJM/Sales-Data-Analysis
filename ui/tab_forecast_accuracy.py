@@ -334,7 +334,7 @@ def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:
     st.write(f"Showing {len(display_df)} of {len(accuracy_df)} items")
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         height=min(Config.DATAFRAME_HEIGHT, len(display_df) * 35 + 38),
     )
 
@@ -369,12 +369,12 @@ def _render_type_comparison(type_summary: pd.DataFrame) -> None:
         fig.add_hline(y=20, line_dash="dash", line_color="green", annotation_text="Good (<20%)")
         fig.add_hline(y=40, line_dash="dash", line_color="orange", annotation_text="Acceptable (<40%)")
         fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col2:
         st.dataframe(
             type_summary[["TYPE", "COUNT", "MAPE", "BIAS", "MISSED_OPPORTUNITY"]],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -403,7 +403,7 @@ def _render_trend_chart(trend_df: pd.DataFrame) -> None:
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _render_detail_view(data: dict, params: dict) -> None:

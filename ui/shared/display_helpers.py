@@ -6,7 +6,6 @@ import pandas as pd
 import streamlit as st
 
 from ui.constants import ColumnNames, Icons
-from ui.shared.sku_utils import extract_model
 from utils.logging_config import get_logger
 
 logger = get_logger("display_helpers")
@@ -19,20 +18,10 @@ def display_metrics_row(metrics: list[tuple[str, Any, str | None]]) -> None:
             st.metric(label, value, delta=delta)
 
 
-def display_star_product(star: dict, stock_df: pd.DataFrame | None, is_rising: bool) -> None:
+def display_star_product(star: dict, is_rising: bool) -> None:
     product_model = star["model"]
 
-    desc = ""
-    if stock_df is not None:
-        stock_copy = stock_df.copy()
-        stock_copy["model"] = extract_model(stock_copy["sku"])
-        model_desc = stock_copy[stock_copy["model"] == product_model]
-        if not model_desc.empty:
-            desc = model_desc.iloc[0]["nazwa"]
-
     st.markdown(f"**Model:** {product_model}")
-    if desc:
-        st.caption(desc)
 
     sign = "+" if is_rising else ""
     display_metrics_row([
@@ -76,10 +65,10 @@ def format_number(value: int | float, decimals: int = 0) -> str:
 
 
 def create_download_button(
-    data: pd.DataFrame,
-    filename: str,
-    label: str = "Download CSV",
-    key: str | None = None,
+        data: pd.DataFrame,
+        filename: str,
+        label: str = "Download CSV",
+        key: str | None = None,
 ) -> None:
     csv = data.to_csv(index=False).encode("utf-8")
     st.download_button(

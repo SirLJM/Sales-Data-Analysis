@@ -16,6 +16,7 @@ from sales_data.analysis import (
     calculate_order_priority,
     calculate_safety_stock_and_rop,
     calculate_size_priorities,
+    calculate_size_sales_history,
     calculate_stock_projection,
     calculate_top_products_by_type,
     calculate_top_sales_report,
@@ -211,6 +212,16 @@ class SalesAnalyzer:
         return calculate_size_priorities(sales_df, model, size_aliases)
 
     @staticmethod
+    def calculate_size_sales_history(
+            monthly_agg: pd.DataFrame,
+            model: str,
+            color: str,
+            size_aliases: dict[str, str] | None = None,
+            months: int = 4,
+    ) -> dict[str, int]:
+        return calculate_size_sales_history(monthly_agg, model, color, size_aliases, months)
+
+    @staticmethod
     def optimize_pattern_with_aliases(
             priority_skus: pd.DataFrame,
             model: str,
@@ -218,10 +229,11 @@ class SalesAnalyzer:
             pattern_set,
             size_aliases: dict[str, str],
             min_per_pattern: int,
-            algorithm_mode: str = "greedy_overshoot"
+            algorithm_mode: str = "greedy_overshoot",
+            size_sales_history: dict[str, int] | None = None,
     ) -> dict:
         return optimize_pattern_with_aliases(
-            priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode
+            priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode, size_sales_history
         )
 
     @staticmethod

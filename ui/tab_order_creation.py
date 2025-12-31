@@ -97,8 +97,12 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
     seasonal_data = context["seasonal_data"]
     stock_df = context.get("stock_df")
     forecast_df = context.get("forecast_df")
-    use_stock = context.get("use_stock", False)
-    use_forecast = context.get("use_forecast", False)
+
+    if stock_df is None or (hasattr(stock_df, 'empty') and stock_df.empty):
+        stock_df = _load_stock_data()
+
+    if forecast_df is None or (hasattr(forecast_df, 'empty') and forecast_df.empty):
+        forecast_df = _load_forecast_data()
 
     sku_summary = analyzer.aggregate_by_sku()
     sku_summary = analyzer.classify_sku_type(
@@ -117,28 +121,116 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         lead_time_months=settings["lead_time"],
     )
 
-    if use_stock and stock_df is not None:
-        stock_df_sku_level = _prepare_stock_df(stock_df)
-        if stock_df_sku_level is not None:
-            stock_cols = ["SKU", ColumnNames.STOCK]
-            if "PRICE" in stock_df_sku_level.columns:
-                stock_cols.append("PRICE")
-            sku_stock = stock_df_sku_level[stock_cols].copy()
-            sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-            sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].fillna(0).infer_objects(copy=False)
-            if "PRICE" in stock_cols:
-                sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0).infer_objects(copy=False)
-        else:
-            _add_default_stock_columns(sku_summary)
-    else:
-        _add_default_stock_columns(sku_summary)
-
-    if use_forecast and forecast_df is not None:
-        sku_summary = _add_forecast_data(sku_summary, forecast_df, settings["lead_time"])
-    else:
-        sku_summary["FORECAST_LEADTIME"] = 0
+    sku_summary = _merge_stock_data(sku_summary, stock_df)
+    sku_summary = _merge_forecast_data(sku_summary, forecast_df, settings["lead_time"])
+    sku_summary = _calculate_priority(sku_summary, settings)
 
     return sku_summary
+
+
+def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) -> pd.DataFrame:
+    if stock_df is None or stock_df.empty:
+        _add_default_stock_columns(sku_summary)
+        return sku_summary
+
+    stock_df_sku_level = _prepare_stock_df(stock_df)
+    if stock_df_sku_level is None or ColumnNames.STOCK not in stock_df_sku_level.columns:
+        _add_default_stock_columns(sku_summary)
+        return sku_summary
+
+    stock_cols = ["SKU", ColumnNames.STOCK]
+    if "PRICE" in stock_df_sku_level.columns:
+        stock_cols.append("PRICE")
+
+    sku_stock = stock_df_sku_level[stock_cols].copy()
+    sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
+    sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].fillna(0).infer_objects(copy=False)
+
+    if "PRICE" in stock_cols:
+        sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0).infer_objects(copy=False)
+
+    return sku_summary
+
+
+def _merge_forecast_data(
+    sku_summary: pd.DataFrame, forecast_df: pd.DataFrame | None, lead_time: float
+) -> pd.DataFrame:
+    if forecast_df is None or forecast_df.empty:
+        sku_summary["FORECAST_LEADTIME"] = 0
+        return sku_summary
+
+    return _add_forecast_data(sku_summary, forecast_df, lead_time)
+
+
+def _calculate_priority(sku_summary: pd.DataFrame, settings: dict) -> pd.DataFrame:
+    if "FORECAST_LEADTIME" not in sku_summary.columns:
+        sku_summary["PRIORITY_SCORE"] = 0
+        return sku_summary
+
+    df = sku_summary.copy()
+    priority_settings = settings.get("order_recommendations", {})
+
+    stockout_cfg = priority_settings.get("stockout_risk", {})
+    zero_stock_penalty = stockout_cfg.get("zero_stock_penalty", 100)
+    below_rop_max = stockout_cfg.get("below_rop_max_penalty", 80)
+
+    weights = priority_settings.get("priority_weights", {})
+    weight_stockout = weights.get("stockout_risk", 0.5)
+    weight_revenue = weights.get("revenue_impact", 0.3)
+    weight_demand = weights.get("demand_forecast", 0.2)
+
+    demand_cap = priority_settings.get("demand_cap", 100)
+    type_multipliers = priority_settings.get("type_multipliers", {})
+
+    df["STOCKOUT_RISK"] = 0.0
+    zero_stock_mask = (df["STOCK"] == 0) & (df["FORECAST_LEADTIME"] > 0)
+    df.loc[zero_stock_mask, "STOCKOUT_RISK"] = zero_stock_penalty
+
+    below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
+    df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
+        (df.loc[below_rop_mask, "ROP"] - df.loc[below_rop_mask, "STOCK"])
+        / df.loc[below_rop_mask, "ROP"].replace(0, 1)
+        * below_rop_max
+    )
+
+    if "PRICE" in df.columns:
+        df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
+        max_revenue = df["REVENUE_AT_RISK"].max()
+        df["REVENUE_IMPACT"] = df["REVENUE_AT_RISK"] / max_revenue * 100 if max_revenue > 0 else 0
+    else:
+        df["REVENUE_IMPACT"] = 0
+
+    df["DEMAND_SCORE"] = df["FORECAST_LEADTIME"].clip(upper=demand_cap)
+
+    df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_multipliers).fillna(1.0)
+
+    df["PRIORITY_SCORE"] = (
+        df["STOCKOUT_RISK"] * weight_stockout
+        + df["REVENUE_IMPACT"] * weight_revenue
+        + df["DEMAND_SCORE"] * weight_demand
+    ) * df["TYPE_MULTIPLIER"]
+
+    return df
+
+
+@st.cache_data(ttl=600)
+def _load_stock_data() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.load_stock_data()
+    except Exception as e:
+        logger.warning("Could not load stock data: %s", e)
+        return None
+
+
+@st.cache_data(ttl=600)
+def _load_forecast_data() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.load_forecast_data()
+    except Exception as e:
+        logger.warning("Could not load forecast data: %s", e)
+        return None
 
 
 def _prepare_stock_df(stock_df: pd.DataFrame) -> pd.DataFrame | None:
@@ -148,10 +240,12 @@ def _prepare_stock_df(stock_df: pd.DataFrame) -> pd.DataFrame | None:
     stock_copy = stock_df.copy()
     if "sku" in stock_copy.columns:
         stock_copy = stock_copy.rename(columns={"sku": "SKU"})
-    if "available_stock" in stock_copy.columns:
-        stock_copy[ColumnNames.STOCK] = stock_copy["available_stock"]
-    elif "stock" in stock_copy.columns:
-        stock_copy[ColumnNames.STOCK] = stock_copy["stock"]
+
+    if ColumnNames.STOCK not in stock_copy.columns:
+        if "available_stock" in stock_copy.columns:
+            stock_copy[ColumnNames.STOCK] = stock_copy["available_stock"]
+        elif "stock" in stock_copy.columns:
+            stock_copy[ColumnNames.STOCK] = stock_copy["stock"]
 
     if "cena_netto" in stock_copy.columns:
         stock_copy["PRICE"] = stock_copy["cena_netto"]
@@ -208,7 +302,7 @@ def _build_size_quantities(color_data: pd.DataFrame) -> dict[str, int]:
 
 
 def _create_color_item(color_data: pd.DataFrame, model_code: str, color: str, size_quantities: dict) -> dict:
-    avg_priority = color_data["PRIORITY"].mean() if "PRIORITY" in color_data.columns else 0
+    avg_priority = color_data["PRIORITY_SCORE"].mean() if "PRIORITY_SCORE" in color_data.columns else 0
     total_deficit = int(color_data["DEFICIT"].sum()) if "DEFICIT" in color_data.columns else 0
     total_forecast = int(color_data["FORECAST_LEADTIME"].sum())
     return {
@@ -235,18 +329,18 @@ def _build_selected_items(model_data: pd.DataFrame, model_code: str) -> list[dic
 def _save_order_to_session(selected_items: list[dict], model_data: pd.DataFrame) -> None:
     set_session_value(SessionKeys.SELECTED_ORDER_ITEMS, selected_items)
 
-    if "PRIORITY" not in model_data.columns:
-        model_data["PRIORITY"] = 0
+    if "PRIORITY_SCORE" not in model_data.columns:
+        model_data["PRIORITY_SCORE"] = 0
 
     required_cols = [
-        "SKU", "MODEL", "COLOR", "SIZE", "PRIORITY", "DEFICIT",
+        "SKU", "MODEL", "COLOR", "SIZE", "PRIORITY_SCORE", "DEFICIT",
         "FORECAST_LEADTIME", ColumnNames.STOCK, "ROP", "SS", "TYPE"
     ]
     available_cols = [col for col in required_cols if col in model_data.columns]
     priority_skus = model_data[available_cols].copy()
 
-    priority_skus["PRIORITY_SCORE"] = priority_skus["PRIORITY"]
-    priority_skus["URGENT"] = (priority_skus[ColumnNames.STOCK] == 0) & (priority_skus["FORECAST_LEADTIME"] > 0)
+    if "URGENT" not in priority_skus.columns:
+        priority_skus["URGENT"] = (priority_skus[ColumnNames.STOCK] == 0) & (priority_skus["FORECAST_LEADTIME"] > 0)
 
     model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_skus)
 
@@ -297,9 +391,11 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     if urgent_colors:
         st.info(f"**Urgent colors:** {', '.join(urgent_colors)}")
 
+    monthly_agg = _load_monthly_aggregations_cached()
+
     pattern_results = {}
     for color in all_colors:
-        result = _optimize_color_pattern(model, color, pattern_set)
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg)
         pattern_results[color] = result
 
     sales_history = _load_last_4_months_sales(model, all_colors)
@@ -368,7 +464,19 @@ def _find_urgent_colors_for_model(model: str) -> list[str]:
     return SalesAnalyzer.find_urgent_colors(model_color_summary, model)
 
 
-def _optimize_color_pattern(model: str, color: str, pattern_set: PatternSet) -> dict:
+@st.cache_data(ttl=600)
+def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.get_monthly_aggregations(entity_type="sku")
+    except Exception as e:
+        logger.warning("Could not load monthly aggregations: %s", e)
+        return None
+
+
+def _optimize_color_pattern(
+    model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
+) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
         st.warning(f"No recommendations data available for {model}-{color}")
@@ -380,8 +488,14 @@ def _optimize_color_pattern(model: str, color: str, pattern_set: PatternSet) -> 
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
+    size_sales_history = None
+    if monthly_agg is not None and not monthly_agg.empty:
+        size_sales_history = SalesAnalyzer.calculate_size_sales_history(
+            monthly_agg, model, color, size_aliases, months=4
+        )
+
     return SalesAnalyzer.optimize_pattern_with_aliases(
-        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode
+        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode, size_sales_history
     )
 
 

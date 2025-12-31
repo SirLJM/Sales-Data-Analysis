@@ -44,3 +44,4 @@ saved_pattern_sets.json
 saved_pattern_sets.json.old
 .env
 utils/optimizer_pattern_sets.json
+.coverage

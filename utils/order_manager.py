@@ -35,13 +35,14 @@ def archive_order(order_id: str) -> bool:
         return False
 
 
-def add_manual_order(order_id: str, model: str, order_date) -> bool:
-    if not isinstance(order_date, datetime):
-        order_date = datetime.combine(order_date, datetime.min.time())
+def add_manual_order(order_id: str, order_data: dict) -> bool:
+    order_date = order_data.get("order_date")
+    if order_date and not isinstance(order_date, datetime):
+        order_data["order_date"] = datetime.combine(order_date, datetime.min.time())
 
     try:
         repository = create_order_repository()
-        return repository.add_manual(order_id, model, order_date)
+        return repository.add_manual(order_id, order_data)
     except Exception as e:
         logger.error("Error adding manual order: %s", e)
         return False

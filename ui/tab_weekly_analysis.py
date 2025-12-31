@@ -37,7 +37,7 @@ def _render_content(context: dict) -> None:
         stock_df, _ = load_stock()
 
     st.markdown("---")
-    _render_top_sales_report(df, stock_df)
+    _render_top_sales_report(df)
 
     st.markdown("---")
     _render_top_by_type(df, stock_df)
@@ -46,7 +46,7 @@ def _render_content(context: dict) -> None:
     _render_new_products_monitoring(df, stock_df)
 
 
-def _render_top_sales_report(df: pd.DataFrame, stock_df: pd.DataFrame | None) -> None:
+def _render_top_sales_report(df: pd.DataFrame) -> None:
     st.header("⭐ Top Sales Report")
     st.caption("Compare previous week's sales to same week last year (Monday-Sunday)")
 
@@ -72,14 +72,14 @@ def _render_top_sales_report(df: pd.DataFrame, stock_df: pd.DataFrame | None) ->
         with col_rising:
             st.subheader(f"{Icons.ROCKET} RISING STAR")
             if top_sales["rising_star"] is not None:
-                display_star_product(top_sales["rising_star"], stock_df, is_rising=True)
+                display_star_product(top_sales["rising_star"], is_rising=True)
             else:
                 st.info("No rising products found")
 
         with col_falling:
             st.subheader(f"{Icons.FALLING} FALLING STAR")
             if top_sales["falling_star"] is not None:
-                display_star_product(top_sales["falling_star"], stock_df, is_rising=False)
+                display_star_product(top_sales["falling_star"], is_rising=False)
             else:
                 st.info("No falling products found")
 

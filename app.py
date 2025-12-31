@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import streamlit as st
 
+from utils.logging_config import setup_logging
+
+setup_logging()
+
 from ui import sidebar
 from ui import tab_forecast_accuracy
 from ui import tab_monthly_analysis
@@ -20,7 +24,7 @@ initialize_session_state()
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Sales & Inventory Analysis",
     "✂️ Size Pattern Optimizer",
-    "📅 Weekly Analysis",
+    "📋 Weekly Analysis",
     "📆 Monthly Analysis",
     "🎯 Order Recommendations",
     "📋 Order Creation",

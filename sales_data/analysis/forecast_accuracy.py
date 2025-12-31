@@ -129,7 +129,7 @@ def calculate_accuracy_metrics(comparison_df: pd.DataFrame, entity_col: str) -> 
             "MISSED_OPPORTUNITY": missed_opportunity,
         })
 
-    results = comparison_df.groupby(entity_col).apply(compute_entity_metrics).reset_index()
+    results = comparison_df.groupby(entity_col).apply(compute_entity_metrics, include_groups=False).reset_index()
     results.columns = [entity_col.upper()] + list(results.columns[1:])
 
     return results
@@ -257,7 +257,7 @@ def calculate_accuracy_trend(
         bias = _calculate_bias(g_with_stock)
         return pd.Series({"MAPE": mape, "BIAS": bias})
 
-    trend = comparison.groupby("period").apply(compute_period_metrics).reset_index()
+    trend = comparison.groupby("period").apply(compute_period_metrics, include_groups=False).reset_index()
     trend = trend.sort_values("period")
 
     return trend

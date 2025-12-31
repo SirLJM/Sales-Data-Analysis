@@ -46,11 +46,11 @@ def _render_content() -> None:
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        quantities = _render_quantities_section(sizes, active_set)
+        quantities, sales_history = _render_quantities_section(sizes, active_set)
         _render_pattern_sets_section()
 
     with col2:
-        _render_optimization_section(quantities, sizes, min_order_per_pattern)
+        _render_optimization_section(quantities, sizes, min_order_per_pattern, sales_history)
 
 
 def _initialize_pattern_session_state() -> None:
@@ -83,8 +83,8 @@ def _get_active_pattern_set() -> PatternSet | None:
     return next((ps for ps in pattern_sets if ps.id == active_id), None)
 
 
-def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) -> dict[str, int]:
-    st.markdown('<div class="section-header">Quantities</div>', unsafe_allow_html=True)
+def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) -> tuple[dict[str, int], dict[str, int]]:
+    st.markdown('<div class="section-header">Order Quantities</div>', unsafe_allow_html=True)
 
     if active_set:
         st.info(f"Using sizes from: {active_set.name}")
@@ -98,7 +98,20 @@ def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) 
         with cols[col_idx]:
             quantities[size] = st.number_input(size, min_value=0, value=0, step=1, key=f"qty_{size}")
 
-    return quantities
+    st.markdown('<div class="section-header">Sales History (last 4 months)</div>', unsafe_allow_html=True)
+    st.caption("Enter total sales per size. Sizes with < 3 sales will be excluded from order.")
+
+    sales_history = {}
+    cols = st.columns(num_cols)
+
+    for i, size in enumerate(sizes):
+        col_idx = i % num_cols
+        with cols[col_idx]:
+            sales_history[size] = st.number_input(
+                f"{size} sales", min_value=0, value=0, step=1, key=f"sales_{size}"
+            )
+
+    return quantities, sales_history
 
 
 def _render_pattern_sets_section() -> None:
@@ -369,7 +382,12 @@ def _render_editor_buttons(
             st.rerun()
 
 
-def _render_optimization_section(quantities: dict[str, int], sizes: list[str], min_order_per_pattern: int) -> None:
+def _render_optimization_section(
+    quantities: dict[str, int],
+    sizes: list[str],
+    min_order_per_pattern: int,
+    sales_history: dict[str, int],
+) -> None:
     st.markdown('<div class="section-header">Optimization</div>', unsafe_allow_html=True)
 
     settings = get_settings()
@@ -380,11 +398,15 @@ def _render_optimization_section(quantities: dict[str, int], sizes: list[str], m
     st.info(f"Using algorithm: **{algorithm_display}** (change in sidebar)")
 
     if st.button("Run Optimization", type="primary", key="run_optimization"):
-        _run_optimization(quantities, sizes, min_order_per_pattern, current_algorithm)
+        _run_optimization(quantities, sizes, min_order_per_pattern, current_algorithm, sales_history)
 
 
 def _run_optimization(
-        quantities: dict[str, int], sizes: list[str], min_order_per_pattern: int, algorithm: str
+    quantities: dict[str, int],
+    sizes: list[str],
+    min_order_per_pattern: int,
+    algorithm: str,
+    sales_history: dict[str, int],
 ) -> None:
     pattern_sets = st.session_state.get(SessionKeys.PATTERN_SETS, [])
     active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
@@ -407,7 +429,15 @@ def _run_optimization(
         st.error("Active pattern set not found!")
         return
 
-    result = optimize_patterns(quantities, active_set.patterns, min_order_per_pattern, algorithm)
+    size_sales = sales_history if any(sales_history.values()) else None
+
+    result = optimize_patterns(
+        quantities,
+        active_set.patterns,
+        min_order_per_pattern,
+        algorithm,
+        size_sales_history=size_sales,
+    )
 
     display_optimization_metrics(result)
     _display_optimization_results(result, active_set, quantities, sizes, min_order_per_pattern)
@@ -416,6 +446,10 @@ def _run_optimization(
 def _display_optimization_results(
         result: dict, active_set: PatternSet, quantities: dict[str, int], sizes: list[str], min_order_per_pattern: int
 ) -> None:
+    excluded_sizes = result.get("excluded_sizes", [])
+    if excluded_sizes:
+        st.warning(f"Excluded sizes (sales < 3 in last 4 months): {', '.join(excluded_sizes)}")
+
     has_violations = len(result["min_order_violations"]) > 0
 
     if result["all_covered"] and not has_violations:
@@ -436,7 +470,7 @@ def _display_optimization_results(
         )
 
     _display_pattern_allocation(result, active_set, min_order_per_pattern)
-    _display_production_comparison(result, quantities, sizes)
+    _display_production_comparison(result, quantities, sizes, excluded_sizes)
 
 
 def _display_pattern_allocation(result: dict, active_set: PatternSet, min_order_per_pattern: int) -> None:
@@ -461,26 +495,39 @@ def _display_pattern_allocation(result: dict, active_set: PatternSet, min_order_
         st.info("No patterns allocated")
 
 
-def _display_production_comparison(result: dict, quantities: dict[str, int], sizes: list[str]) -> None:
+def _display_production_comparison(
+    result: dict, quantities: dict[str, int], sizes: list[str], excluded_sizes: list[str] | None = None
+) -> None:
     st.markdown("### Production vs Required")
     production_data = []
+    excluded_sizes = excluded_sizes or []
 
     for size in sizes:
-        produced = result["produced"][size]
-        required = quantities[size]
-        excess = result["excess"][size]
-        status = Icons.SUCCESS if produced >= required else Icons.ERROR
-        production_data.append({
-            "Size": size,
-            "Required": required,
-            "Produced": produced,
-            "Excess": f"{excess:+d}",
-            "Status": status,
-        })
+        if size in excluded_sizes:
+            production_data.append({
+                "Size": size,
+                "Required": quantities[size],
+                "Produced": 0,
+                "Excess": "-",
+                "Status": "⛔ excluded",
+            })
+        else:
+            produced = result["produced"].get(size, 0)
+            required = quantities[size]
+            excess = result["excess"].get(size, 0)
+            status = Icons.SUCCESS if produced >= required else Icons.ERROR
+            production_data.append({
+                "Size": size,
+                "Required": required,
+                "Produced": produced,
+                "Excess": f"{excess:+d}",
+                "Status": status,
+            })
 
-    total_required = sum(quantities[size] for size in sizes)
-    total_produced = sum(result["produced"][size] for size in sizes)
-    total_excess = sum(result["excess"][size] for size in sizes)
+    active_sizes = [s for s in sizes if s not in excluded_sizes]
+    total_required = sum(quantities[size] for size in active_sizes)
+    total_produced = sum(result["produced"].get(size, 0) for size in active_sizes)
+    total_excess = sum(result["excess"].get(size, 0) for size in active_sizes)
     production_data.append({
         "Size": "**TOTAL**",
         "Required": total_required,
