@@ -20,6 +20,8 @@ class SessionKeys:
     MONTHLY_YOY_PODGRUPA: Final[str] = "monthly_yoy_podgrupa"
     MONTHLY_YOY_KATEGORIA: Final[str] = "monthly_yoy_kategoria"
     MONTHLY_YOY_METADATA: Final[str] = "monthly_yoy_metadata"
+    FORECAST_COMPARISON_DATA: Final[str] = "forecast_comparison_data"
+    FORECAST_COMPARISON_PARAMS: Final[str] = "forecast_comparison_params"
 
 
 class ColumnNames:

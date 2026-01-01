@@ -41,6 +41,18 @@ from .utils import (
     get_week_start_monday,
     parse_sku_components,
 )
+from .forecast_comparison import (
+    align_forecasts,
+    calculate_comparison_metrics,
+    aggregate_comparison_by_type,
+    calculate_overall_summary,
+)
+from .internal_forecast import (
+    batch_generate_forecasts,
+    generate_internal_forecast,
+    prepare_monthly_series,
+    select_forecast_method,
+)
 
 __all__ = [
     "AVERAGE_SALES",
@@ -71,4 +83,12 @@ __all__ = [
     "get_week_start_monday",
     "optimize_pattern_with_aliases",
     "parse_sku_components",
+    "align_forecasts",
+    "calculate_comparison_metrics",
+    "aggregate_comparison_by_type",
+    "calculate_overall_summary",
+    "batch_generate_forecasts",
+    "generate_internal_forecast",
+    "prepare_monthly_series",
+    "select_forecast_method",
 ]

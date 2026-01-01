@@ -25,13 +25,14 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 |---------------------------|----------------------------------------------------------------------------|
 | **Sales Analysis**        | Statistical analysis with Safety Stock and Reorder Point calculations      |
 | **Stock Projection**      | Visual forecasting of when items will reach critical levels                |
-| **Pattern Optimizer**     | Cutting pattern optimization for manufacturing                             |
+| **Pattern Optimizer**     | Cutting pattern optimization with automatic sales history loading          |
 | **Order Recommendations** | Priority-based ordering with facility filters and active order filtering   |
 | **Weekly Analysis**       | Week-over-week sales comparison and trending                               |
 | **Monthly Analysis**      | Year-over-year category performance                                        |
 | **Order Creation**        | Transform recommendations into production orders with manual entry support |
 | **Order Tracking**        | Track, manage, and archive production orders with delivery countdown       |
 | **Forecast Accuracy**     | Monitor forecast quality vs actual sales with accuracy metrics             |
+| **Forecast Comparison**   | Generate internal forecasts and compare with external forecasts            |
 
 ---
 
@@ -138,8 +139,17 @@ Standalone tool for optimizing cutting patterns in manufacturing.
 1. Create/select a pattern set
 2. Define available sizes (XL, L, M, S, XS, etc.)
 3. Define cutting patterns with size combinations
-4. Enter desired quantities by size
+4. Enter desired quantities by size OR load automatically from sales history
 5. Run optimization to get pattern allocation
+
+**Automatic Sales History Loading:**
+
+Instead of manually entering size quantities, you can load historical sales data:
+
+1. Enter a model code (e.g., "CH031") in the "Model" field
+2. Click "Load" button
+3. System automatically aggregates last 4 months of sales by size for all colors of the model
+4. Size quantities are populated in the input fields
 
 **Output:**
 
@@ -334,6 +344,75 @@ Monitor forecast quality by comparing historical forecasts against actual sales.
 - **Accuracy by Product Type**: Bar chart comparing MAPE across product types
 - **Trend Chart**: Weekly MAPE trend over time
 - **Item Detail View**: Deep dive into individual SKU/Model accuracy
+
+---
+
+### Tab 9: Forecast Comparison
+
+Generate internal forecasts using statistical methods and compare them against external forecasts to evaluate forecast quality.
+
+**Two Sub-tabs:**
+
+1. **Generate New**: Create new internal forecasts and compare with external
+2. **Historical Forecasts**: Load previously saved forecasts for comparison
+
+**Parameters:**
+
+| Parameter | Description |
+|-----------|-------------|
+| Forecast Horizon | Number of months to forecast (1-12, default: lead time) |
+| Entity Level | Model (recommended) or SKU level analysis |
+| Top N | Limit analysis to top N entities by sales volume |
+
+**Forecasting Methods (Auto-selected):**
+
+| Method | Used When | Description |
+|--------|-----------|-------------|
+| Moving Average | New products (< 6 months) | Simple weighted average |
+| Exponential Smoothing | Basic products (CV < 0.6) | Trend-based smoothing |
+| Holt-Winters | Regular products | Seasonal decomposition |
+| SARIMA | Seasonal products (CV > 1.0) | Full seasonal ARIMA model |
+
+**Comparison Metrics:**
+
+| Metric | Description |
+|--------|-------------|
+| MAPE | Mean Absolute Percentage Error (lower is better) |
+| BIAS | Forecast direction tendency |
+| MAE | Mean Absolute Error |
+| RMSE | Root Mean Square Error |
+| Winner | Which forecast performed better (internal/external/tie) |
+| Improvement | Percentage improvement of winner over loser |
+
+**Output Sections:**
+
+1. **Overall Summary**: Aggregate comparison showing total wins for internal vs external
+2. **Breakdown by Product Type**: Win rates by product category (basic, regular, seasonal, new)
+3. **Detailed Table**: Per-entity metrics with sorting and CSV export
+4. **Comparison Chart**: Visual comparison for selected entity showing actual vs internal vs external forecasts
+
+**Saving Forecasts:**
+
+After generating forecasts, you can save them to history:
+
+1. Optionally add notes describing the forecast batch
+2. Click "Save Forecast to History"
+3. Forecasts are stored in database (if available) or local files
+
+**Loading Historical Forecasts:**
+
+1. Switch to "Historical Forecasts" tab
+2. Select a saved forecast from the dropdown
+3. View batch metadata (entity type, horizon, success/failure counts, methods used)
+4. Click "Load and Compare" to recalculate metrics against current actual sales
+5. Click "Delete" to remove a historical forecast
+
+**Use Cases:**
+
+- Evaluate if internal statistical models outperform vendor forecasts
+- Track forecast accuracy improvements over time
+- Identify product types where different methods work better
+- A/B testing of forecasting approaches
 
 ---
 
@@ -778,6 +857,8 @@ src/
 │       ├── aggregation.py      # SKU/Model aggregation
 │       ├── classification.py   # Product type classification
 │       ├── forecast_accuracy.py # Forecast accuracy metrics
+│       ├── forecast_comparison.py # Internal vs external forecast comparison
+│       ├── internal_forecast.py # Internal forecast generation (statsmodels)
 │       ├── inventory_metrics.py # SS, ROP calculations
 │       ├── order_priority.py   # Priority scoring
 │       ├── pattern_helpers.py  # Pattern optimization helpers
@@ -796,6 +877,7 @@ src/
 │   ├── tab_order_creation.py
 │   ├── tab_order_tracking.py
 │   ├── tab_forecast_accuracy.py
+│   ├── tab_forecast_comparison.py
 │   └── shared/                 # Shared UI components
 │       ├── data_loaders.py     # Cached data loading
 │       ├── display_helpers.py  # Display utilities
@@ -810,8 +892,9 @@ src/
 │   ├── order_manager.py        # Order persistence facade
 │   ├── order_repository.py     # Repository pattern (abstract)
 │   ├── order_repository_factory.py # Repository factory
+│   ├── internal_forecast_repository.py # Internal forecast storage
 │   ├── import_utils.py         # Import helpers
-│   └── logging_config.py       # Logging setup
+│   └── logging_config.py       # Logging setup (LOG_LEVEL from .env)
 │
 └── migration/                  # Database setup (optional)
     ├── setup_database.py
@@ -870,6 +953,7 @@ Switch modes by setting `DATA_SOURCE_MODE` in `.env`:
 ```bash
 DATA_SOURCE_MODE=file      # Use Excel/CSV files
 DATA_SOURCE_MODE=database  # Use PostgreSQL
+LOG_LEVEL=INFO             # Logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
 ---
@@ -1014,15 +1098,16 @@ If you manufacture or order in cutting patterns:
 
 ### Key Performance Indicators to Watch
 
-| KPI             | What to Monitor                 | Target    | Where to Check |
-|-----------------|---------------------------------|-----------|----------------|
-| Items Below ROP | Count of critical items         | Minimize  | Tab 1 filter   |
-| Stockout Rate   | Items at zero with demand       | Under 5%  | Tab 5 urgent   |
-| Overstock Items | Stock > 6 months of demand      | Under 10% | Tab 1 filter   |
-| Forecast MAPE   | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
-| Forecast Bias   | Over/under forecasting tendency | Near 0%   | Tab 8          |
-| Active Orders   | Orders in production            | Track     | Tab 7          |
-| Orders Ready    | Orders past delivery threshold  | Process   | Tab 7          |
+| KPI               | What to Monitor                 | Target    | Where to Check |
+|-------------------|---------------------------------|-----------|----------------|
+| Items Below ROP   | Count of critical items         | Minimize  | Tab 1 filter   |
+| Stockout Rate     | Items at zero with demand       | Under 5%  | Tab 5 urgent   |
+| Overstock Items   | Stock > 6 months of demand      | Under 10% | Tab 1 filter   |
+| Forecast MAPE     | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
+| Forecast Bias     | Over/under forecasting tendency | Near 0%   | Tab 8          |
+| Internal vs Ext   | Internal forecast win rate      | Track     | Tab 9          |
+| Active Orders     | Orders in production            | Track     | Tab 7          |
+| Orders Ready      | Orders past delivery threshold  | Process   | Tab 7          |
 
 ### Common Business Scenarios
 
@@ -1066,6 +1151,15 @@ If you manufacture or order in cutting patterns:
 4. Archive processed orders to keep the list clean
 5. **Action:** Check Tab 5 - archived models will reappear in recommendations if needed
 
+#### Scenario 7: Evaluating Forecast Sources
+
+1. Open **Tab 9: Forecast Comparison**
+2. Generate comparison with default parameters (model level)
+3. Review overall summary - which forecast source wins more often?
+4. Check breakdown by product type - internal may work better for some categories
+5. Save the forecast batch with descriptive notes
+6. **Action:** If internal consistently outperforms, consider adjusting external forecast provider
+
 ### Adjusting Settings for Your Business
 
 **Conservative Approach** (fewer stockouts, more inventory):
@@ -1096,10 +1190,13 @@ If you manufacture or order in cutting patterns:
 | Compare to last year          | Tab 4    | Review category YoY performance                 |
 | Create a production order     | Tab 6    | Select items from Tab 5 or enter model manually |
 | Set up cutting patterns       | Tab 2    | Create pattern set, define sizes and patterns   |
+| Load sales history for sizes  | Tab 2    | Enter model code, click Load                    |
 | Track order delivery          | Tab 7    | View active orders, check days elapsed          |
 | Add manual order              | Tab 7    | Enter model code and date                       |
 | Archive completed order       | Tab 7    | Check archive checkbox, click Archive button    |
 | Check forecast quality        | Tab 8    | Set date range, generate accuracy report        |
+| Compare internal vs external  | Tab 9    | Generate comparison, review winners by type     |
+| Save forecast for history     | Tab 9    | Generate, add notes, Save to History            |
 | Filter by production facility | Tab 5    | Use Include/Exclude facility filters            |
 
 ---
@@ -1116,6 +1213,8 @@ If you manufacture or order in cutting patterns:
 8. **Track Orders**: Keep Tab 7 updated - archive delivered orders to prevent duplicate recommendations
 9. **Monitor Forecast Accuracy**: Check Tab 8 monthly - target MAPE under 20%
 10. **Manual Orders**: Use Tab 7 for orders placed outside the system to maintain accurate filtering
+11. **Compare Forecasts**: Use Tab 9 to evaluate if internal models could improve forecast accuracy
+12. **Save Forecast History**: Regularly save internal forecasts to track accuracy improvements over time
 
 ---
 
@@ -1157,6 +1256,19 @@ If you manufacture or order in cutting patterns:
 
 - Orders only filter recommendations by model code
 - Archive orders when items are received to re-enable recommendations
+
+**Forecast comparison issues:**
+
+- Ensure both sales data and external forecast data are loaded
+- Internal forecasts require at least 3 months of sales history per entity
+- SARIMA method may fail for entities with sparse data - system falls back to simpler methods
+- Historical forecasts require database mode or write access to data/internal_forecasts/ directory
+
+**Pattern optimizer sales history not loading:**
+
+- Ensure model code exists in sales data
+- System aggregates all colors for the model
+- Requires at least 4 months of sales history
 
 ---
 

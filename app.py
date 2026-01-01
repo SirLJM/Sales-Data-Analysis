@@ -8,6 +8,7 @@ setup_logging()
 
 from ui import sidebar
 from ui import tab_forecast_accuracy
+from ui import tab_forecast_comparison
 from ui import tab_monthly_analysis
 from ui import tab_order_creation
 from ui import tab_order_recommendations
@@ -21,7 +22,7 @@ st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊",
 
 initialize_session_state()
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Sales & Inventory Analysis",
     "✂️ Size Pattern Optimizer",
     "📋 Weekly Analysis",
@@ -30,6 +31,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🛒 Order Creation",
     "🚚 Order Tracking",
     "📈 Forecast Accuracy",
+    "🔬 Forecast Comparison",
 ])
 
 sidebar_options = sidebar.render_sidebar()
@@ -63,3 +65,6 @@ with tab7:
 
 with tab8:
     tab_forecast_accuracy.render(context)
+
+with tab9:
+    tab_forecast_comparison.render()
