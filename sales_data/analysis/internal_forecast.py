@@ -14,6 +14,32 @@ logger = get_logger("internal_forecast")
 MIN_MONTHS_FOR_FORECAST = 12
 MIN_MONTHS_FOR_SEASONAL = 24
 
+SKTIME_AVAILABLE = False
+AutoARIMA = None
+try:
+    from sktime.forecasting.arima import AutoARIMA
+    SKTIME_AVAILABLE = True
+except ImportError:
+    AutoARIMA = None
+
+AVAILABLE_METHODS = [
+    "moving_avg",
+    "exp_smoothing",
+    "holt_winters",
+    "sarima",
+]
+
+if SKTIME_AVAILABLE:
+    AVAILABLE_METHODS.append("auto_arima")
+
+
+def get_available_methods() -> list[str]:
+    return AVAILABLE_METHODS.copy()
+
+
+def is_method_available(method: str) -> bool:
+    return method in AVAILABLE_METHODS
+
 
 def prepare_monthly_series(
         monthly_agg: pd.DataFrame,
@@ -237,6 +263,60 @@ def generate_forecast_sarima(
         return generate_forecast_holt_winters(series, horizon)
 
 
+def generate_forecast_auto_arima(
+        series: pd.Series,
+        horizon: int,
+        seasonal: bool = True,
+        sp: int = 12,
+) -> pd.DataFrame:
+    if not SKTIME_AVAILABLE:
+        logger.warning("sktime not available, falling back to SARIMA")
+        return generate_forecast_sarima(series, horizon)
+
+    try:
+        y = pd.Series(series.values, index=pd.PeriodIndex(series.index, freq="M"))
+
+        model = AutoARIMA(
+            sp=sp if seasonal else 1,
+            seasonal=seasonal,
+            suppress_warnings=True,
+            error_action="ignore",
+            max_p=3,
+            max_q=3,
+            max_P=2,
+            max_Q=2,
+            max_d=2,
+            max_D=1,
+            stepwise=True,
+            n_jobs=1,
+        )
+
+        model.fit(y)
+        fh = list(range(1, horizon + 1))
+        forecast = model.predict(fh=fh)
+        conf_int = model.predict_interval(fh=fh, coverage=0.95)
+
+        last_period = series.index[-1]
+        future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
+
+        lower_col = conf_int.columns[0] if len(conf_int.columns) >= 1 else None
+        upper_col = conf_int.columns[1] if len(conf_int.columns) >= 2 else None
+
+        lower_vals = conf_int[lower_col].values if lower_col else forecast.values * 0.8
+        upper_vals = conf_int[upper_col].values if upper_col else forecast.values * 1.2
+
+        return pd.DataFrame({
+            "period": future_periods,
+            "forecast": forecast.values,
+            "lower_ci": lower_vals,
+            "upper_ci": upper_vals,
+        })
+
+    except Exception as e:
+        logger.warning("AutoARIMA failed, falling back to SARIMA: %s", e)
+        return generate_forecast_sarima(series, horizon)
+
+
 def generate_internal_forecast(
         monthly_agg: pd.DataFrame,
         entity_id: str,
@@ -244,6 +324,7 @@ def generate_internal_forecast(
         product_type: str | None,
         cv: float | None,
         horizon_months: int,
+        method_override: str | None = None,
 ) -> dict:
     result = {
         "entity_id": entity_id,
@@ -260,7 +341,10 @@ def generate_internal_forecast(
         result["error"] = f"Insufficient data (need {MIN_MONTHS_FOR_FORECAST} months)"
         return result
 
-    method = select_forecast_method(series, product_type, cv)
+    if method_override:
+        method = method_override
+    else:
+        method = select_forecast_method(series, product_type, cv)
     result["method_used"] = method
 
     try:
@@ -272,6 +356,8 @@ def generate_internal_forecast(
             forecast_df = generate_forecast_holt_winters(series, horizon_months)
         elif method == "sarima":
             forecast_df = generate_forecast_sarima(series, horizon_months)
+        elif method == "auto_arima":
+            forecast_df = generate_forecast_auto_arima(series, horizon_months)
         else:
             forecast_df = generate_forecast_moving_avg(series, horizon_months)
 
@@ -294,6 +380,7 @@ def batch_generate_forecasts(
         entities: list[dict],
         horizon_months: int,
         progress_callback: Callable[[int, int, str], None] | None = None,
+        method_override: str | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     all_forecasts = []
     stats = {
@@ -314,7 +401,8 @@ def batch_generate_forecasts(
             progress_callback(i + 1, len(entities), entity_id)
 
         result = generate_internal_forecast(
-            monthly_agg, entity_id, entity_type, product_type, cv, horizon_months
+            monthly_agg, entity_id, entity_type, product_type, cv, horizon_months,
+            method_override=method_override
         )
 
         if result["success"]:

@@ -9,6 +9,7 @@ alembic>=1.17.2
 python-dotenv>=1.2.1
 camelot-py[base]>=1.0.9
 statsmodels>=0.14.6
+sktime>=0.40.1
 
 # Testing
 pytest>=9.0.2

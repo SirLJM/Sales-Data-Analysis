@@ -11,7 +11,10 @@ from sales_data.analysis.forecast_comparison import (
     calculate_comparison_metrics,
     calculate_overall_summary,
 )
-from sales_data.analysis.internal_forecast import batch_generate_forecasts
+from sales_data.analysis.internal_forecast import (
+    batch_generate_forecasts,
+    get_available_methods,
+)
 from ui.constants import Icons, MimeTypes
 from ui.shared.session_manager import get_data_source, get_settings
 from utils.internal_forecast_repository import create_internal_forecast_repository
@@ -111,7 +114,7 @@ def _render_new_forecast_tab() -> None:
 
 def _render_parameters() -> dict:
     with st.expander("Parameters", expanded=True):
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             settings = get_settings()
@@ -141,6 +144,25 @@ def _render_parameters() -> dict:
                     "by_type": "By product type",
                 }[x],
                 key="fc_filter_type",
+            )
+
+        with col4:
+            available_methods = get_available_methods()
+            method_labels = {
+                "auto": "Auto (select by type)",
+                "moving_avg": "Moving Average",
+                "exp_smoothing": "Exponential Smoothing",
+                "holt_winters": "Holt-Winters",
+                "sarima": "SARIMA",
+                "auto_arima": "AutoARIMA (sktime)",
+            }
+            method_options = ["auto"] + available_methods
+            forecast_method = st.selectbox(
+                "Forecast Method",
+                options=method_options,
+                format_func=lambda x: method_labels.get(x, x),
+                key="fc_method",
+                help="Auto selects method based on product type. AutoARIMA automatically finds best ARIMA parameters.",
             )
 
         filter_params = {}
@@ -173,6 +195,7 @@ def _render_parameters() -> dict:
         "entity_type": entity_type,
         "filter_type": filter_type,
         "filter_params": filter_params,
+        "forecast_method": forecast_method if forecast_method != "auto" else None,
     }
 
 
@@ -216,6 +239,7 @@ def _generate_comparison(params: dict) -> None:
             entities,
             params["horizon"],
             progress_callback,
+            method_override=params.get("forecast_method"),
         )
 
         progress_bar.progress(90, text="Calculating comparison metrics...")
