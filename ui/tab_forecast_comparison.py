@@ -42,6 +42,33 @@ SESSION_KEY_PARAMS = "forecast_comparison_params"
 SESSION_KEY_INTERNAL_FORECASTS = "internal_forecasts_df"
 
 
+@st.cache_data(ttl=3600)
+def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.get_monthly_aggregations()
+    except (DataLoadError, KeyError, ValueError):
+        return None
+
+
+@st.cache_data(ttl=3600)
+def _load_external_forecast_cached() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.load_forecast_data()
+    except (DataLoadError, KeyError, ValueError):
+        return None
+
+
+@st.cache_data(ttl=3600)
+def _load_sales_data_cached() -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        return data_source.load_sales_data()
+    except (DataLoadError, KeyError, ValueError):
+        return None
+
+
 def render() -> None:
     try:
         _render_content()
@@ -150,25 +177,23 @@ def _render_parameters() -> dict:
 
 
 def _generate_comparison(params: dict) -> None:
-    data_source = get_data_source()
-
     progress_bar = st.progress(0, text="Loading data...")
 
     try:
-        monthly_agg = data_source.get_monthly_aggregations()
+        monthly_agg = _load_monthly_aggregations_cached()
         if monthly_agg is None or monthly_agg.empty:
             st.error("No monthly aggregation data available")
             return
 
         progress_bar.progress(10, text="Loading forecasts...")
 
-        external_forecast = data_source.load_forecast_data()
+        external_forecast = _load_external_forecast_cached()
         if external_forecast is None or external_forecast.empty:
             st.warning("No external forecast data available. Will only generate internal forecasts.")
 
         progress_bar.progress(20, text="Loading sales data...")
 
-        sales_df = data_source.load_sales_data()
+        sales_df = _load_sales_data_cached()
 
         progress_bar.progress(30, text="Preparing entities...")
 
@@ -610,12 +635,10 @@ def _load_historical_forecast(batch_id: str) -> None:
         st.error("Failed to load forecast data")
         return
 
-    data_source = get_data_source()
-
     # noinspection PyTypeChecker
     with st.spinner("Loading data and calculating metrics..."):
-        external_forecast = data_source.load_forecast_data()
-        sales_df = data_source.load_sales_data()
+        external_forecast = _load_external_forecast_cached()
+        sales_df = _load_sales_data_cached()
 
         entity_type = forecasts_df["entity_type"].iloc[0] if "entity_type" in forecasts_df.columns else "model"
 

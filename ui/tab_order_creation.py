@@ -7,7 +7,13 @@ import streamlit as st
 
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
-from ui.shared.data_loaders import load_color_aliases, load_model_metadata, load_size_aliases
+from ui.shared.data_loaders import (
+    load_color_aliases,
+    load_data,
+    load_model_metadata,
+    load_size_aliases,
+    load_size_aliases_reverse,
+)
 from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
 from ui.shared.sku_utils import extract_color, extract_model, extract_size
 from ui.shared.styles import ROTATED_TABLE_STYLE
@@ -213,7 +219,7 @@ def _calculate_priority(sku_summary: pd.DataFrame, settings: dict) -> pd.DataFra
     return df
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)
 def _load_stock_data() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -223,7 +229,7 @@ def _load_stock_data() -> pd.DataFrame | None:
         return None
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)
 def _load_forecast_data() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -464,7 +470,7 @@ def _find_urgent_colors_for_model(model: str) -> list[str]:
     return SalesAnalyzer.find_urgent_colors(model_color_summary, model)
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)
 def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -669,7 +675,7 @@ def _format_month_label(year_month_str: str) -> str:
 
 def _build_color_size_table(pattern_results: dict, pattern_set: PatternSet) -> pd.DataFrame:
     color_aliases = load_color_aliases()
-    size_alias_to_code = _load_size_aliases_reverse()
+    size_alias_to_code = load_size_aliases_reverse()
 
     def get_size_sort_key(size_str: str) -> int:
         size_code = size_alias_to_code.get(size_str, size_str)
@@ -698,16 +704,9 @@ def _build_color_size_table(pattern_results: dict, pattern_set: PatternSet) -> p
     return pd.DataFrame(data)
 
 
-@st.cache_data(ttl=3600)
-def _load_size_aliases_reverse() -> dict[str, str]:
-    size_aliases = load_size_aliases()
-    return {v: k for k, v in size_aliases.items()}
-
-
 def _get_all_model_colors(pattern_results: dict) -> list[str]:
     ordered_colors = sorted(pattern_results.keys())
-    data_source = get_data_source()
-    sales_df = data_source.load_sales_data()
+    sales_df = load_data()
 
     if sales_df is None or sales_df.empty:
         return ordered_colors

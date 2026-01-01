@@ -38,12 +38,13 @@ LEAD_TIME = 1.36
 
 
 class SalesAnalyzer:
-    def __init__(self, data: pd.DataFrame) -> None:
-        self.data = data.copy()
+    def __init__(self, data: pd.DataFrame, copy: bool = True) -> None:
+        self.data = data.copy() if copy else data
         if not pd.api.types.is_datetime64_any_dtype(self.data["data"]):
             self.data["data"] = pd.to_datetime(self.data["data"])
 
-        self.data["model"] = self.data["sku"].astype(str).str[:5]
+        if "model" not in self.data.columns:
+            self.data["model"] = self.data["sku"].astype(str).str[:5]
 
     @staticmethod
     def _get_week_start_monday(date: datetime) -> datetime:

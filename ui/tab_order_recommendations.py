@@ -6,7 +6,7 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.shared.data_loaders import load_color_aliases, load_model_metadata
-from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
+from ui.shared.session_manager import get_session_value, get_settings, set_session_value
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_order_recommendations")
@@ -518,8 +518,7 @@ def _render_full_summary(recommendations: dict, model_metadata_df: pd.DataFrame 
 
     model_color_summary = recommendations["model_color_summary"].copy()
 
-    data_source = get_data_source()
-    color_aliases = data_source.load_color_aliases()
+    color_aliases = load_color_aliases()
 
     if color_aliases:
         model_color_summary["COLOR_NAME"] = model_color_summary["COLOR"].map(color_aliases).fillna(

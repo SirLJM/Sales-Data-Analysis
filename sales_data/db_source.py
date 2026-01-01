@@ -29,6 +29,7 @@ class DatabaseSource(DataSource):
             pool_pre_ping=True,
         )
         self._is_available = self._test_connection()
+        self._cached_settings_hash: str | None = None
 
     def _test_connection(self) -> bool:
         try:
@@ -252,12 +253,9 @@ class DatabaseSource(DataSource):
         if df.empty:
             return self._compute_sku_statistics(entity_type)
 
-        from utils.settings_manager import load_settings
+        current_hash = self._get_current_settings_hash()
 
-        settings = load_settings()
-        current_hash = self._compute_settings_hash(settings)
-
-        if not df.empty and "configuration_hash" in df.columns:
+        if "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
                 logger.info("Settings changed, recomputing statistics...")
@@ -303,12 +301,9 @@ class DatabaseSource(DataSource):
         if df.empty:
             return self._compute_order_priorities(top_n)
 
-        from utils.settings_manager import load_settings
+        current_hash = self._get_current_settings_hash()
 
-        settings = load_settings()
-        current_hash = self._compute_settings_hash(settings)
-
-        if not df.empty and "configuration_hash" in df.columns:
+        if "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
                 logger.info("Settings changed, recomputing priorities...")
@@ -363,6 +358,13 @@ class DatabaseSource(DataSource):
         settings_subset = {k: settings.get(k) for k in relevant_keys if k in settings}
         settings_json = json.dumps(settings_subset, sort_keys=True)
         return hashlib.md5(settings_json.encode()).hexdigest()
+
+    def _get_current_settings_hash(self) -> str:
+        from utils.settings_manager import load_settings
+        settings = load_settings()
+        current_hash = self._compute_settings_hash(settings)
+        self._cached_settings_hash = current_hash
+        return current_hash
 
     @staticmethod
     def _compute_sku_statistics(entity_type: str) -> pd.DataFrame:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.constants import AlgorithmModes, Config, Icons, SessionKeys
+from ui.shared.data_loaders import load_size_aliases, load_size_aliases_reverse
 from ui.shared.display_helpers import display_optimization_metrics
 from ui.shared.session_manager import get_data_source, get_settings
 from ui.shared.styles import PATTERN_SECTION_STYLE
@@ -210,13 +211,12 @@ def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
         return {}
 
     try:
-        data_source = get_data_source()
-        all_aliases = data_source.load_size_aliases()
+        all_aliases = load_size_aliases()
 
         if not all_aliases:
             return {}
 
-        reverse_aliases = {v: k for k, v in all_aliases.items()}
+        reverse_aliases = load_size_aliases_reverse()
         size_aliases = {}
 
         for size_name in active_set.size_names:
