@@ -10,7 +10,9 @@ def optimize_dtypes(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     for col in df.columns:
         col_type = df[col].dtype
 
-        if col_type == "object":
+        if isinstance(col_type, pd.CategoricalDtype):
+            continue
+        elif col_type == "object":
             df = _optimize_object_column(df, col)
         elif np.issubdtype(col_type, np.integer):
             df = _optimize_integer_column(df, col)
