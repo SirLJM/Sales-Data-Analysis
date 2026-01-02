@@ -404,7 +404,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         result = _optimize_color_pattern(model, color, pattern_set, monthly_agg)
         pattern_results[color] = result
 
-    sales_history = _load_last_4_months_sales(model, all_colors)
+    sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
     forecast_data = _load_forecast_data_for_colors(model, all_colors)
 
     order_table = _create_order_summary_table(
@@ -548,10 +548,14 @@ def _display_model_metadata(metadata: dict) -> None:
         st.metric("Material Weight", metadata.get("gramatura", "N/A") or "N/A")
 
 
-def _load_last_4_months_sales(model: str, colors: list[str]) -> pd.DataFrame:
+def _load_last_4_months_sales(
+    model: str, colors: list[str], monthly_agg: pd.DataFrame | None = None
+) -> pd.DataFrame:
     try:
-        data_source = get_data_source()
-        monthly_agg = data_source.get_monthly_aggregations(entity_type="sku")
+        if monthly_agg is None:
+            monthly_agg = _load_monthly_aggregations_cached()
+        if monthly_agg is None or monthly_agg.empty:
+            return pd.DataFrame()
         return SalesAnalyzer.get_last_n_months_sales_by_color(monthly_agg, model, colors, months=4)
     except Exception as e:
         st.warning(f"Could not load sales history: {e}")

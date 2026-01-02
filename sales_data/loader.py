@@ -3,9 +3,15 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
+from pandas import DataFrame
 
+from .dtype_optimizer import (
+    get_optimal_sales_dtypes,
+    optimize_dtypes,
+)
 from .validator import DataValidator
 
 PATH_TO = "/path/to"
@@ -286,13 +292,23 @@ class SalesDataLoader:
         return forecast_files[-1]
 
     @staticmethod
-    def _read_file(file_path: Path, find_sheet_method=None) -> pd.DataFrame:
+    def _read_file(
+            file_path: Path,
+            find_sheet_method=None,
+            usecols: list[str] | None = None,
+            dtype: dict | None = None,
+    ) -> DataFrame | dict[Any, DataFrame]:
         if file_path.suffix == CSV:
-            return pd.read_csv(file_path)
+            return pd.read_csv(file_path, usecols=usecols, dtype=dtype)
         elif file_path.suffix == XLSX:
             sheet_name = find_sheet_method(file_path) if find_sheet_method else None
-            result = pd.read_excel(file_path, sheet_name=sheet_name or "Sheet1")
-            return result  # type: ignore[return-value]
+            result = pd.read_excel(
+                file_path,
+                sheet_name=sheet_name or "Sheet1",
+                usecols=usecols,
+                dtype=dtype,
+            )
+            return result
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
@@ -313,9 +329,19 @@ class SalesDataLoader:
         return df
 
     def load_sales_file(self, file_path: Path) -> pd.DataFrame:
-        df = self._read_file(file_path, self.validator.find_sales_sheet)
+        sales_cols = ["order_id", "data", "sku", "ilosc", "cena", "razem"]
+        dtype = get_optimal_sales_dtypes()
+        dtype_without_date = {k: v for k, v in dtype.items() if k != "data"}
+
+        df = self._read_file(
+            file_path,
+            self.validator.find_sales_sheet,
+            usecols=sales_cols,
+            dtype=dtype_without_date,
+        )
         df = self._validate_and_clean_sales_data(df)
-        return self._add_sales_metadata(df, file_path)
+        df = self._add_sales_metadata(df, file_path)
+        return optimize_dtypes(df)
 
     def _validate_and_filter_stock_data(self, df: pd.DataFrame) -> pd.DataFrame:
         is_valid, errors = self.validator.validate_stock_data(df)
@@ -338,6 +364,7 @@ class SalesDataLoader:
 
         df = self._read_file(file_path, self.validator.find_stock_sheet)
         df = self._validate_and_filter_stock_data(df)
+        df = optimize_dtypes(df)
 
         print(f"  Loaded {len(df):,} active SKUs")
 
@@ -372,6 +399,7 @@ class SalesDataLoader:
 
         df = self._read_file(file_path, self.validator.find_forecast_sheet)
         df = self._validate_and_prepare_forecast_data(df)
+        df = optimize_dtypes(df)
 
         print(f"  Loaded {len(df):,} forecast records for {df['sku'].nunique():,} SKUs")
 
@@ -398,11 +426,12 @@ class SalesDataLoader:
             all_dataframes.append(df)
 
         consolidated_df = pd.concat(all_dataframes, ignore_index=True)
+        consolidated_df = optimize_dtypes(consolidated_df, verbose=True)
 
         print("\nConsolidation complete!")
         print(f"Total rows: {len(consolidated_df):,}")
-        print(f"Unique orders: {consolidated_df['order_id'].nunique():,}")  # type: ignore[index]
-        print(f"Unique products (SKUs): {consolidated_df['sku'].nunique():,}")  # type: ignore[index]
+        print(f"Unique orders: {consolidated_df['order_id'].nunique():,}")
+        print(f"Unique products (SKUs): {consolidated_df['sku'].nunique():,}")
 
         return consolidated_df
 

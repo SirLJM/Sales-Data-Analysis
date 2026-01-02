@@ -9,6 +9,7 @@ from utils.logging_config import get_logger
 
 from .analyzer import SalesAnalyzer
 from .data_source import DataSource
+from .dtype_optimizer import optimize_dtypes
 from .loader import SalesDataLoader, load_size_aliases_from_excel
 
 logger = get_logger("file_source")
@@ -72,7 +73,8 @@ class FileSource(DataSource):
         if not all_stock_dfs:
             return pd.DataFrame()
 
-        return pd.concat(all_stock_dfs, ignore_index=True)
+        result = pd.concat(all_stock_dfs, ignore_index=True)
+        return optimize_dtypes(result)
 
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
         if generated_date is not None:
@@ -181,7 +183,7 @@ class FileSource(DataSource):
         monthly_agg["entity_type"] = entity_type
         monthly_agg["year_month"] = monthly_agg["year_month"].astype(str)
 
-        return monthly_agg
+        return optimize_dtypes(monthly_agg)
 
     def load_model_metadata(self) -> pd.DataFrame | None:
         return self.loader.load_model_metadata()

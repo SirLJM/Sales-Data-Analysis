@@ -147,8 +147,8 @@ Standalone tool for optimizing cutting patterns in manufacturing.
 Instead of manually entering size quantities, you can load historical sales data:
 
 1. Enter a model code (e.g., "CH031") in the "Model" field
-2. Click "Load" button
-3. System automatically aggregates last 4 months of sales by size for all colors of the model
+2. Click the "Load" button
+3. System automatically aggregates the last 4 months of sales by size for all colors of the model
 4. Size quantities are populated in the input fields
 
 **Output:**
@@ -315,104 +315,276 @@ Track and manage created production orders with delivery countdown.
 
 ### Tab 8: Forecast Accuracy
 
-Monitor forecast quality by comparing historical forecasts against actual sales.
+**Purpose:** Measure how accurate your external forecast was compared to what actually sold. This answers the question:
+*"How good was our forecast?"*
 
-**Parameters:**
+**When to Use:**
 
-- **Analysis Period**: Date range to analyze (minimum = lead time)
-- **Forecast Lookback**: Months before analysis starts to find a forecast file
-- **View Level**: SKU or Model level accuracy
+- Monthly review to assess forecast quality
+- After a season ends to evaluate prediction accuracy
+- When investigating why certain products had stockouts or overstock
 
-**Metrics:**
+**Key Concept:**
+This tab looks **backwards in time**. It compares a **past forecast** against **actual sales that already happened**.
+You're measuring historical accuracy, not predicting the future.
 
-| Metric             | Description                                                                   |
-|--------------------|-------------------------------------------------------------------------------|
-| MAPE               | Mean Absolute Percentage Error (lower is better)                              |
-| BIAS               | Forecast direction: positive = over-forecasting, negative = under-forecasting |
-| Missed Opportunity | Forecast quantity during stockout periods                                     |
-| Volume Accuracy    | How close total forecast was to total actual sales                            |
+#### Step-by-Step Workflow
 
-**Color-Coded Thresholds:**
+1. **Set Analysis Period** (the time range you want to evaluate):
+    - Example: If today is January 15, 2025, you might analyze October 1 - December 31, 2024
+    - This is the period where you'll compare forecast vs. actual sales
+    - Minimum recommended: at least 30 days for meaningful results
 
-- Green (< 20% MAPE): Good accuracy
-- Yellow (20-40% MAPE): Acceptable accuracy
-- Red (> 40% MAPE): Poor accuracy
+2. **Set Forecast Lookback** (how far back to find the forecast file):
+    - Default: 4 months before analysis starts
+    - The system looks for a forecast file generated before your analysis period
+    - Example: For analysis starting Oct 1, it looks for the forecast from ~June 2024
+    - This simulates real-world conditions where you make forecasts months ahead
 
-**Views:**
+3. **Choose View Level**:
+    - **SKU**: Granular analysis of each size/color variant
+    - **Model**: Aggregated analysis at product family level (recommended for overview)
 
-- **Accuracy by Item**: Detailed table with search and sorting
-- **Accuracy by Product Type**: Bar chart comparing MAPE across product types
-- **Trend Chart**: Weekly MAPE trend over time
-- **Item Detail View**: Deep dive into individual SKU/Model accuracy
+4. **Click "Generate Accuracy Report"**
+
+#### Understanding the Results
+
+**Overall Metrics (top of page):**
+
+| Metric             | What It Means                                       | Target        |
+|--------------------|-----------------------------------------------------|---------------|
+| MAPE               | Average error as percentage                         | < 20% = Good  |
+| BIAS               | Positive = over-forecast, Negative = under-forecast | Close to 0%   |
+| Missed Opportunity | Units that could have sold during stockouts         | Minimize      |
+| Volume Accuracy    | Total forecast vs total actual                      | Close to 100% |
+
+**Color Indicators:**
+
+- 🟢 Green (MAPE < 20%): Excellent - forecast is reliable
+- 🟡 Yellow (MAPE 20–40%): Acceptable - room for improvement
+- 🔴 Red (MAPE > 40%): Poor - investigate why
+
+**Accuracy by Product Type Chart:**
+Shows which product categories forecast well vs. poorly. Common patterns:
+
+- Basic products usually have the lowest MAPE (stable demand)
+- New products often have highest MAPE (limited history)
+- Seasonal products vary based on timing
+
+**Trend Chart:**
+Shows how accuracy changed over time during the analysis period. Look for:
+
+- Consistent low MAPE = reliable forecasting
+- Spikes = investigate specific weeks/events
+- Improving trend = forecasting process getting better
+
+**Detail Table:**
+Click on any SKU/Model to see:
+
+- Actual sales vs forecast per period
+- When stockouts occurred
+- MAPE breakdown by week/month
+
+#### Practical Example
+
+*Scenario: Q4 2024 review (Oct – Dec)*
+
+1. Set Analysis Start: October 1, 2024
+2. Set Analysis End: December 31, 2024
+3. Lookback: 4 months (finds ~June 2024 forecast)
+4. Generate a report
+
+*Results interpretation:*
+
+- Overall MAPE: 28% → Acceptable, but could improve
+- BIAS: +15% → Consistently over-forecasting (ordered too much)
+- Basic products: 18% MAPE → Good
+- Seasonal products: 45% MAPE → Poor (Christmas spike underestimated)
+
+*Action: Adjust seasonal Z-scores and review seasonal detection parameters*
 
 ---
 
 ### Tab 9: Forecast Comparison
 
-Generate internal forecasts using statistical methods and compare them against external forecasts to evaluate forecast quality.
+**Purpose:** Generate your own statistical forecasts and compare them against external/vendor forecasts. This answers:
+*"Could we forecast better internally?"*
 
-**Two Sub-tabs:**
+**When to Use:**
 
-1. **Generate New**: Create new internal forecasts and compare with external
-2. **Historical Forecasts**: Load previously saved forecasts for comparison
+- Evaluating whether to switch forecast providers
+- Testing if internal models outperform vendor forecasts
+- Building a historical record of forecast experiments
+- Identifying which product types work best with which methods
 
-**Parameters:**
+**Key Concept:**
+This tab generates **new forecasts looking forward**, then compares them to external forecasts. It uses statistical
+methods (Moving Average, Exponential Smoothing, Holt-Winters, SARIMA) automatically selected based on a product type.
 
-| Parameter | Description |
-|-----------|-------------|
-| Forecast Horizon | Number of months to forecast (1-12, default: lead time) |
-| Entity Level | Model (recommended) or SKU level analysis |
-| Top N | Limit analysis to top N entities by sales volume |
+#### Two Sub-tabs
 
-**Forecasting Methods (Auto-selected):**
+**1. Generate New** - Create fresh internal forecasts
+**2. Historical Forecasts** - Review previously saved forecast experiments
 
-| Method | Used When | Description |
-|--------|-----------|-------------|
-| Moving Average | New products (< 6 months) | Simple weighted average |
-| Exponential Smoothing | Basic products (CV < 0.6) | Trend-based smoothing |
-| Holt-Winters | Regular products | Seasonal decomposition |
-| SARIMA | Seasonal products (CV > 1.0) | Full seasonal ARIMA model |
+---
 
-**Comparison Metrics:**
+#### Generate New Tab: Step-by-Step
 
-| Metric | Description |
-|--------|-------------|
-| MAPE | Mean Absolute Percentage Error (lower is better) |
-| BIAS | Forecast direction tendency |
-| MAE | Mean Absolute Error |
-| RMSE | Root Mean Square Error |
-| Winner | Which forecast performed better (internal/external/tie) |
-| Improvement | Percentage improvement of winner over loser |
+1. **Set Forecast Horizon**:
+    - How many months ahead to forecast (1–12)
+    - Default: matches your lead time setting
+    - Recommendation: Match your typical planning horizon (e.g., 2–3 months)
 
-**Output Sections:**
+2. **Choose Entity Level**:
+    - **Model** (recommended): Faster, more stable results, aggregates by product family
+    - **SKU**: Detailed but slower, may have sparse data for low-volume items
 
-1. **Overall Summary**: Aggregate comparison showing total wins for internal vs external
-2. **Breakdown by Product Type**: Win rates by product category (basic, regular, seasonal, new)
-3. **Detailed Table**: Per-entity metrics with sorting and CSV export
-4. **Comparison Chart**: Visual comparison for selected entity showing actual vs internal vs external forecasts
+3. **Set Top N**:
+    - Limit analysis to top N entities by sales volume
+    - Recommendation: Start with 50–100 for quick analysis, increase for comprehensive review
+    - Full analysis of all items can take several minutes
 
-**Saving Forecasts:**
+4. **Click "Generate Comparison"**
 
-After generating forecasts, you can save them to history:
+#### Understanding Comparison Results
 
-1. Optionally add notes describing the forecast batch
+**Overall Summary Box:**
+
+```
+Internal Wins: 45 (45%)
+External Wins: 38 (38%)
+Ties: 17 (17%)
+```
+
+Higher internal win % suggests your statistical models outperform the vendor forecast.
+
+**Breakdown by Product Type Table:**
+
+| Type     | Total | Internal Wins | External Wins | Internal Win % | Avg Int MAPE | Avg Ext MAPE |
+|----------|-------|---------------|---------------|----------------|--------------|--------------|
+| basic    | 30    | 20            | 8             | 67%            | 15%          | 22%          |
+| regular  | 40    | 18            | 18            | 45%            | 25%          | 26%          |
+| seasonal | 20    | 5             | 12            | 25%            | 38%          | 28%          |
+| new      | 10    | 2             | 0             | 20%            | 45%          | 52%          |
+
+*Interpretation: Internal models excel for basic products but struggle with seasonal items.*
+
+**Detailed Comparison Table:**
+Each row shows one entity (SKU or Model) with:
+
+- Internal MAPE vs External MAPE
+- Winner indicator
+- Improvement % (how much better the winner was)
+- Methods used (which statistical method was applied)
+
+**Comparison Chart:**
+Select any entity to see a visual comparison:
+
+- Gray line: Actual historical sales
+- Blue line: Internal forecast
+- Red line: External forecast
+- Shaded area: Forecast period
+
+#### Saving Forecasts to History
+
+After generating, you can save results for future reference:
+
+1. Add optional notes (e.g., "Q1 2025 baseline", "After parameter tuning")
 2. Click "Save Forecast to History"
-3. Forecasts are stored in database (if available) or local files
+3. Saved forecasts include:
+    - All generated forecast values
+    - Parameters used
+    - Comparison metrics
+    - Timestamp
 
-**Loading Historical Forecasts:**
+**Why Save?**
 
-1. Switch to "Historical Forecasts" tab
-2. Select a saved forecast from the dropdown
-3. View batch metadata (entity type, horizon, success/failure counts, methods used)
-4. Click "Load and Compare" to recalculate metrics against current actual sales
-5. Click "Delete" to remove a historical forecast
+- Track improvements over time
+- Compare before/after parameter changes
+- Build evidence for forecast provider decisions
+- Audit the trail of forecasting experiments
 
-**Use Cases:**
+---
 
-- Evaluate if internal statistical models outperform vendor forecasts
-- Track forecast accuracy improvements over time
-- Identify product types where different methods work better
-- A/B testing of forecasting approaches
+#### Historical Forecasts Tab: Step-by-Step
+
+1. **Select Saved Forecast** from the dropdown (sorted by date, newest first)
+
+2. **Review Batch Info:**
+    - Generated date/time
+    - Entity type (SKU/Model)
+    - Forecast horizon
+    - Success/failure counts
+    - Methods used breakdown
+
+3. **Click "Load and Compare"** to recalculate metrics against current actual data
+
+4. **Or "Delete"** to remove a historical forecast
+
+**Why Reload?**
+As more actual sales data becomes available, you can recalculate the accuracy of old forecasts to see true performance.
+
+---
+
+#### Forecasting Methods Explained
+
+The system automatically selects the best method for each entity:
+
+| Method                    | When Used                         | How It Works                     | Best For                     |
+|---------------------------|-----------------------------------|----------------------------------|------------------------------|
+| **Moving Average**        | New products (< 6 months history) | Weighted average of recent sales | Limited data situations      |
+| **Exponential Smoothing** | Basic products (CV < 0.6)         | Trend-following with decay       | Stable, trending products    |
+| **Holt-Winters**          | Regular products (0.6 ≤ CV ≤ 1.0) | Trend + seasonality              | Products with clear patterns |
+| **SARIMA**                | Seasonal products (CV > 1.0)      | Full seasonal ARIMA model        | Complex seasonal patterns    |
+
+*Fallback behavior: If a complex method fails (insufficient data), the system automatically tries simpler methods.*
+
+---
+
+#### Practical Examples
+
+**Example 1: Quarterly Vendor Evaluation**
+
+*Goal: Should we renew the contract with a forecast vendor?*
+
+1. Generate New → Model level → Top 200 → Horizon: 3 months
+2. Review overall summary: Internal wins 55%, External wins 35%
+3. Check by product type: Internals much better for basic/regular
+4. Save with note: "Q4 2024 vendor evaluation"
+5. Decision: Consider bringing forecasting in-house for stable products
+
+**Example 2: Before/After Parameter Tuning**
+
+*Goal: Did adjusting seasonal Z-scores improve forecasting?*
+
+1. Before changes: Save forecast with the note "Before seasonal tuning"
+2. Adjust parameters in sidebar
+3. After changes: Generate a new comparison
+4. Save with the note "After seasonal tuning"
+5. Load both from history and compare win rates
+
+**Example 3: Method Performance Analysis**
+
+*Goal: Which forecasting method works best for our product mix?*
+
+1. Generate comparison at Model level → Top 500
+2. Export detailed table to CSV
+3. Analyze externally: Group by "Method Used" column
+4. Find: SARIMA has the lowest MAPE for seasonal items, Moving Average struggles
+5. Action: Investigate why some entities fall back to simpler methods
+
+---
+
+#### Key Differences: Tab 8 vs Tab 9
+
+| Aspect                | Tab 8: Forecast Accuracy          | Tab 9: Forecast Comparison        |
+|-----------------------|-----------------------------------|-----------------------------------|
+| **Direction**         | Looks backwards                   | Looks forwards                    |
+| **Purpose**           | Measure past performance          | Generate new forecasts            |
+| **Compares**          | External forecast vs actual sales | Internal vs external forecasts    |
+| **Question Answered** | "How accurate was our forecast?"  | "Could we forecast better?"       |
+| **Output**            | Accuracy metrics (MAPE, BIAS)     | Winner analysis + saved forecasts |
+| **Typical Use**       | Monthly/quarterly review          | Vendor evaluation, method testing |
 
 ---
 
@@ -1098,16 +1270,16 @@ If you manufacture or order in cutting patterns:
 
 ### Key Performance Indicators to Watch
 
-| KPI               | What to Monitor                 | Target    | Where to Check |
-|-------------------|---------------------------------|-----------|----------------|
-| Items Below ROP   | Count of critical items         | Minimize  | Tab 1 filter   |
-| Stockout Rate     | Items at zero with demand       | Under 5%  | Tab 5 urgent   |
-| Overstock Items   | Stock > 6 months of demand      | Under 10% | Tab 1 filter   |
-| Forecast MAPE     | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
-| Forecast Bias     | Over/under forecasting tendency | Near 0%   | Tab 8          |
-| Internal vs Ext   | Internal forecast win rate      | Track     | Tab 9          |
-| Active Orders     | Orders in production            | Track     | Tab 7          |
-| Orders Ready      | Orders past delivery threshold  | Process   | Tab 7          |
+| KPI             | What to Monitor                 | Target    | Where to Check |
+|-----------------|---------------------------------|-----------|----------------|
+| Items Below ROP | Count of critical items         | Minimize  | Tab 1 filter   |
+| Stockout Rate   | Items at zero with demand       | Under 5%  | Tab 5 urgent   |
+| Overstock Items | Stock > 6 months of demand      | Under 10% | Tab 1 filter   |
+| Forecast MAPE   | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
+| Forecast Bias   | Over/under forecasting tendency | Near 0%   | Tab 8          |
+| Internal vs Ext | Internal forecast win rate      | Track     | Tab 9          |
+| Active Orders   | Orders in production            | Track     | Tab 7          |
+| Orders Ready    | Orders past delivery threshold  | Process   | Tab 7          |
 
 ### Common Business Scenarios
 
@@ -1138,10 +1310,17 @@ If you manufacture or order in cutting patterns:
 #### Scenario 5: Poor Forecast Accuracy
 
 1. Open **Tab 8: Forecast Accuracy**
-2. Generate a report for the last 90 days
-3. Check MAPE by product type - identify problem areas
-4. Review BIAS - positive = over-forecasting, negative = under-forecasting
-5. **Action:** Adjust forecasting model or safety stock for affected items
+2. Set analysis period: last 90 days (or last completed quarter)
+3. Set lookback: 4 months (to find the forecast that was used)
+4. Generate report and review overall MAPE
+5. Check MAPE by product type - identify problem categories
+6. Review BIAS:
+    - Positive (+) = over-forecasting = ordered too much = excess inventory
+    - Negative (-) = under-forecasting = ordered too little = stockouts
+7. **Action:** For categories with high MAPE:
+    - Seasonal with poor accuracy → Review seasonal detection parameters
+    - New products with poor accuracy → Expected, monitor more closely
+    - Basic products with poor accuracy → Investigate data quality issues
 
 #### Scenario 6: Order Delivery Tracking
 
@@ -1151,14 +1330,32 @@ If you manufacture or order in cutting patterns:
 4. Archive processed orders to keep the list clean
 5. **Action:** Check Tab 5 - archived models will reappear in recommendations if needed
 
-#### Scenario 7: Evaluating Forecast Sources
+#### Scenario 7: Evaluating Forecast Sources (Quarterly Review)
+
+*Goal: Should we use external vendor forecasts or build internal models?*
 
 1. Open **Tab 9: Forecast Comparison**
-2. Generate comparison with default parameters (model level)
-3. Review overall summary - which forecast source wins more often?
-4. Check breakdown by product type - internal may work better for some categories
-5. Save the forecast batch with descriptive notes
-6. **Action:** If internal consistently outperforms, consider adjusting external forecast provider
+2. Set parameters: Model level, Top 200, Horizon = lead time
+3. Click "Generate Comparison" and wait for analysis
+4. Review overall summary:
+    - Internal wins > 50%? → Internal models may be better
+    - External wins > 50%? → Vendor forecast is adding value
+5. Check the breakdown by product type:
+    - Internal often wins for basic products (stable patterns)
+    - External may win for seasonal (vendor may have market intelligence)
+6. Save with note: "Q4 2024 vendor review"
+7. **Action:** Consider hybrid approach - use internal for basic, external for seasonal
+
+#### Scenario 8: Tracking Forecast Improvement Over Time
+
+*Goal: Are our forecasting adjustments making things better?*
+
+1. Open **Tab 9: Forecast Comparison** → Historical Forecasts tab
+2. Load the oldest saved forecast
+3. Note the internal win rate and average MAPE
+4. Load the newest saved forecast
+5. Compare win rates and MAPE values
+6. **Action:** If improving, continue the current approach; if not, review parameter changes
 
 ### Adjusting Settings for Your Business
 
@@ -1182,22 +1379,24 @@ If you manufacture or order in cutting patterns:
 
 ### Quick Reference Card
 
-| I Want To...                  | Go To... | Do This...                                      |
-|-------------------------------|----------|-------------------------------------------------|
-| See what needs ordering       | Tab 5    | Generate recommendations, use facility filters  |
-| Check a specific product      | Tab 1    | Search by SKU/Model, view projection chart      |
-| Find trending products        | Tab 3    | Check Rising/Falling Stars                      |
-| Compare to last year          | Tab 4    | Review category YoY performance                 |
-| Create a production order     | Tab 6    | Select items from Tab 5 or enter model manually |
-| Set up cutting patterns       | Tab 2    | Create pattern set, define sizes and patterns   |
-| Load sales history for sizes  | Tab 2    | Enter model code, click Load                    |
-| Track order delivery          | Tab 7    | View active orders, check days elapsed          |
-| Add manual order              | Tab 7    | Enter model code and date                       |
-| Archive completed order       | Tab 7    | Check archive checkbox, click Archive button    |
-| Check forecast quality        | Tab 8    | Set date range, generate accuracy report        |
-| Compare internal vs external  | Tab 9    | Generate comparison, review winners by type     |
-| Save forecast for history     | Tab 9    | Generate, add notes, Save to History            |
-| Filter by production facility | Tab 5    | Use Include/Exclude facility filters            |
+| I Want To...                  | Go To... | Do This...                                       |
+|-------------------------------|----------|--------------------------------------------------|
+| See what needs ordering       | Tab 5    | Generate recommendations, use facility filters   |
+| Check a specific product      | Tab 1    | Search by SKU/Model, view projection chart       |
+| Find trending products        | Tab 3    | Check Rising/Falling Stars                       |
+| Compare to last year          | Tab 4    | Review category YoY performance                  |
+| Create a production order     | Tab 6    | Select items from Tab 5 or enter model manually  |
+| Set up cutting patterns       | Tab 2    | Create pattern set, define sizes and patterns    |
+| Load sales history for sizes  | Tab 2    | Enter model code, click Load                     |
+| Track order delivery          | Tab 7    | View active orders, check days elapsed           |
+| Add manual order              | Tab 7    | Enter model code and date                        |
+| Archive completed order       | Tab 7    | Check archive checkbox, click Archive button     |
+| Check forecast quality        | Tab 8    | Set analysis period + lookback, generate report  |
+| See forecast accuracy trend   | Tab 8    | Generate report, scroll to Trend Chart section   |
+| Compare internal vs external  | Tab 9    | Generate New → set horizon → Generate Comparison |
+| Save forecast for history     | Tab 9    | After generating, add notes, Save to History     |
+| Load historical forecast      | Tab 9    | Historical Forecasts tab → select → Load         |
+| Filter by production facility | Tab 5    | Use Include/Exclude facility filters             |
 
 ---
 
@@ -1261,7 +1460,7 @@ If you manufacture or order in cutting patterns:
 
 - Ensure both sales data and external forecast data are loaded
 - Internal forecasts require at least 3 months of sales history per entity
-- SARIMA method may fail for entities with sparse data - system falls back to simpler methods
+- SARIMA method may fail for entities with sparse data - the system falls back to simpler methods
 - Historical forecasts require database mode or write access to data/internal_forecasts/ directory
 
 **Pattern optimizer sales history not loading:**
