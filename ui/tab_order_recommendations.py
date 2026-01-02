@@ -55,6 +55,7 @@ def _initialize_tab_session_state() -> None:
         st.session_state[SessionKeys.SZWALNIA_EXCLUDE_FILTER] = []
 
 
+@st.fragment
 def _render_parameters_expander() -> None:
     settings = get_settings()
 

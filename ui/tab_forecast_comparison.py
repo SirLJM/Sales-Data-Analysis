@@ -765,6 +765,7 @@ def _handle_batch_actions(batch_id: str, batch: dict, repo) -> None:
                 st.error("Failed to delete forecast")
 
 
+@st.fragment
 def _render_historical_tab() -> None:
     st.subheader("Historical Internal Forecasts")
 

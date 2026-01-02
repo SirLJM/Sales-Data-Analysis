@@ -37,6 +37,7 @@ def _render_content() -> None:
     _render_facility_capacity()
 
 
+@st.fragment
 def _render_pdf_upload() -> None:
     from ui.shared import load_unique_categories, load_unique_facilities
     from utils.order_manager import add_manual_order
@@ -104,6 +105,7 @@ def _display_parsed_order(order_data: dict) -> None:
     st.dataframe(parsed_df, hide_index=True)
 
 
+@st.fragment
 def _render_manual_order_form() -> None:
     from utils.order_manager import add_manual_order
 
@@ -195,6 +197,7 @@ def _invalidate_orders_cache() -> None:
         del st.session_state["cached_active_orders"]
 
 
+@st.fragment
 def _render_active_orders() -> None:
     st.subheader("📋 Active Orders")
 

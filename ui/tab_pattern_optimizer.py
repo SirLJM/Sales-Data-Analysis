@@ -232,6 +232,7 @@ def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
         return {}
 
 
+@st.fragment
 def _render_pattern_sets_section() -> None:
     st.markdown('<div class="section-header">Pattern Sets</div>', unsafe_allow_html=True)
 

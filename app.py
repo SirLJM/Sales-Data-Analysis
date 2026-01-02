@@ -25,7 +25,7 @@ st.markdown(RESPONSIVE_TABS_STYLE, unsafe_allow_html=True)
 
 initialize_session_state()
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tabs = st.tabs([
     "📊 Sales & Inventory Analysis",
     "✂️ Size Pattern Optimizer",
     "📋 Weekly Analysis",
@@ -45,29 +45,29 @@ context = {
     "use_forecast": sidebar_options.get("use_forecast", True),
 }
 
-with tab1:
+with tabs[0]:
     tab_sales_analysis.render(context)
 
-with tab2:
+with tabs[1]:
     tab_pattern_optimizer.render()
 
-with tab3:
+with tabs[2]:
     tab_weekly_analysis.render(context)
 
-with tab4:
+with tabs[3]:
     tab_monthly_analysis.render()
 
-with tab5:
+with tabs[4]:
     tab_order_recommendations.render(context)
 
-with tab6:
+with tabs[5]:
     tab_order_creation.render(context)
 
-with tab7:
+with tabs[6]:
     tab_order_tracking.render()
 
-with tab8:
+with tabs[7]:
     tab_forecast_accuracy.render(context)
 
-with tab9:
+with tabs[8]:
     tab_forecast_comparison.render()
