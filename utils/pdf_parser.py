@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import tempfile
 from datetime import datetime
 from io import BytesIO
 
@@ -31,25 +32,26 @@ def set_lookup_data(facilities: list[str], categories: list[str]) -> None:
 def parse_order_pdf(pdf_file: BytesIO | str) -> dict | None:
     try:
         if isinstance(pdf_file, BytesIO):
-            temp_path = "temp_order.pdf"
-            with open(temp_path, "wb") as f:
-                f.write(pdf_file.getvalue())
-            pdf_path = temp_path
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(pdf_file.getvalue())
+                pdf_path = tmp.name
         else:
             pdf_path = pdf_file
 
-        reader = PdfReader(pdf_path)
-        page_text = reader.pages[0].extract_text()
+        try:
+            reader = PdfReader(pdf_path)
+            page_text = reader.pages[0].extract_text()
+            tables = read_pdf(pdf_path, pages="1", flavor="stream")
 
-        tables = read_pdf(pdf_path, pages="1", flavor="stream")
+            if not tables:
+                logger.warning("No tables found in PDF")
+                return None
 
-        if not tables or len(tables) < 2:
-            logger.warning("Expected table not found in PDF")
-            return None
-
-        order_data = _extract_order_metadata(tables, page_text)
-
-        return order_data
+            return _extract_order_metadata(tables, page_text)
+        finally:
+            if isinstance(pdf_file, BytesIO):
+                import os
+                os.unlink(pdf_path)
 
     except Exception as e:
         logger.exception("Error parsing PDF: %s", e)
@@ -77,26 +79,87 @@ def _extract_facility(line_lower: str) -> str | None:
 
 
 def _extract_material(line: str) -> str | None:
-    if ("DRES" in line or "GSM" in line) and ("PĘTELKA" in line or "GSM" in line):
-        return line.strip()
+    line_upper = line.upper()
+    if "GSM" in line_upper:
+        gsm_match = re.search(r"(\d+)\s*GSM", line_upper)
+        material_keywords = ["DRES", "PĘTELKA", "DRAPANA", "SINGIEL"]
+        material_parts = []
+        for keyword in material_keywords:
+            if keyword in line_upper:
+                material_parts.append(keyword)
+        if gsm_match:
+            material_parts.append(f"{gsm_match.group(1)} GSM")
+        if material_parts:
+            return " ".join(material_parts)
     return None
 
 
-def _extract_product_name(line: str) -> str | None:
-    if "SZTUK" not in line:
-        return None
-    product_match = re.search(r'(.+?)\s+\d+\s*SZTUK', line)
-    if product_match:
-        return product_match.group(1).strip()
-    return line.split("SZTUK")[0].strip() if "SZTUK" in line else None
+def _get_product_keywords() -> list[str]:
+    keywords = [c.upper() for c in _categories if c]
+    default_keywords = ["BLUZA", "SUKIENKA", "SPODNIE", "KOSZULKA", "KAPTUR", "DRESS", "ŁATY"]
+    for kw in default_keywords:
+        if kw not in keywords:
+            keywords.append(kw)
+    return keywords
+
+
+def _clean_product_name(name: str) -> str:
+    return re.sub(r"\s*\d+\s*SZTUK.*", "", name.strip())
+
+
+def _extract_product_name_from_text(page_text: str) -> str | None:
+    keywords = _get_product_keywords()
+    keywords_pattern = "|".join(re.escape(kw) for kw in keywords)
+    product_patterns = [
+        rf"((?:NOWA\s+)?(?:{keywords_pattern})(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ]+){{0,3}})",
+        r"(\w+\s+kopertowa)",
+    ]
+    for pattern in product_patterns:
+        match = re.search(pattern, page_text, re.IGNORECASE)
+        if match:
+            return _clean_product_name(match.group(1))
+    return None
+
+
+def _cell_matches_keyword(cell_value: str, keywords: list[str]) -> bool:
+    if len(cell_value) >= 50:
+        return False
+    return any(kw in cell_value.upper() for kw in keywords)
+
+
+def _extract_product_name_from_table(tables) -> str | None:
+    keywords = _get_product_keywords()
+    for table in tables:
+        df = table.df
+        for row_idx in range(min(10, len(df))):
+            for col_idx in range(len(df.columns)):
+                cell_value = str(df.iloc[row_idx, col_idx]).strip()
+                if _cell_matches_keyword(cell_value, keywords):
+                    return cell_value
+    return None
 
 
 def _extract_model_from_table(tables) -> str | None:
-    main_table = tables[1].df if len(tables) > 1 else tables[0].df
-    for col_idx in range(len(main_table.columns)):
-        cell_value = str(main_table.iloc[1, col_idx]).strip()
-        if re.match(r"^[A-Z]{2}\d{3}$", cell_value):
-            return cell_value
+    for table in tables:
+        df = table.df
+        for row_idx in range(min(10, len(df))):
+            for col_idx in range(len(df.columns)):
+                cell_value = str(df.iloc[row_idx, col_idx]).strip()
+                model_match = re.search(r"([A-Z]{2}\d{3})", cell_value)
+                if model_match:
+                    return model_match.group(1)
+    return None
+
+
+def _extract_quantity_from_table(tables) -> int | None:
+    for table in tables:
+        df = table.df
+        for row_idx in range(len(df)):
+            cell_value = str(df.iloc[row_idx, -1]).strip()
+            if cell_value.isdigit():
+                qty = int(cell_value)
+                if qty >= 100:
+                    return qty
     return None
 
 
@@ -123,14 +186,22 @@ def _extract_order_metadata(tables, page_text: str) -> dict:
             metadata["facility"] = _extract_facility(line_lower)
         if not metadata["material"]:
             metadata["material"] = _extract_material(line)
-        if not metadata["product_name"]:
-            metadata["product_name"] = _extract_product_name(line)
+
+    metadata["product_name"] = _extract_product_name_from_table(tables)
+    if not metadata["product_name"]:
+        metadata["product_name"] = _extract_product_name_from_text(page_text)
 
     qty_match = re.search(r"(\d+)\s*SZTUK", page_text)
     if qty_match:
         metadata["total_quantity"] = int(qty_match.group(1))
+    else:
+        metadata["total_quantity"] = _extract_quantity_from_table(tables)
 
     metadata["model"] = _extract_model_from_table(tables)
+    if not metadata["model"]:
+        model_match = re.search(r"([A-Z]{2}\d{3})", page_text)
+        if model_match:
+            metadata["model"] = model_match.group(1)
 
     return metadata
 

@@ -8,6 +8,8 @@ import streamlit as st
 from ui.constants import ColumnNames, Config, Icons
 from utils.logging_config import get_logger
 
+TOTAL_QUANTITY = "Total Quantity"
+
 logger = get_logger("tab_order_tracking")
 
 
@@ -30,6 +32,9 @@ def _render_content() -> None:
 
     st.markdown("---")
     _render_active_orders()
+
+    st.markdown("---")
+    _render_facility_capacity()
 
 
 def _render_pdf_upload() -> None:
@@ -281,3 +286,58 @@ def _handle_archive_selection(edited_orders: pd.DataFrame) -> None:
                     st.error(f"{Icons.ERROR} Failed to archive order {row[ColumnNames.ORDER_ID]}")
             _invalidate_orders_cache()
             st.rerun()
+
+
+def _render_facility_capacity() -> None:
+    st.subheader("🏭 Facility Capacity")
+
+    active_orders = _get_cached_active_orders()
+
+    if not active_orders:
+        st.info(f"{Icons.INFO} No active orders to calculate facility capacity.")
+        return
+
+    capacity_data = _calculate_facility_capacity(active_orders)
+
+    if not capacity_data:
+        st.info(f"{Icons.INFO} No facility data available in active orders.")
+        return
+
+    capacity_df = pd.DataFrame(capacity_data)
+    capacity_df = capacity_df.sort_values(TOTAL_QUANTITY, ascending=False)
+
+    st.dataframe(
+        capacity_df,
+        hide_index=True,
+        column_config={
+            "Facility": st.column_config.TextColumn("Facility", width="medium"),
+            "Order Count": st.column_config.NumberColumn("Orders", format="%d"),
+            TOTAL_QUANTITY: st.column_config.NumberColumn("Total Qty", format="%d"),
+        },
+    )
+
+    total_qty = capacity_df[TOTAL_QUANTITY].sum()
+    st.caption(f"📊 Total quantity across all facilities: {total_qty:,}")
+
+
+def _calculate_facility_capacity(active_orders: list[dict]) -> list[dict]:
+    facility_totals: dict[str, dict] = {}
+
+    for order in active_orders:
+        facility = order.get("facility") or "Unknown"
+        quantity = order.get("total_quantity") or 0
+
+        if facility not in facility_totals:
+            facility_totals[facility] = {"order_count": 0, "total_quantity": 0}
+
+        facility_totals[facility]["order_count"] += 1
+        facility_totals[facility]["total_quantity"] += quantity
+
+    return [
+        {
+            "Facility": facility,
+            "Order Count": data["order_count"],
+            "Total Quantity": data["total_quantity"],
+        }
+        for facility, data in facility_totals.items()
+    ]
