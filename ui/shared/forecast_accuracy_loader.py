@@ -65,7 +65,11 @@ def get_available_forecast_dates() -> list[datetime]:
 
 def get_date_range_from_sales() -> tuple[datetime | None, datetime | None]:
     data_source = get_data_source()
-    sales_df = data_source.load_sales_data()
+
+    try:
+        sales_df = data_source.load_sales_data()
+    except ValueError:
+        return None, None
 
     if sales_df is None or sales_df.empty:
         return None, None
