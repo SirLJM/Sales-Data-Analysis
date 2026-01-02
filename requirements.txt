@@ -1,18 +1,19 @@
-streamlit>=1.52.2
-pandas>=2.3.3
-numpy>=2.3.5
-openpyxl>=3.1.5
-plotly-express>=0.4.1
-psycopg2-binary>=2.9.11
-sqlalchemy>=2.0.45
-alembic>=1.17.2
-python-dotenv>=1.2.1
-camelot-py[base]>=1.0.9
-statsmodels>=0.14.6
-sktime>=0.40.1
+streamlit
+streamlit-aggrid
+pandas
+numpy
+openpyxl
+plotly-express
+psycopg2-binary
+sqlalchemy
+alembic
+python-dotenv
+camelot-py[base]
+statsmodels
+sktime
 
 # Testing
-pytest>=9.0.2
-pytest-cov>=7.0.0
-pytest-mock>=3.15.1
-freezegun>=1.5.5
+pytest
+pytest-cov
+pytest-mock
+freezegun

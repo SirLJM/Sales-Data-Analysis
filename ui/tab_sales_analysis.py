@@ -10,7 +10,7 @@ from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.shared.data_loaders import load_data, load_forecast, load_stock
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
-from ui.shared.styles import DATAFRAME_STYLE, SIDEBAR_STYLE
+from ui.shared.styles import SIDEBAR_STYLE
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_sales_analysis")
@@ -314,8 +314,11 @@ def _render_data_table(
     item_label = "Model(s)" if group_by_model else "SKU(s)"
     st.write(f"Showing {len(filtered_summary)} of {len(summary)} {item_label}")
 
-    st.markdown(DATAFRAME_STYLE, unsafe_allow_html=True)
-    st.dataframe(filtered_summary, width="stretch", height=Config.DATAFRAME_HEIGHT)
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+
+    id_col = "MODEL" if group_by_model else "SKU"
+    pinned = [id_col] if id_col in filtered_summary.columns else None
+    render_dataframe_with_aggrid(filtered_summary, height=Config.DATAFRAME_HEIGHT, pinned_columns=pinned)
 
 
 def _render_type_metrics(display_data: pd.DataFrame) -> None:
@@ -381,7 +384,7 @@ def _render_stock_metrics(
             },
         )
         fig.update_traces(textposition="inside", textinfo="percent+label+value")
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig)
 
     if stock_df is not None:
         col1, col2, col3 = st.columns(3)

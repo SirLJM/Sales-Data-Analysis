@@ -165,6 +165,31 @@ def _render_parameters() -> dict:
                 help="Auto selects method based on product type. AutoARIMA automatically finds best ARIMA parameters.",
             )
 
+        st.markdown("---")
+        col_date1, col_date2, col_info = st.columns([1, 1, 2])
+
+        with col_date1:
+            generation_date = st.date_input(
+                "Generate 'as of' date",
+                value=pd.Timestamp.now().date(),
+                help="Simulate forecast generation as if it was this date. Only sales data up to this date will be used.",
+                key="fc_generation_date",
+            )
+
+        with col_date2:
+            comparison_date = st.date_input(
+                "Compare 'as of' date",
+                value=pd.Timestamp.now().date(),
+                help="Date up to which actual sales are loaded for comparison. Set to future date of generation date to see forecast accuracy.",
+                key="fc_comparison_date",
+            )
+
+        with col_info:
+            st.caption(
+                "**Generation date**: Only sales up to this date are used to generate forecast. "
+                "**Comparison date**: Actual sales from forecast period up to this date are loaded for accuracy comparison."
+            )
+
         filter_params = {}
         if filter_type == "top_n":
             filter_params["top_n"] = st.slider(
@@ -196,16 +221,45 @@ def _render_parameters() -> dict:
         "filter_type": filter_type,
         "filter_params": filter_params,
         "forecast_method": forecast_method if forecast_method != "auto" else None,
+        "generation_date": generation_date,
+        "comparison_date": comparison_date,
     }
+
+
+def _filter_monthly_agg_by_date(monthly_agg: pd.DataFrame, cutoff_date) -> pd.DataFrame:
+    if monthly_agg is None or monthly_agg.empty:
+        return monthly_agg
+
+    df = monthly_agg.copy()
+    month_col = _find_column(df, ["year_month", "month", "MONTH"])
+
+    if month_col is None:
+        return df
+
+    cutoff_period = pd.Period(pd.Timestamp(cutoff_date), freq="M")
+    df["_period"] = pd.PeriodIndex(df[month_col].astype(str), freq="M")
+    filtered = df[df["_period"] <= cutoff_period].drop(columns=["_period"])
+
+    return filtered
 
 
 def _generate_comparison(params: dict) -> None:
     progress_bar = st.progress(0, text="Loading data...")
 
+    generation_date = params.get("generation_date", pd.Timestamp.now().date())
+    comparison_date = params.get("comparison_date", pd.Timestamp.now().date())
+
     try:
+        progress_bar.progress(5, text="Loading monthly aggregations...")
+
         monthly_agg = _load_monthly_aggregations_cached()
         if monthly_agg is None or monthly_agg.empty:
             st.error("No monthly aggregation data available")
+            return
+
+        monthly_agg_filtered = _filter_monthly_agg_by_date(monthly_agg, generation_date)
+        if monthly_agg_filtered.empty:
+            st.error(f"No data available before {generation_date}")
             return
 
         progress_bar.progress(10, text="Loading forecasts...")
@@ -214,19 +268,24 @@ def _generate_comparison(params: dict) -> None:
         if external_forecast is None or external_forecast.empty:
             st.warning("No external forecast data available. Will only generate internal forecasts.")
 
-        progress_bar.progress(20, text="Loading sales data...")
+        progress_bar.progress(20, text="Loading sales data for comparison...")
 
-        sales_df = _load_sales_data_cached()
+        forecast_start_period = pd.Period(pd.Timestamp(generation_date), freq="M") + 1
+        comparison_sales_df = _load_sales_for_period(str(forecast_start_period), comparison_date)
+
+        if comparison_sales_df is None or comparison_sales_df.empty:
+            st.warning(f"No sales data available for comparison period ({forecast_start_period} to {comparison_date}). Actual values will be zero.")
+            comparison_sales_df = pd.DataFrame()
 
         progress_bar.progress(30, text="Preparing entities...")
 
-        entities = _prepare_entity_list(monthly_agg, params)
+        entities = _prepare_entity_list(monthly_agg_filtered, params)
 
         if not entities:
             st.warning("No entities found matching the filter criteria")
             return
 
-        st.info(f"Processing {len(entities)} entities...")
+        st.info(f"Processing {len(entities)} entities (data up to {generation_date})...")
 
         def progress_callback(current, total, entity_id):
             pct = 30 + int((current / total) * 60)
@@ -235,7 +294,7 @@ def _generate_comparison(params: dict) -> None:
         progress_bar.progress(35, text="Generating internal forecasts...")
 
         internal_forecasts, stats = batch_generate_forecasts(
-            monthly_agg,
+            monthly_agg_filtered,
             entities,
             params["horizon"],
             progress_callback,
@@ -251,7 +310,7 @@ def _generate_comparison(params: dict) -> None:
         comparison_df = align_forecasts(
             internal_forecasts,
             external_forecast,
-            sales_df,
+            comparison_sales_df,
             params["entity_type"],
         )
 
@@ -270,11 +329,14 @@ def _generate_comparison(params: dict) -> None:
             "overall_summary": overall_summary,
             "comparison_df": comparison_df,
             "stats": stats,
+            "forecast_start": str(forecast_start_period),
+            "as_of_date": str(comparison_date),
+            "generation_date": str(generation_date),
         }
         st.session_state[SESSION_KEY_PARAMS] = params
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = internal_forecasts
 
-        st.success(f"Comparison complete! Processed {stats['success']} entities successfully.")
+        st.success(f"Comparison complete! Processed {stats['success']} entities successfully. Generated as of {generation_date}, compared against sales up to {comparison_date}.")
         if stats["failed"] > 0:
             st.warning(f"{stats['failed']} entities failed to forecast")
 
@@ -342,6 +404,11 @@ def _display_results() -> None:
     overall_summary = data["overall_summary"]
     stats = data["stats"]
 
+    if data.get("generation_date"):
+        st.info(f"Forecast generated 'as of': {data['generation_date']} | Forecast period: {data.get('forecast_start', 'N/A')} | Comparison data up to: {data.get('as_of_date', 'N/A')}")
+    elif data.get("forecast_start") and data.get("as_of_date"):
+        st.info(f"Forecast period: {data['forecast_start']} to {data['as_of_date']}")
+
     st.markdown("---")
     _display_overall_summary(overall_summary, stats)
 
@@ -349,10 +416,69 @@ def _display_results() -> None:
     _display_type_breakdown(type_summary)
 
     st.markdown("---")
+    _display_all_forecasts_table(data)
+
+    st.markdown("---")
     _display_detailed_table(metrics_df)
 
     st.markdown("---")
     _display_entity_chart(data)
+
+
+def _display_all_forecasts_table(data: dict) -> None:
+    st.subheader("All Forecast Items")
+
+    comparison_df = data.get("comparison_df")
+    if comparison_df is None or comparison_df.empty:
+        st.info("No forecast data available")
+        return
+
+    with st.expander("View All Forecast Items", expanded=False):
+        search = st.text_input("Search by Entity ID", key="fc_all_search")
+
+        df = comparison_df.copy()
+        if search:
+            df = df[df["entity_id"].str.contains(search.upper())]
+
+        col1, col2 = st.columns(2)
+        with col1:
+            sort_by = st.selectbox(
+                "Sort by",
+                options=["entity_id", "year_month", "actual", "internal_forecast", "external_forecast"],
+                key="fc_all_sort",
+            )
+        with col2:
+            sort_order = st.selectbox(
+                "Order",
+                options=["Ascending", "Descending"],
+                key="fc_all_order",
+            )
+
+        df = df.sort_values(sort_by, ascending=(sort_order == "Ascending"))
+
+        display_df = df[[
+            "entity_id", "year_month", "internal_forecast", "external_forecast", "actual", "method"
+        ]].copy()
+
+        display_df["internal_forecast"] = display_df["internal_forecast"].apply(lambda x: f"{x:,.0f}")
+        display_df["external_forecast"] = display_df["external_forecast"].apply(lambda x: f"{x:,.0f}")
+        display_df["actual"] = display_df["actual"].apply(lambda x: f"{x:,.0f}")
+
+        display_df.columns = ["Entity", "Period", "Internal Forecast", "External Forecast", "Actual Sales", "Method"]
+
+        from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+        render_dataframe_with_aggrid(display_df, height=400, pinned_columns=["Entity"])
+
+        st.caption(f"Total rows: {len(df)}")
+
+        csv = comparison_df.to_csv(index=False)
+        st.download_button(
+            "Download All Forecasts (CSV)",
+            csv,
+            "all_forecasts.csv",
+            MimeTypes.TEXT_CSV,
+            key="fc_download_all",
+        )
 
 
 def _display_overall_summary(summary: dict, stats: dict) -> None:
@@ -413,7 +539,8 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
     display_df[AVG_INT_MAPE] = display_df[AVG_INT_MAPE].apply(lambda x: f"{x:.1f}%")
     display_df[AVG_EXT_MAPE] = display_df[AVG_EXT_MAPE].apply(lambda x: f"{x:.1f}%")
 
-    st.dataframe(display_df, hide_index=True)
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(display_df, max_height=300)
 
 
 def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
@@ -459,7 +586,8 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
     show_df["Improvement"] = show_df["Improvement"].apply(lambda x: f"{x:+.1f}%")
     show_df[ACTUAL_VOLUME] = show_df[ACTUAL_VOLUME].apply(lambda x: f"{x:,.0f}")
 
-    st.dataframe(show_df, hide_index=True, height=400)
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(show_df, height=400, pinned_columns=["Entity"])
 
     csv = metrics_df.to_csv(index=False)
     st.download_button(
@@ -586,11 +714,48 @@ def _build_batch_options(batches: list[dict]) -> dict[str, str]:
     return {_format_batch_label(batch): batch["batch_id"] for batch in batches}
 
 
-def _handle_batch_actions(batch_id: str, repo) -> None:
+def _get_forecast_date_range(batch: dict) -> tuple[str, str]:
+    generated = batch.get("generated_at", "")
+    horizon = batch.get("horizon_months", 2)
+
+    if isinstance(generated, str):
+        try:
+            gen_date = pd.to_datetime(generated.split("T")[0])
+        except (ValueError, IndexError):
+            gen_date = pd.Timestamp.now()
+    else:
+        gen_date = pd.Timestamp.now()
+
+    start_period = gen_date.to_period("M")
+    end_period = start_period + horizon - 1
+
+    return str(start_period), str(end_period)
+
+
+def _handle_batch_actions(batch_id: str, batch: dict, repo) -> None:
+    st.markdown("#### Analysis Settings")
+
+    forecast_start, forecast_end = _get_forecast_date_range(batch)
+    st.caption(f"Forecast covers periods: {forecast_start} to {forecast_end}")
+
+    col_date, col_info = st.columns([2, 3])
+    with col_date:
+        as_of_date = st.date_input(
+            "Analyze 'as of' date",
+            value=pd.Timestamp.now().date(),
+            help="Select a date in the past to compare forecast against actual sales that occurred after the forecast was generated",
+            key="fc_as_of_date",
+        )
+    with col_info:
+        st.info(
+            "Set 'as of' date to analyze historical accuracy. "
+            "Sales data will be loaded from forecast period up to this date."
+        )
+
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("Load and Compare", key="fc_load_historical"):
-            _load_historical_forecast(batch_id)
+        if st.button("Load and Compare", key="fc_load_historical", type="primary"):
+            _load_historical_forecast(batch_id, batch, as_of_date)
     with col2:
         if st.button("Delete", key="fc_delete_historical"):
             if repo.delete_forecast_batch(batch_id):
@@ -628,7 +793,7 @@ def _render_historical_tab() -> None:
         return
 
     _display_batch_details(selected_batch)
-    _handle_batch_actions(batch_id, repo)
+    _handle_batch_actions(batch_id, selected_batch, repo)
 
 
 def _display_batch_details(batch: dict) -> None:
@@ -651,7 +816,33 @@ def _display_batch_details(batch: dict) -> None:
         st.caption(f"Notes: {batch['notes']}")
 
 
-def _load_historical_forecast(batch_id: str) -> None:
+def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
+    try:
+        data_source = get_data_source()
+        sales_df = data_source.load_sales_data()
+
+        if sales_df is None or sales_df.empty:
+            return None
+
+        date_col = _find_column(sales_df, ["data", "sale_date", "date"])
+        if date_col is None:
+            return sales_df
+
+        df = sales_df.copy()
+        df[date_col] = pd.to_datetime(df[date_col])
+
+        start_date = pd.Period(start_period).start_time
+        end_dt = pd.to_datetime(end_date)
+
+        filtered = df[(df[date_col] >= start_date) & (df[date_col] <= end_dt)]
+        return filtered
+
+    except Exception as e:
+        logger.warning("Error loading sales for period: %s", e)
+        return None
+
+
+def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
     repo = create_internal_forecast_repository()
     forecasts_df = repo.get_forecast_batch(batch_id)
 
@@ -662,7 +853,13 @@ def _load_historical_forecast(batch_id: str) -> None:
     # noinspection PyTypeChecker
     with st.spinner("Loading data and calculating metrics..."):
         external_forecast = _load_external_forecast_cached()
-        sales_df = _load_sales_data_cached()
+
+        forecast_start, _ = _get_forecast_date_range(batch)
+        sales_df = _load_sales_for_period(forecast_start, as_of_date)
+
+        if sales_df is None or sales_df.empty:
+            st.warning("No sales data available for the selected period. Actual values will be zero.")
+            sales_df = pd.DataFrame()
 
         entity_type = forecasts_df["entity_type"].iloc[0] if "entity_type" in forecasts_df.columns else "model"
 
@@ -694,8 +891,14 @@ def _load_historical_forecast(batch_id: str) -> None:
             "overall_summary": overall_summary,
             "comparison_df": comparison_df,
             "stats": stats,
+            "forecast_start": forecast_start,
+            "as_of_date": str(as_of_date),
+        }
+        st.session_state[SESSION_KEY_PARAMS] = {
+            "entity_type": entity_type,
+            "horizon": batch.get("horizon_months", 2),
         }
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = forecasts_df
 
-        st.success("Historical forecast loaded!")
+        st.success(f"Historical forecast loaded! Sales data from {forecast_start} to {as_of_date}")
         st.rerun()

@@ -332,10 +332,12 @@ def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:
     display_df["MAPE_COLOR"] = display_df["MAPE"].apply(_get_mape_color)
 
     st.write(f"Showing {len(display_df)} of {len(accuracy_df)} items")
-    st.dataframe(
+
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(
         display_df,
-        width="stretch",
         height=min(Config.DATAFRAME_HEIGHT, len(display_df) * 35 + 38),
+        pinned_columns=[id_col],
     )
 
     st.download_button(
@@ -369,13 +371,14 @@ def _render_type_comparison(type_summary: pd.DataFrame) -> None:
         fig.add_hline(y=20, line_dash="dash", line_color="green", annotation_text="Good (<20%)")
         fig.add_hline(y=40, line_dash="dash", line_color="orange", annotation_text="Acceptable (<40%)")
         fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.dataframe(
+        from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+        render_dataframe_with_aggrid(
             type_summary[["TYPE", "COUNT", "MAPE", "BIAS", "MISSED_OPPORTUNITY"]],
-            width="stretch",
-            hide_index=True,
+            max_height=300,
+            pinned_columns=["TYPE"],
         )
 
 
@@ -403,7 +406,7 @@ def _render_trend_chart(trend_df: pd.DataFrame) -> None:
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def _render_detail_view(data: dict, params: dict) -> None:

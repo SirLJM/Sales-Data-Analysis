@@ -135,7 +135,8 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
                 col_names = {"color": "COLOR", "sales": "SALES"}
 
             top_products_df = top_products_df[final_cols].rename(columns=col_names)
-            st.dataframe(top_products_df, hide_index=True, width="stretch")
+            from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+            render_dataframe_with_aggrid(top_products_df, max_height=300, pinned_columns=["MODEL+COLOR"])
         else:
             st.info(f"No {type_name} products found")
 
@@ -185,7 +186,8 @@ def _display_weekly_metrics(weekly_df: pd.DataFrame) -> None:
 
 def _display_weekly_table(weekly_df: pd.DataFrame) -> None:
     st.subheader("Weekly Sales by Model")
-    st.dataframe(weekly_df, hide_index=True, height=Config.DATAFRAME_HEIGHT, width="stretch")
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(weekly_df, max_height=Config.DATAFRAME_HEIGHT, pinned_columns=["MODEL"])
 
     csv = weekly_df.to_csv(index=False)
     st.download_button(
@@ -200,7 +202,8 @@ def _display_weekly_table(weekly_df: pd.DataFrame) -> None:
 def _display_zero_sales_warning(weekly_df: pd.DataFrame) -> None:
     week_cols = [col for col in weekly_df.columns if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
     weekly_df_with_total = weekly_df.copy()
-    weekly_df_with_total["TOTAL_SALES"] = weekly_df_with_total[week_cols].sum(axis=1)
+    numeric_week_data = weekly_df_with_total[week_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+    weekly_df_with_total["TOTAL_SALES"] = numeric_week_data.sum(axis=1)
     zero_sales = weekly_df_with_total[weekly_df_with_total["TOTAL_SALES"] == 0]
 
     if not zero_sales.empty:

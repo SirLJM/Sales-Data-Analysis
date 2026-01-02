@@ -548,7 +548,11 @@ def _render_full_summary(recommendations: dict, model_metadata_df: pd.DataFrame 
         ])
 
     available_cols = [col for col in display_cols if col in model_color_summary.columns]
-    st.dataframe(model_color_summary[available_cols], hide_index=True, height=400)
+
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(
+        model_color_summary[available_cols], height=400, pinned_columns=["Model", "Color"]
+    )
 
     st.download_button(
         "📥 Download Full Priority Report (SKU level)",

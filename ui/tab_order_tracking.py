@@ -76,6 +76,7 @@ def _render_pdf_upload() -> None:
             if add_manual_order(order_id, order_data):
                 st.success(f"{Icons.SUCCESS} Order {order_id} created from PDF")
                 del st.session_state["parsed_order_data"]
+                _invalidate_orders_cache()
                 st.rerun()
             else:
                 st.error(f"{Icons.ERROR} Failed to create order")
@@ -95,7 +96,7 @@ def _display_parsed_order(order_data: dict) -> None:
         "Material": order_data.get('material', 'N/A'),
     }])
 
-    st.dataframe(parsed_df, hide_index=True, width="stretch")
+    st.dataframe(parsed_df, hide_index=True)
 
 
 def _render_manual_order_form() -> None:
@@ -169,17 +170,30 @@ def _render_manual_order_form() -> None:
                 }
                 if add_manual_order(order_id, order_data):
                     st.success(f"{Icons.SUCCESS} Order {order_id} added to active orders")
+                    _invalidate_orders_cache()
                     st.rerun()
                 else:
                     st.error(f"{Icons.ERROR} Failed to add order")
 
 
-def _render_active_orders() -> None:
+def _get_cached_active_orders() -> list[dict]:
     from utils.order_manager import get_active_orders
 
+    cache_key = "cached_active_orders"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = get_active_orders()
+    return st.session_state[cache_key]
+
+
+def _invalidate_orders_cache() -> None:
+    if "cached_active_orders" in st.session_state:
+        del st.session_state["cached_active_orders"]
+
+
+def _render_active_orders() -> None:
     st.subheader("📋 Active Orders")
 
-    active_orders = get_active_orders()
+    active_orders = _get_cached_active_orders()
 
     if not active_orders:
         st.info(f"{Icons.INFO} No active orders. Create orders in Tab 5 or add manual orders above.")
@@ -265,4 +279,5 @@ def _handle_archive_selection(edited_orders: pd.DataFrame) -> None:
                     st.success(f"{Icons.SUCCESS} Archived order {row[ColumnNames.ORDER_ID]}")
                 else:
                     st.error(f"{Icons.ERROR} Failed to archive order {row[ColumnNames.ORDER_ID]}")
+            _invalidate_orders_cache()
             st.rerun()

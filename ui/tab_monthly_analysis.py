@@ -41,7 +41,7 @@ def _render_content() -> None:
 
 
 def _render_generate_button(category_df: pd.DataFrame) -> None:
-    if st.button("🔄 Generate Monthly YoY Analysis", type="primary", width="stretch"):
+    if st.button("Generate Monthly YoY Analysis", type="primary"):
         # noinspection PyTypeChecker
         with st.spinner("Calculating year-over-year comparison..."):
             try:
@@ -184,17 +184,15 @@ def _render_kategoria_table(podgrupa: str, kategoria_details: pd.DataFrame) -> N
         lambda x: f"{Icons.NEW} New" if abs(x - 999.0) < 0.01 else f"{x:+.1f}%"
     )
 
-    st.dataframe(
-        display_df[[
-            "Clothing Category",
-            ColumnNames.CURRENT_SALES,
-            ColumnNames.PRIOR_YEAR_SALES,
-            "Difference",
-            ColumnNames.CHANGE_PCT,
-        ]],
-        width="stretch",
-        hide_index=True,
-    )
+    table_df = display_df[[
+        "Clothing Category",
+        ColumnNames.CURRENT_SALES,
+        ColumnNames.PRIOR_YEAR_SALES,
+        "Difference",
+        ColumnNames.CHANGE_PCT,
+    ]].reset_index(drop=True)
+    table_df.index = [""] * len(table_df)
+    st.table(table_df)
 
 
 def _render_downloads(podgrupa_summary: pd.DataFrame, kategoria_details: pd.DataFrame, metadata: dict) -> None:
@@ -216,7 +214,6 @@ def _render_downloads(podgrupa_summary: pd.DataFrame, kategoria_details: pd.Data
             data=csv_buffer,
             file_name=f"monthly_yoy_podgrupa_{metadata['current_label']}.csv",
             mime=MimeTypes.TEXT_CSV,
-            width="stretch",
         )
 
     with col2:
@@ -236,5 +233,4 @@ def _render_downloads(podgrupa_summary: pd.DataFrame, kategoria_details: pd.Data
             data=csv_buffer,
             file_name=f"monthly_yoy_kategoria_{metadata['current_label']}.csv",
             mime=MimeTypes.TEXT_CSV,
-            width="stretch",
         )

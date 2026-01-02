@@ -413,7 +413,9 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
 
     st.markdown("---")
     st.subheader("Order Summary")
-    st.dataframe(order_table, hide_index=True, height=400, width="stretch")
+
+    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
+    render_dataframe_with_aggrid(order_table, height=400, pinned_columns=["Model", "Color"])
 
     _render_order_actions(model, order_table, pattern_results, metadata)
 

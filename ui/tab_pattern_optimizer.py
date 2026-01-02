@@ -122,12 +122,15 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
     if load_clicked and model_code:
         loaded_history = _load_sales_history_for_model(model_code.upper(), active_set)
         if loaded_history:
-            st.session_state["loaded_sales_history"] = loaded_history
-            st.success(f"Loaded sales history for {model_code.upper()} (all colors)")
+            for size in sizes:
+                st.session_state[f"sales_{size}"] = loaded_history.get(size, 0)
+            st.session_state["loaded_sales_history_message"] = f"Loaded sales history for {model_code.upper()} (all colors)"
+            st.rerun()
         else:
             st.warning(f"No sales data found for {model_code.upper()}")
 
-    loaded = st.session_state.get("loaded_sales_history", {})
+    if st.session_state.get("loaded_sales_history_message"):
+        st.success(st.session_state.pop("loaded_sales_history_message"))
 
     sales_history = {}
     num_cols = min(len(sizes), 5)
@@ -136,9 +139,8 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
     for i, size in enumerate(sizes):
         col_idx = i % num_cols
         with cols[col_idx]:
-            default_value = loaded.get(size, 0)
             sales_history[size] = st.number_input(
-                f"{size} sales", min_value=0, value=default_value, step=1, key=f"sales_{size}"
+                f"{size} sales", min_value=0, value=0, step=1, key=f"sales_{size}"
             )
 
     return sales_history

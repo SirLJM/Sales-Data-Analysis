@@ -8,6 +8,18 @@ SIDEBAR_STYLE: Final[str] = """
     min-width: 380px;
     max-width: 380px;
 }
+@media (max-width: 1200px) {
+    [data-testid="stSidebar"][aria-expanded="true"] {
+        min-width: 300px;
+        max-width: 300px;
+    }
+}
+@media (max-width: 768px) {
+    [data-testid="stSidebar"][aria-expanded="true"] {
+        min-width: 250px;
+        max-width: 250px;
+    }
+}
 </style>
 """
 
@@ -18,8 +30,35 @@ DATAFRAME_STYLE: Final[str] = """
     padding-left: 2rem !important;
     padding-right: 2rem !important;
 }
-section[data-testid="stDataFrame"] {
-    width: 100% !important;
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+}
+</style>
+"""
+
+SCROLLABLE_DATAFRAME_STYLE: Final[str] = """
+<style>
+.scrollable-df-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+.scrollable-df-wrapper::-webkit-scrollbar {
+    height: 10px;
+}
+.scrollable-df-wrapper::-webkit-scrollbar-track {
+    background: rgba(128,128,128,0.1);
+    border-radius: 5px;
+}
+.scrollable-df-wrapper::-webkit-scrollbar-thumb {
+    background: rgba(128,128,128,0.4);
+    border-radius: 5px;
+}
+.scrollable-df-wrapper::-webkit-scrollbar-thumb:hover {
+    background: rgba(128,128,128,0.6);
 }
 </style>
 """
@@ -71,5 +110,79 @@ ROTATED_TABLE_STYLE: Final[str] = """
     white-space: nowrap;
     min-height: 150px;
 }
+</style>
+"""
+
+RESPONSIVE_TABS_STYLE: Final[str] = """
+<style>
+/* Tabs root container */
+[data-testid="stTabs"] {
+    width: 100% !important;
+}
+
+/* Tab list container - the div with role="tablist" */
+[data-testid="stTabs"] [role="tablist"] {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
+    margin-bottom: -2px;
+    width: 100% !important;
+    display: flex !important;
+}
+
+/* Webkit scrollbar styling */
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar {
+    height: 8px;
+}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-track {
+    background: rgba(128,128,128,0.2);
+    border-radius: 4px;
+}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-thumb {
+    background: rgba(128,128,128,0.5);
+    border-radius: 4px;
+}
+[data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar-thumb:hover {
+    background: rgba(128,128,128,0.7);
+}
+
+/* Tab buttons - prevent shrinking and wrapping */
+[data-testid="stTabs"] button[role="tab"] {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+}
+
+/* General responsive columns */
+@media (max-width: 768px) {
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+}
+
+/* Responsive metrics */
+@media (max-width: 1200px) {
+    [data-testid="stMetric"] {
+        padding: 0.5rem !important;
+    }
+    [data-testid="stMetric"] label {
+        font-size: 0.8rem !important;
+    }
+    [data-testid="stMetric"] [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+    }
+}
+
+/* Responsive expanders */
+@media (max-width: 768px) {
+    [data-testid="stExpander"] {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+}
+
 </style>
 """
