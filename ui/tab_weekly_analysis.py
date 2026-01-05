@@ -128,11 +128,11 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
                 descriptions = stock_df_copy.groupby(["model", "color"])["nazwa"].first().reset_index()
                 top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
                 top_products_df["nazwa"] = top_products_df["nazwa"].astype(str).replace("nan", "")
-                final_cols = [ColumnNames.MODEL_COLOR, "nazwa", "color", "sales"]
-                col_names = {"nazwa": "DESCRIPTION", "color": "COLOR", "sales": "SALES"}
+                final_cols = [ColumnNames.MODEL_COLOR, "nazwa", "sales"]
+                col_names = {"nazwa": "DESCRIPTION", "sales": "SALES"}
             else:
-                final_cols = [ColumnNames.MODEL_COLOR, "color", "sales"]
-                col_names = {"color": "COLOR", "sales": "SALES"}
+                final_cols = [ColumnNames.MODEL_COLOR, "sales"]
+                col_names = {"sales": "SALES"}
 
             top_products_df = top_products_df[final_cols].rename(columns=col_names)
             st.dataframe(top_products_df, hide_index=True, use_container_width=True)
