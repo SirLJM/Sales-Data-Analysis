@@ -49,6 +49,9 @@ def render_dataframe_with_aggrid(
         )
 
     grid_options = gb.build()
+    grid_options["enableRangeSelection"] = True
+    grid_options["enableCellTextSelection"] = True
+    grid_options["ensureDomOrder"] = True
 
     actual_height = height if height is not None else _calculate_height(df, max_height)
 

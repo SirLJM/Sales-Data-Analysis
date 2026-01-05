@@ -135,8 +135,7 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
                 col_names = {"color": "COLOR", "sales": "SALES"}
 
             top_products_df = top_products_df[final_cols].rename(columns=col_names)
-            from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
-            render_dataframe_with_aggrid(top_products_df, max_height=300, pinned_columns=["MODEL+COLOR"])
+            st.dataframe(top_products_df, hide_index=True, use_container_width=True)
         else:
             st.info(f"No {type_name} products found")
 
