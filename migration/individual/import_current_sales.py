@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine
 from tqdm import tqdm
@@ -19,6 +20,7 @@ from utils.import_utils import (
     log_file_import,
     process_sales_file_in_batches,
 )
+from utils.parallel_loader import parallel_load
 
 load_dotenv(find_dotenv(filename=".env"))
 
@@ -47,18 +49,29 @@ def _collect_files_to_import(engine, loader):
     return files_to_import
 
 
-def _process_single_file(engine, loader, file_info):
+def _load_single_file(
+        loader: SalesDataLoader, file_info: tuple
+) -> tuple[tuple, pd.DataFrame] | None:
+    file_path, _, _, _ = file_info
+    try:
+        df = loader.load_sales_file(file_path)
+        if df.empty:
+            print(f"  Skipping empty file: {file_path.name}")
+            return None
+        print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
+        return file_info, df
+    except (ValueError, OSError, IOError) as e:
+        print(f"  ERROR loading {file_path.name}: {e}")
+        return None
+
+
+def _insert_single_file(engine, file_info: tuple, df: pd.DataFrame) -> int:
     file_path, start_date, end_date, file_hash = file_info
     batch_id = str(uuid.uuid4())
     file_start_time = datetime.now()
 
-    sales_df = loader.load_sales_file(file_path)
-    if sales_df.empty:
-        print(f"Skipping empty file: {file_path.name}")
-        return 0
-
     records_imported = process_sales_file_in_batches(
-        sales_df, engine, file_path, start_date, end_date, batch_id, "current", BATCH_SIZE
+        df, engine, file_path, start_date, end_date, batch_id, "current", BATCH_SIZE
     )
 
     processing_time_ms = int((datetime.now() - file_start_time).total_seconds() * 1000)
@@ -76,7 +89,7 @@ def _process_single_file(engine, loader, file_info):
         "import_current_sales",
     )
 
-    print(f"OK {file_path.name}: {records_imported} records ({processing_time_ms}ms)")
+    print(f"  OK {file_path.name}: {records_imported} records ({processing_time_ms}ms)")
     return records_imported
 
 
@@ -101,14 +114,26 @@ def import_current_sales(connection_string: str):
 
     _print_import_summary(files_to_import)
 
-    total_records = 0
+    print(f"\nLoading {len(files_to_import)} file(s) in parallel...")
+    loaded_data = parallel_load(
+        files_to_import,
+        lambda info: _load_single_file(loader, info),
+        desc="Loading sales files",
+    )
 
-    for file_info in tqdm(files_to_import, desc="Importing files"):
+    if not loaded_data:
+        print("No files loaded successfully")
+        engine.dispose()
+        return
+
+    print(f"\nInserting {len(loaded_data)} file(s) to database...")
+    total_records = 0
+    for file_info, df in tqdm(loaded_data, desc="Inserting files"):
         try:
-            total_records += _process_single_file(engine, loader, file_info)
+            total_records += _insert_single_file(engine, file_info, df)
         except (ValueError, OSError, IOError) as exc:
             file_path = file_info[0]
-            print(f"ERROR importing {file_path.name}: {exc}")
+            print(f"ERROR inserting {file_path.name}: {exc}")
 
     print("=" * 60)
     print(f"Import complete: {total_records} total records imported")

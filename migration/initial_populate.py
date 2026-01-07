@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import uuid
 from datetime import datetime
 
+import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
 from tqdm import tqdm
@@ -22,6 +23,7 @@ from utils.import_utils import (
     log_file_import,
     process_sales_file_in_batches,
 )
+from utils.parallel_loader import parallel_load
 
 load_dotenv(find_dotenv(filename=".env"))
 
@@ -33,13 +35,13 @@ def _log_failed_import(engine, file_path, file_hash, batch_id, error_message):
         conn.execute(
             text(
                 """
-                          INSERT INTO file_imports (file_path, file_name, file_type, file_hash, file_size,
-                                                    import_batch_id, import_status, error_message,
-                                                    import_triggered_by)
-                          VALUES (:file_path, :file_name, :file_type, :file_hash, :file_size,
-                                  :import_batch_id, :import_status, :error_message,
-                                  :import_triggered_by)
-                          """
+                INSERT INTO file_imports (file_path, file_name, file_type, file_hash, file_size,
+                                          import_batch_id, import_status, error_message,
+                                          import_triggered_by)
+                VALUES (:file_path, :file_name, :file_type, :file_hash, :file_size,
+                        :import_batch_id, :import_status, :error_message,
+                        :import_triggered_by)
+                """
             ),
             {
                 "file_path": str(file_path),
@@ -56,16 +58,26 @@ def _log_failed_import(engine, file_path, file_hash, batch_id, error_message):
         conn.commit()
 
 
-def _process_archival_file(engine, loader, file_info):
+def _load_archival_file(
+        loader: SalesDataLoader, file_info: tuple
+) -> tuple[tuple, pd.DataFrame] | None:
+    file_path, _, _, _ = file_info
+    try:
+        df = loader.load_sales_file(file_path)
+        if df.empty:
+            print(f"  Skipping empty file: {file_path.name}")
+            return None
+        print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
+        return file_info, df
+    except (ValueError, OSError, IOError) as e:
+        print(f"  ERROR loading {file_path.name}: {e}")
+        return None
+
+
+def _insert_archival_file(engine, file_info: tuple, df: pd.DataFrame) -> int:
     file_path, start_date, end_date, file_hash = file_info
     batch_id = str(uuid.uuid4())
     file_start_time = datetime.now()
-
-    df = loader.load_sales_file(file_path)
-
-    if df.empty:
-        print(f"Skipping empty file: {file_path.name}")
-        return 0
 
     records_imported = process_sales_file_in_batches(
         df, engine, file_path, start_date, end_date, batch_id, "archival", BATCH_SIZE
@@ -86,7 +98,7 @@ def _process_archival_file(engine, loader, file_info):
         "initial_populate",
     )
 
-    print(f"OK {file_path.name}: {records_imported} records ({processing_time}ms)")
+    print(f"  OK {file_path.name}: {records_imported} records ({processing_time}ms)")
     return records_imported
 
 
@@ -97,7 +109,7 @@ def _collect_archival_files_to_import(engine, loader):
 
     files_to_import = []
     for file_path, start_date, end_date in loader.collect_files_from_directory(
-        loader.archival_sales_dir
+            loader.archival_sales_dir
     ):
         file_hash = compute_file_hash(file_path)
         if not is_file_imported(engine, file_hash, "sales_archival"):
@@ -112,7 +124,7 @@ def _toggle_cache_triggers(engine, enable: bool):
         conn.execute(text(f"SELECT {action}_cache_triggers()"))
         conn.commit()
     status = "re-enabled" if enable else "disabled for bulk import"
-    print(f"✓ Cache invalidation triggers {status}")
+    print(f"Cache invalidation triggers {status}")
 
 
 def populate_archival_sales(connection_string: str):
@@ -132,21 +144,35 @@ def populate_archival_sales(connection_string: str):
 
     _toggle_cache_triggers(engine, enable=False)
 
+    print(f"\nLoading {len(files_to_import)} file(s) in parallel...")
+    loaded_data = parallel_load(
+        files_to_import,
+        lambda info: _load_archival_file(loader, info),
+        desc="Loading archival files",
+    )
+
+    if not loaded_data:
+        print("No files loaded successfully")
+        _toggle_cache_triggers(engine, enable=True)
+        engine.dispose()
+        return
+
+    print(f"\nInserting {len(loaded_data)} file(s) to database...")
     total_records = 0
 
-    for file_info in tqdm(files_to_import, desc="Importing files"):
+    for file_info, df in tqdm(loaded_data, desc="Inserting files"):
         try:
-            total_records += _process_archival_file(engine, loader, file_info)
+            total_records += _insert_archival_file(engine, file_info, df)
         except (ValueError, OSError, IOError) as e:
             file_path, _, _, file_hash = file_info
             batch_id = str(uuid.uuid4())
-            print(f"ERROR importing {file_path.name}: {str(e)}")
+            print(f"ERROR inserting {file_path.name}: {str(e)}")
             _log_failed_import(engine, file_path, file_hash, batch_id, str(e))
 
     _toggle_cache_triggers(engine, enable=True)
 
     print("=" * 60)
-    print(f"✓ Import complete: {total_records} total records imported")
+    print(f"Import complete: {total_records} total records imported")
 
     engine.dispose()
 
