@@ -31,6 +31,7 @@ from sales_data.analysis import (
     get_last_n_months_sales_by_color,
     get_last_week_range,
     get_size_quantities_for_model_color,
+    get_size_sales_by_month_for_model,
     get_week_start_monday,
     optimize_pattern_with_aliases,
     parse_sku_components,
@@ -223,6 +224,15 @@ class SalesAnalyzer:
             months: int = 4,
     ) -> dict[str, int]:
         return calculate_size_sales_history(monthly_agg, model, color, size_aliases, months)
+
+    @staticmethod
+    def get_size_sales_by_month_for_model(
+            monthly_agg: pd.DataFrame,
+            model: str,
+            size_aliases: dict[str, str] | None = None,
+            months: int = 3,
+    ) -> dict[str, dict[str, int]]:
+        return get_size_sales_by_month_for_model(monthly_agg, model, size_aliases, months)
 
     @staticmethod
     def optimize_pattern_with_aliases(

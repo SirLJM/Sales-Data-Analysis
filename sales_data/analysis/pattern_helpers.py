@@ -96,6 +96,53 @@ def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return None
 
 
+def get_size_sales_by_month_for_model(
+    monthly_agg: pd.DataFrame,
+    model: str,
+    size_aliases: dict[str, str] | None = None,
+    months: int = 3,
+) -> dict[str, dict[str, int]]:
+    if monthly_agg is None or monthly_agg.empty:
+        return {}
+
+    df = monthly_agg.copy()
+
+    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    if sku_col is None:
+        return {}
+
+    df["_model"] = df[sku_col].astype(str).str[:5]
+    df["_size"] = df[sku_col].astype(str).str[7:9]
+
+    filtered = df[df["_model"] == model]
+    if filtered.empty:
+        return {}
+
+    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+
+    if month_col is None or qty_col is None:
+        return {}
+
+    sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
+
+    result = {}
+    for month in sorted_months:
+        month_data = filtered[filtered[month_col] == month]
+        size_sales: dict = month_data.groupby("_size", observed=True)[qty_col].sum().to_dict()  # type: ignore[assignment]
+
+        if size_aliases:
+            aliased = {}
+            for size_code, sales in size_sales.items():
+                alias = size_aliases.get(str(size_code), str(size_code))
+                aliased[alias] = aliased.get(alias, 0) + int(sales)
+            result[str(month)] = aliased
+        else:
+            result[str(month)] = {str(k): int(v) for k, v in size_sales.items()}
+
+    return result
+
+
 def optimize_pattern_with_aliases(
     priority_skus: pd.DataFrame,
     model: str,

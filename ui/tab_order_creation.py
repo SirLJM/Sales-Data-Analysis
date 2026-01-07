@@ -414,7 +414,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     _render_order_actions(model, order_table, pattern_results, metadata)
 
     st.markdown("---")
-    _render_size_distribution_table(pattern_results)
+    _render_size_distribution_table(pattern_results, model, monthly_agg)
 
     st.markdown("---")
     st.subheader("Size × Color Production Table")
@@ -456,7 +456,11 @@ def _render_size_color_table(
     st.markdown(f'<div class="rotated-table">{html_table}</div>', unsafe_allow_html=True)
 
 
-def _render_size_distribution_table(pattern_results: dict) -> None:
+def _render_size_distribution_table(
+    pattern_results: dict,
+    model: str,
+    monthly_agg: pd.DataFrame | None,
+) -> None:
     size_totals: dict[str, int] = {}
 
     for color, result in pattern_results.items():
@@ -469,6 +473,7 @@ def _render_size_distribution_table(pattern_results: dict) -> None:
         return
 
     size_alias_to_code = load_size_aliases_reverse()
+    size_aliases = load_size_aliases()
 
     def get_size_sort_key(size_str: str) -> int:
         size_code = size_alias_to_code.get(size_str, size_str)
@@ -479,24 +484,43 @@ def _render_size_distribution_table(pattern_results: dict) -> None:
 
     sorted_sizes = sorted(size_totals.keys(), key=get_size_sort_key)
 
-    data = {"Size": [], "Qty": [], "%": []}
-    total_pct = 0.0
+    sales_by_month = {}
+    if monthly_agg is not None:
+        sales_by_month = SalesAnalyzer.get_size_sales_by_month_for_model(
+            monthly_agg, model, size_aliases, months=3
+        )
 
+    sorted_months = sorted(sales_by_month.keys(), reverse=True) if sales_by_month else []
+
+    data = {"": []}
+    for size in sorted_sizes:
+        data[size] = []
+
+    data[""].append("Produced")
+    for size in sorted_sizes:
+        data[size].append(str(size_totals[size]))
+
+    total_pct = 0.0
+    data[""].append("%")
     for size in sorted_sizes:
         qty = size_totals[size]
         pct = (qty / total_qty) * 100
         total_pct += pct
-        data["Size"].append(size)
-        data["Qty"].append(str(qty))
-        data["%"].append(f"{pct:.1f}%")
+        data[size].append(f"{pct:.1f}%")
+
+    for month in sorted_months:
+        month_sales = sales_by_month.get(month, {})
+        data[""].append(month)
+        for size in sorted_sizes:
+            data[size].append(str(month_sales.get(size, 0)))
 
     df = pd.DataFrame(data)
 
     st.subheader("Size Distribution")
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.caption("All colors combined")
-        st.dataframe(df.T.astype(str), hide_index=False)
+        st.caption("All colors combined + last 3 months sales history")
+        st.dataframe(df, hide_index=True)
     with col2:
         st.metric("Total Qty", total_qty)
         check_color = "green" if abs(total_pct - 100.0) < 0.1 else "red"

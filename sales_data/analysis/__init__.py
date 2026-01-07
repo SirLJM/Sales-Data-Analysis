@@ -24,6 +24,7 @@ from .order_priority import (
 from .pattern_helpers import (
     calculate_size_priorities,
     calculate_size_sales_history,
+    get_size_sales_by_month_for_model,
     optimize_pattern_with_aliases,
 )
 from .projection import (
@@ -84,6 +85,7 @@ __all__ = [
     "get_last_n_months_sales_by_color",
     "get_last_week_range",
     "get_size_quantities_for_model_color",
+    "get_size_sales_by_month_for_model",
     "get_week_start_monday",
     "optimize_pattern_with_aliases",
     "parse_sku_components",
