@@ -9,6 +9,7 @@ setup_logging()
 from ui import sidebar
 from ui import tab_forecast_accuracy
 from ui import tab_forecast_comparison
+from ui import tab_ml_forecast
 from ui import tab_monthly_analysis
 from ui import tab_order_creation
 from ui import tab_order_recommendations
@@ -35,6 +36,7 @@ tabs = st.tabs([
     "🚚 Order Tracking",
     "📈 Forecast Accuracy",
     "🔬 Forecast Comparison",
+    "🤖 ML Forecast",
 ])
 
 sidebar_options = sidebar.render_sidebar()
@@ -71,3 +73,6 @@ with tabs[7]:
 
 with tabs[8]:
     tab_forecast_comparison.render()
+
+with tabs[9]:
+    tab_ml_forecast.render()

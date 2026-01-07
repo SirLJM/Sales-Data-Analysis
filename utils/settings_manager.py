@@ -52,6 +52,14 @@ DEFAULT_SETTINGS = {
         "mape_threshold_good": 20.0,
         "mape_threshold_acceptable": 40.0,
     },
+    "ml_forecast": {
+        "default_models": ["lightgbm", "random_forest"],
+        "cv_splits": 3,
+        "cv_test_size": 3,
+        "cv_metric": "mape",
+        "include_statistical": True,
+        "confidence_level": 0.95,
+    },
 }
 
 
