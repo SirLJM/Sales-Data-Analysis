@@ -89,8 +89,15 @@ def aggregate_yearly_sales(data: pd.DataFrame, by_model: bool = False, include_c
 
 def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = False) -> pd.DataFrame:
     df = forecast_df.copy()
+    df["data"] = pd.to_datetime(df["data"])
+    df = df[df["data"] >= datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)]
+
+    if df.empty:
+        id_col = "MODEL_COLOR" if include_color else "MODEL"
+        return pd.DataFrame(columns=[id_col, "YEAR", "QUANTITY"])
+
     # noinspection PyTypeChecker
-    df["year"] = pd.to_datetime(df["data"]).dt.year
+    df["year"] = df["data"].dt.year
     df["model"] = df["sku"].astype(str).str[:5]
 
     if include_color:

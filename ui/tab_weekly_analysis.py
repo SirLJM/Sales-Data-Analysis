@@ -135,7 +135,7 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
                 col_names = {"sales": "SALES"}
 
             top_products_df = top_products_df[final_cols].rename(columns=col_names)
-            st.dataframe(top_products_df, hide_index=True, use_container_width=True)
+            st.dataframe(top_products_df, hide_index=True, width='stretch')
         else:
             st.info(f"No {type_name} products found")
 
@@ -185,8 +185,11 @@ def _display_weekly_metrics(weekly_df: pd.DataFrame) -> None:
 
 def _display_weekly_table(weekly_df: pd.DataFrame) -> None:
     st.subheader("Weekly Sales by Model")
-    from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
-    render_dataframe_with_aggrid(weekly_df, max_height=Config.DATAFRAME_HEIGHT, pinned_columns=["MODEL"])
+    row_height = 35
+    header_height = 38
+    max_height = 400
+    calculated_height = min(header_height + len(weekly_df) * row_height, max_height)
+    st.dataframe(weekly_df, width='stretch', hide_index=True, height=calculated_height)
 
     csv = weekly_df.to_csv(index=False)
     st.download_button(

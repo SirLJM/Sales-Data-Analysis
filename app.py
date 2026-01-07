@@ -26,7 +26,7 @@ st.markdown(RESPONSIVE_TABS_STYLE, unsafe_allow_html=True)
 
 initialize_session_state()
 
-tabs = st.tabs([
+TAB_NAMES = [
     "📊 Sales & Inventory Analysis",
     "✂️ Size Pattern Optimizer",
     "📋 Weekly Analysis",
@@ -37,7 +37,39 @@ tabs = st.tabs([
     "📈 Forecast Accuracy",
     "🔬 Forecast Comparison",
     "🤖 ML Forecast",
-])
+]
+
+
+def _render_nav_buttons():
+    import streamlit.components.v1 as components
+    for i, name in enumerate(TAB_NAMES):
+        components.html(f"""
+        <button onclick="
+            var tabs = window.parent.document.querySelectorAll('button[data-baseweb=&quot;tab&quot;]');
+            if (tabs && tabs[{i}]) tabs[{i}].click();
+            var popoverBtn = window.parent.document.querySelector('button[data-testid=&quot;stPopoverButton&quot;]');
+            if (popoverBtn) popoverBtn.click();
+        " style="
+            display: block;
+            width: 100%;
+            padding: 10px 14px;
+            margin: 2px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            text-align: left;
+            font-size: 13px;
+        ">{name}</button>
+        """, height=42)
+
+
+col_nav, col_spacer = st.columns([0.08, 0.92])
+with col_nav:
+    with st.popover("☰"):
+        _render_nav_buttons()
+
+tabs = st.tabs(TAB_NAMES)
 
 sidebar_options = sidebar.render_sidebar()
 

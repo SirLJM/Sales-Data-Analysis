@@ -371,7 +371,7 @@ def _render_type_comparison(type_summary: pd.DataFrame) -> None:
         fig.add_hline(y=20, line_dash="dash", line_color="green", annotation_text="Good (<20%)")
         fig.add_hline(y=40, line_dash="dash", line_color="orange", annotation_text="Acceptable (<40%)")
         fig.update_layout(showlegend=False, height=400)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with col2:
         from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
@@ -406,7 +406,7 @@ def _render_trend_chart(trend_df: pd.DataFrame) -> None:
         hovermode="x unified",
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_detail_view(data: dict, params: dict) -> None:

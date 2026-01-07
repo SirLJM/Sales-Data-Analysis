@@ -223,7 +223,7 @@ def _run_training(params: dict) -> None:
 
 
 def _load_training_data(
-    progress_bar, params: dict
+        progress_bar, params: dict
 ) -> tuple[pd.DataFrame | None, pd.DataFrame | None, list[dict] | None]:
     progress_bar.progress(5, text="Loading monthly aggregations...")
 
@@ -246,7 +246,7 @@ def _load_training_data(
 
 
 def _execute_training(
-    progress_bar, monthly_agg: pd.DataFrame, entities: list[dict], sku_stats, params: dict
+        progress_bar, monthly_agg: pd.DataFrame, entities: list[dict], sku_stats, params: dict
 ) -> tuple:
     def progress_callback(current, total, entity_id):
         pct = 20 + int((current / total) * 70)
@@ -290,7 +290,7 @@ def _save_trained_models(progress_bar, trained_models: dict, params: dict) -> in
 
 
 def _store_training_results(
-    forecasts_df, stats: dict, trained_models: dict, params: dict, saved_count: int
+        forecasts_df, stats: dict, trained_models: dict, params: dict, saved_count: int
 ) -> None:
     st.session_state[SessionKeys.ML_FORECAST_DATA] = forecasts_df
     st.session_state[SessionKeys.ML_TRAINED_MODELS] = trained_models
@@ -365,9 +365,9 @@ def _display_training_results() -> None:
                 names="Model",
                 title="Best Model Selection",
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
         with col_table:
-            st.dataframe(dist_df, use_container_width=True, hide_index=True)
+            st.dataframe(dist_df, width='stretch', hide_index=True)
 
     if forecasts_df is not None and not forecasts_df.empty:
         st.markdown("#### Forecast Preview")
@@ -383,7 +383,8 @@ def _display_forecast_table(forecasts_df: pd.DataFrame) -> None:
         summary.append({
             "Entity": entity,
             "Model": entity_data["model_type"].iloc[0] if "model_type" in entity_data.columns else "N/A",
-            "CV Score": f"{entity_data['cv_score'].iloc[0]:.1f}%" if "cv_score" in entity_data.columns and pd.notna(entity_data["cv_score"].iloc[0]) else "N/A",
+            "CV Score": f"{entity_data['cv_score'].iloc[0]:.1f}%" if "cv_score" in entity_data.columns and pd.notna(
+                entity_data["cv_score"].iloc[0]) else "N/A",
             "Total Forecast": f"{entity_data['forecast'].sum():,.0f}",
         })
 
@@ -558,7 +559,7 @@ def _render_entity_detail_chart(forecasts_df: pd.DataFrame) -> None:
                 height=400,
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 
 def _render_manage_tab() -> None:
@@ -690,7 +691,7 @@ def _render_model_detail(models: list[dict], repo) -> None:
                 title="Top Features",
             )
             fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"})
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
         if st.button(f"Delete Model for {selected_entity}", key="ml_delete_single"):
             entity_type = model_meta.get("entity_type", "model")

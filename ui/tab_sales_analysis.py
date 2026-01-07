@@ -717,7 +717,7 @@ def _render_yearly_summary_table(
 
         st.dataframe(
             filtered_data,
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             height=400,
         )
@@ -860,7 +860,7 @@ def _render_yearly_trend_chart(
         xaxis={"tickmode": "linear", "dtick": 1},
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     _render_trend_metrics(sales_data, forecast_data)
 

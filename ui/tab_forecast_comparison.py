@@ -274,7 +274,8 @@ def _generate_comparison(params: dict) -> None:
         comparison_sales_df = _load_sales_for_period(str(forecast_start_period), comparison_date)
 
         if comparison_sales_df is None or comparison_sales_df.empty:
-            st.warning(f"No sales data available for comparison period ({forecast_start_period} to {comparison_date}). Actual values will be zero.")
+            st.warning(
+                f"No sales data available for comparison period ({forecast_start_period} to {comparison_date}). Actual values will be zero.")
             comparison_sales_df = pd.DataFrame()
 
         progress_bar.progress(30, text="Preparing entities...")
@@ -336,7 +337,8 @@ def _generate_comparison(params: dict) -> None:
         st.session_state[SESSION_KEY_PARAMS] = params
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = internal_forecasts
 
-        st.success(f"Comparison complete! Processed {stats['success']} entities successfully. Generated as of {generation_date}, compared against sales up to {comparison_date}.")
+        st.success(
+            f"Comparison complete! Processed {stats['success']} entities successfully. Generated as of {generation_date}, compared against sales up to {comparison_date}.")
         if stats["failed"] > 0:
             st.warning(f"{stats['failed']} entities failed to forecast")
 
@@ -405,7 +407,8 @@ def _display_results() -> None:
     stats = data["stats"]
 
     if data.get("generation_date"):
-        st.info(f"Forecast generated 'as of': {data['generation_date']} | Forecast period: {data.get('forecast_start', 'N/A')} | Comparison data up to: {data.get('as_of_date', 'N/A')}")
+        st.info(
+            f"Forecast generated 'as of': {data['generation_date']} | Forecast period: {data.get('forecast_start', 'N/A')} | Comparison data up to: {data.get('as_of_date', 'N/A')}")
     elif data.get("forecast_start") and data.get("as_of_date"):
         st.info(f"Forecast period: {data['forecast_start']} to {data['as_of_date']}")
 
@@ -651,7 +654,7 @@ def _display_entity_chart(data: dict) -> None:
                 height=400,
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
 
 
 def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:

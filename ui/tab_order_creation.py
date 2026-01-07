@@ -414,8 +414,12 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     _render_order_actions(model, order_table, pattern_results, metadata)
 
     st.markdown("---")
+    _render_size_distribution_table(pattern_results)
+
+    st.markdown("---")
     st.subheader("Size × Color Production Table")
-    _render_size_color_table(pattern_results, pattern_set)
+    stock_by_color_size = _get_stock_by_color_size(model)
+    _render_size_color_table(pattern_results, pattern_set, stock_by_color_size)
 
 
 def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results: dict, metadata: dict) -> None:
@@ -439,15 +443,122 @@ def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results
             st.rerun()
 
 
-def _render_size_color_table(pattern_results: dict, pattern_set: PatternSet) -> None:
+def _render_size_color_table(
+        pattern_results: dict, pattern_set: PatternSet, stock_by_color_size: dict[tuple[str, str], int]
+) -> None:
     size_color_table = _build_color_size_table(pattern_results, pattern_set)
 
     tsv_data = size_color_table.to_csv(sep="\t", index=False)
     _render_copy_button(tsv_data)
 
     st.markdown(ROTATED_TABLE_STYLE, unsafe_allow_html=True)
-    html_table = size_color_table.to_html(index=False, classes="rotated-table", border=0)
+    html_table = _build_styled_html_table(size_color_table, stock_by_color_size)
     st.markdown(f'<div class="rotated-table">{html_table}</div>', unsafe_allow_html=True)
+
+
+def _render_size_distribution_table(pattern_results: dict) -> None:
+    size_totals: dict[str, int] = {}
+
+    for color, result in pattern_results.items():
+        produced = result.get("produced", {})
+        for size, qty in produced.items():
+            size_totals[size] = size_totals.get(size, 0) + qty
+
+    total_qty = sum(size_totals.values())
+    if total_qty == 0:
+        return
+
+    size_alias_to_code = load_size_aliases_reverse()
+
+    def get_size_sort_key(size_str: str) -> int:
+        size_code = size_alias_to_code.get(size_str, size_str)
+        try:
+            return int(size_code)
+        except (ValueError, TypeError):
+            return 999
+
+    sorted_sizes = sorted(size_totals.keys(), key=get_size_sort_key)
+
+    data = {"Size": [], "Qty": [], "%": []}
+    total_pct = 0.0
+
+    for size in sorted_sizes:
+        qty = size_totals[size]
+        pct = (qty / total_qty) * 100
+        total_pct += pct
+        data["Size"].append(size)
+        data["Qty"].append(str(qty))
+        data["%"].append(f"{pct:.1f}%")
+
+    df = pd.DataFrame(data)
+
+    st.subheader("Size Distribution")
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.caption("All colors combined")
+        st.dataframe(df.T.astype(str), hide_index=False)
+    with col2:
+        st.metric("Total Qty", total_qty)
+        check_color = "green" if abs(total_pct - 100.0) < 0.1 else "red"
+        st.markdown(f"**Sum: <span style='color:{check_color}'>{total_pct:.1f}%</span>**", unsafe_allow_html=True)
+
+
+def _get_stock_by_color_size(model: str) -> dict[tuple[str, str], int]:
+    recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
+    if not recommendations_data:
+        return {}
+
+    priority_skus = recommendations_data.get("priority_skus")
+    if priority_skus is None or priority_skus.empty:
+        return {}
+
+    model_skus = priority_skus[priority_skus["MODEL"] == model]
+    if model_skus.empty:
+        return {}
+
+    size_aliases = load_size_aliases()
+    result = {}
+    for _, row in model_skus.iterrows():
+        color = row.get("COLOR", "")
+        size_code = row.get("SIZE", "")
+        size_alias = size_aliases.get(size_code, size_code)
+        stock = int(row.get(ColumnNames.STOCK, 0) or 0)
+        result[(color, size_alias)] = stock
+
+    return result
+
+
+def _build_styled_html_table(
+        df: pd.DataFrame, stock_by_color_size: dict[tuple[str, str], int]
+) -> str:
+    color_aliases = load_color_aliases()
+    color_name_to_code = {v: k for k, v in color_aliases.items()} if color_aliases else {}
+
+    html = '<table class="rotated-table" border="0">'
+    html += '<thead><tr>'
+    for col in df.columns:
+        html += f'<th>{col}</th>'
+    html += '</tr></thead>'
+
+    html += '<tbody>'
+    for _, row in df.iterrows():
+        html += '<tr>'
+        size = row.get("Size", "")
+        for col in df.columns:
+            cell_value = row[col]
+            cell_style = ""
+
+            if col != "Size" and size and str(cell_value) != "":
+                color_code = color_name_to_code.get(col, col)
+                stock = stock_by_color_size.get((color_code, size), -1)
+                if stock == 0:
+                    cell_style = ' style="background-color: #ffcccc;"'
+
+            html += f'<td{cell_style}>{cell_value}</td>'
+        html += '</tr>'
+    html += '</tbody></table>'
+
+    return html
 
 
 def _render_copy_button(tsv_data: str) -> None:
