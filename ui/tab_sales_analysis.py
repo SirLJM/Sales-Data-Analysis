@@ -7,7 +7,7 @@ import streamlit as st
 
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
-from ui.shared.data_loaders import load_data, load_forecast, load_stock
+from ui.shared.data_loaders import load_data, load_forecast, load_stock, load_yearly_sales, load_yearly_forecast
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
 from ui.shared.styles import SIDEBAR_STYLE
@@ -60,6 +60,8 @@ def _render_content(context: dict) -> None:
         _render_stock_projection(
             summary, forecast_df, forecast_date, id_column, group_by_model
         )
+
+    _render_yearly_sales_trend()
 
     context["df"] = df
     context["analyzer"] = analyzer
@@ -615,3 +617,154 @@ def _render_projection_chart(
     if not zero_cross.empty:
         days_to_zero = (zero_cross.iloc[0]["date"] - forecast_date).days
         st.error(f"🚨 Stockout predicted in {days_to_zero} days ({zero_cross.iloc[0]['date'].strftime('%Y-%m-%d')})")
+
+
+def _render_yearly_sales_trend() -> None:
+    st.markdown("---")
+    st.subheader("📊 Yearly Sales Trend")
+    st.caption("Track product lifecycle: historical sales and forecast to identify candidates for discontinuation")
+
+    col_mode, col_input = st.columns([1, 3])
+
+    with col_mode:
+        view_mode = st.radio(
+            "Group by:",
+            options=["Model", "Model + Color"],
+            horizontal=True,
+            key="yearly_trend_view_mode"
+        )
+
+    include_color = view_mode == "Model + Color"
+    id_col = "MODEL_COLOR" if include_color else "MODEL"
+
+    yearly_sales = load_yearly_sales(include_color=include_color)
+    yearly_forecast = load_yearly_forecast(include_color=include_color)
+
+    available_ids = sorted(yearly_sales[id_col].unique())
+
+    with col_input:
+        input_label = "Model + Color (e.g. AB123RD):" if include_color else "Model (e.g. AB123):"
+        selected_id = st.text_input(
+            input_label,
+            placeholder="Enter code...",
+            key="yearly_trend_input"
+        )
+
+    st.caption(f"📦 {len(available_ids)} items available")
+
+    if not selected_id:
+        return
+
+    selected_id = selected_id.upper()
+
+    if selected_id not in available_ids:
+        st.warning(f"{Icons.WARNING} '{selected_id}' not found in sales data.")
+        return
+
+    _render_yearly_trend_chart(yearly_sales, yearly_forecast, selected_id, id_col, include_color)
+
+
+def _render_yearly_trend_chart(
+        yearly_sales: pd.DataFrame,
+        yearly_forecast: pd.DataFrame | None,
+        selected_id: str,
+        id_col: str,
+        include_color: bool,
+) -> None:
+    from datetime import datetime
+    current_year = datetime.now().year
+
+    sales_data = yearly_sales[yearly_sales[id_col] == selected_id].copy()
+    sales_data = sales_data.sort_values("YEAR")
+
+    if yearly_forecast is not None:
+        forecast_data = yearly_forecast[yearly_forecast[id_col] == selected_id].copy()
+        forecast_data = forecast_data[forecast_data["YEAR"] >= current_year]
+        forecast_data = forecast_data.groupby("YEAR", as_index=False).agg({"QUANTITY": "sum"})
+    else:
+        forecast_data = pd.DataFrame(columns=["YEAR", "QUANTITY"])
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=sales_data["YEAR"],
+        y=sales_data["QUANTITY"],
+        name="Historical Sales",
+        marker={"color": "#1f77b4"},
+        text=sales_data["QUANTITY"].round(0).astype(int),
+        textposition="outside",
+    ))
+
+    if not forecast_data.empty:
+        fig.add_trace(go.Bar(
+            x=forecast_data["YEAR"],
+            y=forecast_data["QUANTITY"],
+            name="Forecast",
+            marker={"color": "#ff7f0e"},
+            text=forecast_data["QUANTITY"].round(0).astype(int),
+            textposition="outside",
+            opacity=0.7,
+        ))
+
+    entity_label = "Model+Color" if include_color else "Model"
+    fig.update_layout(
+        title=f"Yearly Sales Trend: {entity_label} {selected_id}",
+        xaxis_title="Year",
+        yaxis_title="Quantity Sold",
+        barmode="group",
+        hovermode="x unified",
+        height=450,
+        showlegend=True,
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        xaxis={"tickmode": "linear", "dtick": 1},
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    _render_trend_metrics(sales_data, forecast_data)
+
+
+def _render_trend_metrics(
+        sales_data: pd.DataFrame,
+        forecast_data: pd.DataFrame,
+) -> None:
+    col1, col2, col3, col4 = st.columns(4)
+
+    first_year = int(sales_data["YEAR"].min()) if not sales_data.empty else None
+    total_historical = int(sales_data["QUANTITY"].sum()) if not sales_data.empty else 0
+    years_active = len(sales_data) if not sales_data.empty else 0
+
+    with col1:
+        st.metric("First Sale Year", first_year if first_year else "N/A")
+    with col2:
+        st.metric("Years Active", years_active)
+    with col3:
+        st.metric("Total Historical Sales", f"{total_historical:,}")
+
+    if not forecast_data.empty:
+        forecast_qty = int(forecast_data["QUANTITY"].sum())
+        with col4:
+            st.metric("Forecast (Future)", f"{forecast_qty:,}")
+
+    if len(sales_data) >= 2:
+        recent_years = sales_data.tail(2)
+        if len(recent_years) == 2:
+            prev_year_qty = recent_years.iloc[0]["QUANTITY"]
+            last_year_qty = recent_years.iloc[1]["QUANTITY"]
+            if prev_year_qty > 0:
+                yoy_change = ((last_year_qty - prev_year_qty) / prev_year_qty) * 100
+                trend_icon, trend_color = _get_trend_indicator(yoy_change)
+                st.markdown(
+                    f"**YoY Trend:** {trend_icon} "
+                    f"<span style='color:{trend_color}'>{yoy_change:+.1f}%</span> "
+                    f"({int(prev_year_qty):,} → {int(last_year_qty):,})",
+                    unsafe_allow_html=True
+                )
+
+
+def _get_trend_indicator(yoy_change: float) -> tuple[str, str]:
+    if yoy_change > 0:
+        return "📈", "green"
+    if yoy_change < 0:
+        return "📉", "red"
+    return "➡️", "gray"

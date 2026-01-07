@@ -54,6 +54,57 @@ def aggregate_by_model(data: pd.DataFrame) -> pd.DataFrame:
     return model_summary.sort_values("MODEL", ascending=False)
 
 
+def aggregate_yearly_sales(data: pd.DataFrame, by_model: bool = False, include_color: bool = False) -> pd.DataFrame:
+    df = data.copy()
+    # noinspection PyTypeChecker
+    df["year"] = df["data"].dt.year
+
+    if by_model:
+        df["model"] = df["sku"].astype(str).str[:5]
+        if include_color:
+            df["color"] = df["sku"].astype(str).str[5:7]
+            df["model_color"] = df["model"] + df["color"]
+            group_cols = ["model_color", "year"]
+            id_col = "MODEL_COLOR"
+        else:
+            group_cols = ["model", "year"]
+            id_col = "MODEL"
+    else:
+        if include_color:
+            df["model"] = df["sku"].astype(str).str[:5]
+            df["color"] = df["sku"].astype(str).str[5:7]
+            df["model_color"] = df["model"] + df["color"]
+            group_cols = ["model_color", "year"]
+            id_col = "MODEL_COLOR"
+        else:
+            df["model"] = df["sku"].astype(str).str[:5]
+            group_cols = ["model", "year"]
+            id_col = "MODEL"
+
+    yearly_sales = df.groupby(group_cols, as_index=False).agg({"ilosc": "sum"})
+    yearly_sales.columns = [id_col, "YEAR", "QUANTITY"]
+
+    return yearly_sales
+
+
+def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = False) -> pd.DataFrame:
+    df = forecast_df.copy()
+    # noinspection PyTypeChecker
+    df["year"] = pd.to_datetime(df["data"]).dt.year
+    df["model"] = df["sku"].astype(str).str[:5]
+
+    if include_color:
+        df["color"] = df["sku"].astype(str).str[5:7]
+        df["model_color"] = df["model"] + df["color"]
+        yearly_forecast = df.groupby(["model_color", "year"], as_index=False).agg({"forecast": "sum"})
+        yearly_forecast.columns = ["MODEL_COLOR", "YEAR", "QUANTITY"]
+    else:
+        yearly_forecast = df.groupby(["model", "year"], as_index=False).agg({"forecast": "sum"})
+        yearly_forecast.columns = ["MODEL", "YEAR", "QUANTITY"]
+
+    return yearly_forecast
+
+
 def calculate_last_two_years_avg_sales(data: pd.DataFrame, by_model: bool = False) -> pd.DataFrame:
     df = data.copy()
 

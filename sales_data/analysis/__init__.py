@@ -4,6 +4,8 @@ from .aggregation import (
     AVERAGE_SALES,
     aggregate_by_model,
     aggregate_by_sku,
+    aggregate_forecast_yearly,
+    aggregate_yearly_sales,
     calculate_last_two_years_avg_sales,
 )
 from .classification import classify_sku_type, determine_seasonal_months
@@ -58,7 +60,9 @@ __all__ = [
     "AVERAGE_SALES",
     "aggregate_by_model",
     "aggregate_by_sku",
+    "aggregate_forecast_yearly",
     "aggregate_order_by_model_color",
+    "aggregate_yearly_sales",
     "calculate_forecast_date_range",
     "calculate_forecast_metrics",
     "calculate_last_two_years_avg_sales",

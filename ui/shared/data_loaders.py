@@ -92,3 +92,19 @@ def load_unique_categories() -> list[str]:
         return []
     categories = mappings[col_name].dropna().unique().tolist()
     return [c for c in categories if c]
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_yearly_sales(include_color: bool = False) -> pd.DataFrame:
+    from sales_data.analysis import aggregate_yearly_sales
+    sales_df = load_data()
+    return aggregate_yearly_sales(sales_df, by_model=True, include_color=include_color)
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_yearly_forecast(include_color: bool = False) -> pd.DataFrame | None:
+    from sales_data.analysis import aggregate_forecast_yearly
+    forecast_df, _, _ = load_forecast()
+    if forecast_df is None:
+        return None
+    return aggregate_forecast_yearly(forecast_df, include_color=include_color)
