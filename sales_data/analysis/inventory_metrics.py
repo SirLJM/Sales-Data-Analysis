@@ -118,7 +118,7 @@ def calculate_forecast_metrics(
             (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
         ]
 
-        result = forecast_leadtime.groupby("sku", as_index=False).agg({"forecast": "sum"})
+        result = forecast_leadtime.groupby("sku", as_index=False, observed=True).agg({"forecast": "sum"})
         result.rename(columns={"forecast": "FORECAST_LEADTIME"}, inplace=True)
         result["FORECAST_LEADTIME"] = result["FORECAST_LEADTIME"].fillna(0).round(2)
     else:

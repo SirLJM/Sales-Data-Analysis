@@ -71,7 +71,7 @@ def _add_forecast_leadtime(
         df["FORECAST_LEADTIME"] = 0
         return df
 
-    forecast_sum = forecast_window.groupby("sku")["forecast"].sum().reset_index()
+    forecast_sum = forecast_window.groupby("sku", observed=True)["forecast"].sum().reset_index()
     forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
     df = df.merge(forecast_sum, on="SKU", how="left")
     df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
@@ -141,7 +141,7 @@ def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
         agg_dict["REVENUE_AT_RISK"] = "sum"
 
     grouped = (
-        priority_df.groupby(["MODEL", "COLOR"], as_index=False)
+        priority_df.groupby(["MODEL", "COLOR"], as_index=False, observed=True)
         .agg(agg_dict)
         .sort_values("PRIORITY_SCORE", ascending=False)
     )

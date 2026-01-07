@@ -113,6 +113,21 @@ ROTATED_TABLE_STYLE: Final[str] = """
 </style>
 """
 
+INPUT_FIELD_STYLE: Final[str] = """
+<style>
+/* Limit input field widths for compact UI */
+[data-testid="stTextInput"] {
+    max-width: 200px !important;
+}
+[data-testid="stNumberInput"] {
+    max-width: 150px !important;
+}
+[data-testid="stSelectbox"] {
+    max-width: 250px !important;
+}
+</style>
+"""
+
 RESPONSIVE_TABS_STYLE: Final[str] = """
 <style>
 /* Tabs root container */

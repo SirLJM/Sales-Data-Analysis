@@ -107,7 +107,7 @@ def calculate_model_stock_projection(
 
     model_forecast = filter_and_prepare_forecast(model_forecast, start_date, projection_months)
 
-    model_forecast_aggregated = model_forecast.groupby("data", as_index=False).agg({"forecast": "sum"})
+    model_forecast_aggregated = model_forecast.groupby("data", as_index=False, observed=True).agg({"forecast": "sum"})
 
     return build_projection_from_forecast(
         model_forecast_aggregated, current_stock, rop, safety_stock, start_date

@@ -41,6 +41,7 @@ from ui.shared.sku_utils import (
 )
 from ui.shared.styles import (
     DATAFRAME_STYLE,
+    INPUT_FIELD_STYLE,
     PATTERN_SECTION_STYLE,
     ROTATED_TABLE_STYLE,
     SIDEBAR_STYLE,

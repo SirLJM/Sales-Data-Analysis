@@ -60,7 +60,7 @@ def prepare_monthly_series(
         monthly_agg = monthly_agg.copy()
         monthly_agg["_model"] = monthly_agg[id_col].astype(str).str[:5]
         entity_data = monthly_agg[monthly_agg["_model"] == entity_id]
-        entity_data = entity_data.groupby(month_col, as_index=False)[qty_col].sum()
+        entity_data = entity_data.groupby(month_col, as_index=False, observed=True)[qty_col].sum()
     else:
         entity_data = monthly_agg[monthly_agg[id_col] == entity_id]
 

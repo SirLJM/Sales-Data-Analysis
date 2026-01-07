@@ -29,14 +29,14 @@ def determine_seasonal_months(data: pd.DataFrame) -> pd.DataFrame:
     df["month"] = df["data"].dt.month  # type: ignore[attr-defined]
     df["year"] = df["data"].dt.year  # type: ignore[attr-defined]
 
-    monthly_sales = df.groupby(["sku", "year", "month"], as_index=False)["ilosc"].sum()
+    monthly_sales = df.groupby(["sku", "year", "month"], as_index=False, observed=True)["ilosc"].sum()
 
     # noinspection PyUnresolvedReferences
-    avg_monthly_sales = monthly_sales.groupby(["sku", "month"], as_index=False)[
+    avg_monthly_sales = monthly_sales.groupby(["sku", "month"], as_index=False, observed=True)[
         "ilosc"].mean()
     avg_monthly_sales = avg_monthly_sales.rename(columns={"sku": "SKU", "ilosc": "avg_sales"})
 
-    overall_avg = avg_monthly_sales.groupby("SKU", as_index=False)["avg_sales"].mean()  # type: ignore[attr-defined]
+    overall_avg = avg_monthly_sales.groupby("SKU", as_index=False, observed=True)["avg_sales"].mean()  # type: ignore[attr-defined]
     overall_avg = overall_avg.rename(columns={"avg_sales": "overall_avg"})
 
     seasonal_data = avg_monthly_sales.merge(overall_avg, on="SKU")

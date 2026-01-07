@@ -265,7 +265,7 @@ def _add_forecast_data(sku_summary: pd.DataFrame, forecast_df: pd.DataFrame, lea
     forecast_window = forecast_df[
         (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
         ]
-    forecast_agg = forecast_window.groupby("sku", as_index=False)["forecast"].sum()
+    forecast_agg = forecast_window.groupby("sku", as_index=False, observed=True)["forecast"].sum()
     # noinspection PyArgumentList
     forecast_agg = forecast_agg.rename(columns={"sku": "SKU", "forecast": "FORECAST_LEADTIME"})
     sku_summary = sku_summary.merge(forecast_agg, on="SKU", how="left")

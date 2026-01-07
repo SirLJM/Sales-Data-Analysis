@@ -133,7 +133,7 @@ def _process_stock_data(
 
     if group_by_model:
         stock_df["MODEL"] = extract_model(stock_df["SKU"])
-        stock_agg = stock_df.groupby("MODEL", as_index=False).agg({
+        stock_agg = stock_df.groupby("MODEL", as_index=False, observed=True).agg({
             ColumnNames.STOCK: "sum",
             ColumnNames.VALUE: "sum",
             "DESCRIPTION": "first",
@@ -164,7 +164,7 @@ def _merge_forecast_by_model(summary: pd.DataFrame, forecast_metrics: pd.DataFra
     forecast_metrics["MODEL"] = extract_model(forecast_metrics["sku"])
     if "FORECAST_LEADTIME" not in forecast_metrics.columns:
         return
-    forecast_agg = forecast_metrics.groupby("MODEL").agg({"FORECAST_LEADTIME": "sum"}).reset_index()
+    forecast_agg = forecast_metrics.groupby("MODEL", observed=True).agg({"FORECAST_LEADTIME": "sum"}).reset_index()
     summary_merged = summary.merge(forecast_agg, on="MODEL", how="left")
     if "FORECAST_LEADTIME" in summary_merged.columns:
         summary["FORECAST_LEADTIME"] = summary_merged["FORECAST_LEADTIME"]
@@ -447,7 +447,7 @@ def _render_stock_projection(
         )
         return
 
-    col_input, col_months = st.columns([3, 1])
+    col_input, col_months, _ = st.columns([1, 1, 2])
 
     with col_input:
         input_label = "Enter Model to analyze:" if group_by_model else "Enter SKU to analyze:"
@@ -771,7 +771,7 @@ def _build_yearly_summary_data(
     )
 
     if yearly_forecast is not None and not yearly_forecast.empty:
-        forecast_agg = yearly_forecast.groupby(id_col)["QUANTITY"].sum().reset_index()
+        forecast_agg = yearly_forecast.groupby(id_col, observed=True)["QUANTITY"].sum().reset_index()
         forecast_agg.columns = [id_col, "Forecast"]
         forecast_agg["Forecast"] = forecast_agg["Forecast"].astype(int)
         summary = summary.merge(forecast_agg, on=id_col, how="left")
@@ -821,7 +821,7 @@ def _render_yearly_trend_chart(
     if yearly_forecast is not None:
         forecast_data = yearly_forecast[yearly_forecast[id_col] == selected_id].copy()
         forecast_data = forecast_data[forecast_data["YEAR"] >= current_year]
-        forecast_data = forecast_data.groupby("YEAR", as_index=False).agg({"QUANTITY": "sum"})
+        forecast_data = forecast_data.groupby("YEAR", as_index=False, observed=True).agg({"QUANTITY": "sum"})
     else:
         forecast_data = pd.DataFrame(columns=["YEAR", "QUANTITY"])
 

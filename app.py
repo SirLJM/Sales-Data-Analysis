@@ -18,11 +18,11 @@ from ui import tab_pattern_optimizer
 from ui import tab_sales_analysis
 from ui import tab_weekly_analysis
 from ui.shared.session_manager import initialize_session_state
-from ui.shared.styles import RESPONSIVE_TABS_STYLE
+from ui.shared.styles import INPUT_FIELD_STYLE, RESPONSIVE_TABS_STYLE
 
 st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊", layout="wide")
 
-st.markdown(RESPONSIVE_TABS_STYLE, unsafe_allow_html=True)
+st.markdown(RESPONSIVE_TABS_STYLE + INPUT_FIELD_STYLE, unsafe_allow_html=True)
 
 initialize_session_state()
 

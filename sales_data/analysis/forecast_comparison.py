@@ -27,7 +27,7 @@ def align_forecasts(
         external = _aggregate_external_to_sku_monthly(external_forecast_df)
         actual = _aggregate_actual_to_sku_monthly(actual_sales_df)
 
-    internal_agg = internal.groupby(["entity_id", "year_month"], as_index=False).agg({
+    internal_agg = internal.groupby(["entity_id", "year_month"], as_index=False, observed=True).agg({
         "forecast": "sum",
         "method": "first",
     })
@@ -67,7 +67,7 @@ def _aggregate_external_to_model_monthly(forecast_df: pd.DataFrame) -> pd.DataFr
     df["entity_id"] = df[sku_col].astype(str).str[:5]
     df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False)[[forecast_col]].sum()
+    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[forecast_col]].sum()
     monthly = monthly.rename(columns={forecast_col: "external_forecast"})
 
     return monthly
@@ -89,7 +89,7 @@ def _aggregate_external_to_sku_monthly(forecast_df: pd.DataFrame) -> pd.DataFram
     df["entity_id"] = df[sku_col].astype(str)
     df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False)[[forecast_col]].sum()
+    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[forecast_col]].sum()
     monthly = monthly.rename(columns={forecast_col: "external_forecast"})
 
     return monthly
@@ -111,7 +111,7 @@ def _aggregate_actual_to_model_monthly(sales_df: pd.DataFrame) -> pd.DataFrame:
     df["entity_id"] = df[sku_col].astype(str).str[:5]
     df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False)[[qty_col]].sum()
+    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[qty_col]].sum()
     monthly = monthly.rename(columns={qty_col: "actual"})
 
     return monthly
@@ -133,7 +133,7 @@ def _aggregate_actual_to_sku_monthly(sales_df: pd.DataFrame) -> pd.DataFrame:
     df["entity_id"] = df[sku_col].astype(str)
     df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False)[[qty_col]].sum()
+    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[qty_col]].sum()
     monthly = monthly.rename(columns={qty_col: "actual"})
 
     return monthly
@@ -145,7 +145,7 @@ def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
 
     results = []
 
-    for entity_id, group in comparison_df.groupby("entity_id"):
+    for entity_id, group in comparison_df.groupby("entity_id", observed=True):
         valid = group[group["actual"] > 0].copy()
 
         if valid.empty:
@@ -254,7 +254,7 @@ def aggregate_comparison_by_type(
         return pd.DataFrame()
 
     metrics_df = _add_product_type_column(metrics_df, entity_metadata)
-    summary = [_summarize_group(ptype, group) for ptype, group in metrics_df.groupby("product_type")]
+    summary = [_summarize_group(ptype, group) for ptype, group in metrics_df.groupby("product_type", observed=True)]
 
     return pd.DataFrame(summary)
 

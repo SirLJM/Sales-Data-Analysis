@@ -322,7 +322,7 @@ def _prepare_entity_list(monthly_agg: pd.DataFrame, params: dict) -> list[dict]:
     else:
         df["_entity"] = df[id_col].astype(str)
 
-    volume = df.groupby("_entity")[qty_col].sum().reset_index()
+    volume = df.groupby("_entity", observed=True)[qty_col].sum().reset_index()
     volume.columns = ["entity_id", "total_volume"]
     volume = volume.sort_values("total_volume", ascending=False).head(top_n)
 

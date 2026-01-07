@@ -168,7 +168,7 @@ class FileSource(DataSource):
             group_col = "sku"
 
         monthly_agg = (
-            monthly_data.groupby([group_col, "year_month"], as_index=False)
+            monthly_data.groupby([group_col, "year_month"], as_index=False, observed=True)
             .agg({"ilosc": "sum", "razem": "sum", "order_id": "nunique"})
             .rename(
                 columns={

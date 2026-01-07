@@ -53,7 +53,7 @@ def _aggregate_daily_sales(
 
     df = df[(df["date"] >= start.date()) & (df["date"] <= end.date())]
 
-    daily = df.groupby([entity_col, "date"], as_index=False).agg(actual=("ilosc", "sum"))
+    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(actual=("ilosc", "sum"))
 
     return daily
 
@@ -70,7 +70,7 @@ def _prepare_daily_forecast(
     else:
         df[entity_col] = df["sku"]
 
-    daily = df.groupby([entity_col, "date"], as_index=False).agg(forecast=("forecast", "sum"))
+    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(forecast=("forecast", "sum"))
     daily = daily[(daily["date"] >= start.date()) & (daily["date"] <= end.date())]
 
     return daily
@@ -90,7 +90,7 @@ def _prepare_daily_stock(
     else:
         df[entity_col] = df["sku"]
 
-    daily = df.groupby([entity_col, "date"], as_index=False).agg(
+    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(
         stock_level=("available_stock", "sum")
     )
     daily = daily[(daily["date"] >= start.date()) & (daily["date"] <= end.date())]
@@ -129,7 +129,7 @@ def calculate_accuracy_metrics(comparison_df: pd.DataFrame, entity_col: str) -> 
             "MISSED_OPPORTUNITY": missed_opportunity,
         })
 
-    results = comparison_df.groupby(entity_col).apply(compute_entity_metrics, include_groups=False).reset_index()
+    results = comparison_df.groupby(entity_col, observed=True).apply(compute_entity_metrics, include_groups=False).reset_index()
     results.columns = [entity_col.upper()] + list(results.columns[1:])
 
     return results
@@ -204,7 +204,7 @@ def aggregate_accuracy_by_product_type(
     merged = accuracy_df.merge(type_lookup, on=id_col, how="left")
     merged["TYPE"] = merged["TYPE"].fillna("unknown")
 
-    type_summary = merged.groupby("TYPE").agg({
+    type_summary = merged.groupby("TYPE", observed=True).agg({
         "MAPE": "mean",
         "BIAS": "mean",
         "MAE": "mean",
@@ -257,7 +257,7 @@ def calculate_accuracy_trend(
         bias = _calculate_bias(g_with_stock)
         return pd.Series({"MAPE": mape, "BIAS": bias})
 
-    trend = comparison.groupby("period").apply(compute_period_metrics, include_groups=False).reset_index()
+    trend = comparison.groupby("period", observed=True).apply(compute_period_metrics, include_groups=False).reset_index()
     trend = trend.sort_values("period")
 
     return trend

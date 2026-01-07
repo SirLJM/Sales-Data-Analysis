@@ -190,7 +190,7 @@ def _calculate_model_size_sales_history(
     sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
     recent = filtered[filtered[month_col].isin(sorted_months)]
 
-    size_sales = recent.groupby("_size")[qty_col].sum().to_dict()
+    size_sales = recent.groupby("_size", observed=True)[qty_col].sum().to_dict()
 
     if size_aliases:
         aliased = {}

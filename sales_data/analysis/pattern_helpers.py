@@ -27,7 +27,7 @@ def calculate_size_priorities(
     if size_col not in df.columns:
         return {}
 
-    size_sales = df.groupby("size")[size_col].sum()
+    size_sales = df.groupby("size", observed=True)[size_col].sum()
 
     if size_aliases:
         aliased_sales: dict[str, float] = {}
@@ -77,7 +77,7 @@ def calculate_size_sales_history(
     sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
     recent = filtered[filtered[month_col].isin(sorted_months)]
 
-    size_sales = recent.groupby("_size")[qty_col].sum().to_dict()
+    size_sales = recent.groupby("_size", observed=True)[qty_col].sum().to_dict()
 
     if size_aliases:
         aliased = {}

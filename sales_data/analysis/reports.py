@@ -25,7 +25,7 @@ def generate_weekly_new_products_analysis(
     df = sales_df.copy()
     df["model"] = df["sku"].astype(str).str[:5]
 
-    first_sales = df.groupby("model")["data"].min().reset_index()
+    first_sales = df.groupby("model", observed=True)["data"].min().reset_index()
     first_sales.columns = ["model", "first_sale_date"]
 
     new_products = first_sales[first_sales["first_sale_date"] >= cutoff_date].copy()
@@ -50,7 +50,7 @@ def generate_weekly_new_products_analysis(
 
     df_new["week_start"] = df_new["data"].apply(get_week_start_wednesday)
 
-    weekly_sales = df_new.groupby(["model", "week_start"], as_index=False)["ilosc"].sum()
+    weekly_sales = df_new.groupby(["model", "week_start"], as_index=False, observed=True)["ilosc"].sum()
 
     model_week_ranges = []
     for _, row in new_products.iterrows():
@@ -85,7 +85,7 @@ def generate_weekly_new_products_analysis(
     if stock_df is not None:
         stock_df = stock_df.copy()
         stock_df["model"] = stock_df["sku"].astype(str).str[:5]
-        descriptions = stock_df.groupby("model")["nazwa"].first().reset_index()
+        descriptions = stock_df.groupby("model", observed=True)["nazwa"].first().reset_index()
         descriptions.columns = ["MODEL", "DESCRIPTION"]
         result = result.merge(descriptions, on="MODEL", how="left")
 
@@ -119,14 +119,14 @@ def calculate_top_sales_report(
 
     last_week_sales = (
         df[(df["data"] >= last_week_start) & (df["data"] <= last_week_end)]
-        .groupby("model", as_index=False)["ilosc"]
+        .groupby("model", as_index=False, observed=True)["ilosc"]
         .sum()
     )
     last_week_sales.columns = ["model", "current_week_sales"]
 
     prev_year_sales = (
         df[(df["data"] >= prev_year_start) & (df["data"] <= prev_year_end)]
-        .groupby("model", as_index=False)["ilosc"]
+        .groupby("model", as_index=False, observed=True)["ilosc"]
         .sum()
     )
     prev_year_sales.columns = ["model", "prev_year_sales"]
@@ -179,14 +179,14 @@ def calculate_top_products_by_type(
 
     last_week_sales = df[(df["data"] >= last_week_start) & (df["data"] <= last_week_end)].copy()
 
-    model_color_sales = last_week_sales.groupby(["model", "color"], as_index=False)["ilosc"].sum()
+    model_color_sales = last_week_sales.groupby(["model", "color"], as_index=False, observed=True)["ilosc"].sum()
     model_color_sales.columns = ["model", "color", "sales"]
 
     monthly_sales = df.copy()
     monthly_sales["month"] = monthly_sales["data"].dt.to_period("M")  # type: ignore[attr-defined]
-    monthly_agg = monthly_sales.groupby(["model", "month"], as_index=False)["ilosc"].sum()
+    monthly_agg = monthly_sales.groupby(["model", "month"], as_index=False, observed=True)["ilosc"].sum()
 
-    stats = monthly_agg.groupby("model", as_index=False).agg(
+    stats = monthly_agg.groupby("model", as_index=False, observed=True).agg(
         avg_sales=("ilosc", "mean"),
         sd_sales=("ilosc", "std"),
         months_with_sales=("month", "nunique"),
@@ -196,7 +196,7 @@ def calculate_top_products_by_type(
     mask = stats["avg_sales"] > 0
     stats.loc[mask, "cv"] = stats.loc[mask, "sd_sales"] / stats.loc[mask, "avg_sales"]
 
-    first_sales = df.groupby("model")["data"].min().reset_index()
+    first_sales = df.groupby("model", observed=True)["data"].min().reset_index()
     first_sales.columns = ["model", "first_sale"]
 
     stats = stats.merge(first_sales, on="model", how="left")
@@ -294,7 +294,7 @@ def calculate_monthly_yoy_by_category(
 
     kategoria_details = kategoria_details.sort_values(["Podgrupa", "current_qty"], ascending=[True, False])
 
-    podgrupa_summary = kategoria_details.groupby("Podgrupa", as_index=False).agg({
+    podgrupa_summary = kategoria_details.groupby("Podgrupa", as_index=False, observed=True).agg({
         "current_qty": "sum",
         "prior_qty": "sum",
         "difference": "sum"

@@ -11,12 +11,12 @@ def aggregate_by_sku(data: pd.DataFrame) -> pd.DataFrame:
     df = data.copy()
     df["year_month"] = df["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
-    first_sale = df.groupby("sku")["data"].min().reset_index()
+    first_sale = df.groupby("sku", observed=True)["data"].min().reset_index()
     first_sale.columns = ["SKU", "first_sale"]
 
-    monthly_sales = df.groupby(["sku", "year_month"], as_index=False)["ilosc"].sum()
+    monthly_sales = df.groupby(["sku", "year_month"], as_index=False, observed=True)["ilosc"].sum()
 
-    sku_summary = monthly_sales.groupby("sku", as_index=False).agg(
+    sku_summary = monthly_sales.groupby("sku", as_index=False, observed=True).agg(
         {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}  # type: ignore[attr-defined]
     )
 
@@ -35,12 +35,12 @@ def aggregate_by_model(data: pd.DataFrame) -> pd.DataFrame:
     df["model"] = df["sku"].astype(str).str[:5]
     df["year_month"] = df["data"].dt.to_period("M")  # type: ignore[attr-defined]
 
-    first_sale = df.groupby("model")["data"].min().reset_index()
+    first_sale = df.groupby("model", observed=True)["data"].min().reset_index()
     first_sale.columns = ["MODEL", "first_sale"]
 
-    monthly_sales = df.groupby(["model", "year_month"], as_index=False)["ilosc"].sum()
+    monthly_sales = df.groupby(["model", "year_month"], as_index=False, observed=True)["ilosc"].sum()
 
-    model_summary = monthly_sales.groupby("model", as_index=False).agg(
+    model_summary = monthly_sales.groupby("model", as_index=False, observed=True).agg(
         {"year_month": "nunique", "ilosc": ["sum", "mean", "std"]}  # type: ignore[attr-defined]
     )
 
@@ -81,7 +81,7 @@ def aggregate_yearly_sales(data: pd.DataFrame, by_model: bool = False, include_c
             group_cols = ["model", "year"]
             id_col = "MODEL"
 
-    yearly_sales = df.groupby(group_cols, as_index=False).agg({"ilosc": "sum"})
+    yearly_sales = df.groupby(group_cols, as_index=False, observed=True).agg({"ilosc": "sum"})
     yearly_sales.columns = [id_col, "YEAR", "QUANTITY"]
 
     return yearly_sales
@@ -103,10 +103,10 @@ def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = F
     if include_color:
         df["color"] = df["sku"].astype(str).str[5:7]
         df["model_color"] = df["model"] + df["color"]
-        yearly_forecast = df.groupby(["model_color", "year"], as_index=False).agg({"forecast": "sum"})
+        yearly_forecast = df.groupby(["model_color", "year"], as_index=False, observed=True).agg({"forecast": "sum"})
         yearly_forecast.columns = ["MODEL_COLOR", "YEAR", "QUANTITY"]
     else:
-        yearly_forecast = df.groupby(["model", "year"], as_index=False).agg({"forecast": "sum"})
+        yearly_forecast = df.groupby(["model", "year"], as_index=False, observed=True).agg({"forecast": "sum"})
         yearly_forecast.columns = ["MODEL", "YEAR", "QUANTITY"]
 
     return yearly_forecast
@@ -126,12 +126,12 @@ def calculate_last_two_years_avg_sales(data: pd.DataFrame, by_model: bool = Fals
 
     if by_model:
         df_last_2_years["model"] = df_last_2_years["sku"].astype(str).str[:5]
-        monthly_sales = df_last_2_years.groupby(["model", "year_month"], as_index=False)["ilosc"].sum()
-        avg_sales = monthly_sales.groupby("model", as_index=False)["ilosc"].mean()  # type: ignore[attr-defined]
+        monthly_sales = df_last_2_years.groupby(["model", "year_month"], as_index=False, observed=True)["ilosc"].sum()
+        avg_sales = monthly_sales.groupby("model", as_index=False, observed=True)["ilosc"].mean()  # type: ignore[attr-defined]
         avg_sales.columns = ["MODEL", "LAST_2_YEARS_AVG"]
     else:
-        monthly_sales = df_last_2_years.groupby(["sku", "year_month"], as_index=False)["ilosc"].sum()
-        avg_sales = monthly_sales.groupby("sku", as_index=False)["ilosc"].mean()  # type: ignore[attr-defined]
+        monthly_sales = df_last_2_years.groupby(["sku", "year_month"], as_index=False, observed=True)["ilosc"].sum()
+        avg_sales = monthly_sales.groupby("sku", as_index=False, observed=True)["ilosc"].mean()  # type: ignore[attr-defined]
         avg_sales.columns = ["SKU", "LAST_2_YEARS_AVG"]
 
     avg_sales["LAST_2_YEARS_AVG"] = avg_sales["LAST_2_YEARS_AVG"].round(2)
