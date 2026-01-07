@@ -747,15 +747,17 @@ def _render_trend_metrics(
             st.metric("Forecast (Future)", f"{forecast_qty:,}")
 
     if len(sales_data) >= 2:
-        recent_years = sales_data.tail(2)
-        if len(recent_years) == 2:
-            prev_year_qty = recent_years.iloc[0]["QUANTITY"]
-            last_year_qty = recent_years.iloc[1]["QUANTITY"]
+        recent_years = sales_data.tail(2).reset_index(drop=True)
+        prev_year = int(recent_years.loc[0, "YEAR"])
+        last_year = int(recent_years.loc[1, "YEAR"])
+        if last_year - prev_year == 1:
+            prev_year_qty = float(recent_years.loc[0, "QUANTITY"])
+            last_year_qty = float(recent_years.loc[1, "QUANTITY"])
             if prev_year_qty > 0:
                 yoy_change = ((last_year_qty - prev_year_qty) / prev_year_qty) * 100
                 trend_icon, trend_color = _get_trend_indicator(yoy_change)
                 st.markdown(
-                    f"**YoY Trend:** {trend_icon} "
+                    f"**YoY Trend ({prev_year} → {last_year}):** {trend_icon} "
                     f"<span style='color:{trend_color}'>{yoy_change:+.1f}%</span> "
                     f"({int(prev_year_qty):,} → {int(last_year_qty):,})",
                     unsafe_allow_html=True
