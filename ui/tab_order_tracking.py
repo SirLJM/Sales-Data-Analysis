@@ -5,8 +5,10 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from ui.constants import ColumnNames, Config, Icons
+from ui.constants import ColumnNames, Config, Icons, SessionKeys
 from utils.logging_config import get_logger
+
+MONTHLY_CAPACITY = "Monthly Capacity"
 
 TOTAL_QUANTITY = "Total Quantity"
 
@@ -306,7 +308,16 @@ def _render_facility_capacity() -> None:
         st.info(f"{Icons.INFO} No facility data available in active orders.")
         return
 
+    facility_capacities = _get_facility_capacities()
+
     capacity_df = pd.DataFrame(capacity_data)
+    capacity_df[MONTHLY_CAPACITY] = capacity_df["Facility"].map(
+        lambda f: facility_capacities.get(f, 0)
+    )
+    capacity_df["Utilization %"] = capacity_df.apply(
+        lambda row: _calculate_utilization(row[TOTAL_QUANTITY], row[MONTHLY_CAPACITY]),
+        axis=1,
+    )
     capacity_df = capacity_df.sort_values(TOTAL_QUANTITY, ascending=False)
 
     st.dataframe(
@@ -316,11 +327,20 @@ def _render_facility_capacity() -> None:
             "Facility": st.column_config.TextColumn("Facility", width="medium"),
             "Order Count": st.column_config.NumberColumn("Orders", format="%d"),
             TOTAL_QUANTITY: st.column_config.NumberColumn("Total Qty", format="%d"),
+            MONTHLY_CAPACITY: st.column_config.NumberColumn("Capacity", format="%d"),
+            "Utilization %": st.column_config.ProgressColumn(
+                "Utilization",
+                format="%.0f%%",
+                min_value=0,
+                max_value=100,
+            ),
         },
     )
 
     total_qty = capacity_df[TOTAL_QUANTITY].sum()
     st.caption(f"📊 Total quantity across all facilities: {total_qty:,}")
+
+    _render_capacity_editor(capacity_df["Facility"].tolist(), facility_capacities)
 
 
 def _calculate_facility_capacity(active_orders: list[dict]) -> list[dict]:
@@ -344,3 +364,62 @@ def _calculate_facility_capacity(active_orders: list[dict]) -> list[dict]:
         }
         for facility, data in facility_totals.items()
     ]
+
+
+def _get_facility_capacities() -> dict[str, int]:
+    from utils.settings_manager import get_setting, load_settings
+
+    if SessionKeys.FACILITY_CAPACITY not in st.session_state:
+        settings = load_settings()
+        st.session_state[SessionKeys.FACILITY_CAPACITY] = get_setting(
+            "facility_capacity", settings
+        ) or {}
+    return st.session_state[SessionKeys.FACILITY_CAPACITY]
+
+
+def _save_facility_capacities(capacities: dict[str, int]) -> None:
+    from utils.settings_manager import load_settings, save_settings, update_setting
+
+    st.session_state[SessionKeys.FACILITY_CAPACITY] = capacities
+    settings = load_settings()
+    settings = update_setting("facility_capacity", capacities, settings)
+    save_settings(settings)
+
+
+def _calculate_utilization(total_qty: int, capacity: int) -> float:
+    if capacity <= 0:
+        return 0.0
+    return min((total_qty / capacity) * 100, 100.0)
+
+
+@st.fragment
+def _render_capacity_editor(facilities: list[str], current_capacities: dict[str, int]) -> None:
+    with st.expander("⚙️ Edit Monthly Capacity", expanded=False):
+        st.caption("Set monthly production capacity for each facility")
+
+        cols_per_row = 3
+        edited_capacities = current_capacities.copy()
+        has_changes = False
+
+        for i in range(0, len(facilities), cols_per_row):
+            cols = st.columns(cols_per_row)
+            for j, col in enumerate(cols):
+                if i + j < len(facilities):
+                    facility = facilities[i + j]
+                    current_value = current_capacities.get(facility, 0)
+                    with col:
+                        new_value = st.number_input(
+                            facility,
+                            min_value=0,
+                            value=current_value,
+                            step=100,
+                            key=f"capacity_{facility}",
+                        )
+                        if new_value != current_value:
+                            edited_capacities[facility] = new_value
+                            has_changes = True
+
+        if has_changes and st.button("💾 Save Capacity", type="primary"):
+            _save_facility_capacities(edited_capacities)
+            st.success(f"{Icons.SUCCESS} Capacity settings saved")
+            st.rerun()

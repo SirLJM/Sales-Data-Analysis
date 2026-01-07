@@ -26,6 +26,7 @@ class SessionKeys:
     ML_FORECAST_PARAMS: Final[str] = "ml_forecast_params"
     ML_TRAINED_MODELS: Final[str] = "ml_trained_models"
     ML_TRAINING_STATS: Final[str] = "ml_training_stats"
+    FACILITY_CAPACITY: Final[str] = "facility_capacity"
 
 
 class ColumnNames:

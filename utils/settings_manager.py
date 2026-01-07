@@ -60,6 +60,7 @@ DEFAULT_SETTINGS = {
         "include_statistical": True,
         "confidence_level": 0.95,
     },
+    "facility_capacity": {},
 }
 
 
