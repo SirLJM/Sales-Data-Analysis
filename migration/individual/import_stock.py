@@ -3,18 +3,53 @@ from __future__ import annotations
 import os
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sales_data.loader import SalesDataLoader
+from utils.parallel_loader import parallel_load
 
 load_dotenv(find_dotenv(filename=".env"))
 
 BATCH_SIZE = 1000
+
+
+def _load_stock_file(
+        loader: SalesDataLoader, file_info: tuple[Path, datetime]
+) -> tuple[Path, datetime, pd.DataFrame] | None:
+    file_path, snapshot_date = file_info
+    try:
+        df = loader.load_stock_file(file_path)
+        if df.empty:
+            return None
+        print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
+        return file_path, snapshot_date, df
+    except (ValueError, OSError, IOError) as e:
+        print(f"  ERROR loading {file_path.name}: {e}")
+        return None
+
+
+def _check_existing_dates(engine: Engine, stock_files: list) -> set[datetime]:
+    dates = [d for _, d in stock_files]
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                """
+                SELECT DISTINCT snapshot_date
+                FROM stock_snapshots
+                WHERE snapshot_date = ANY (:dates)
+                """
+            ),
+            {"dates": dates},
+        )
+        return {row[0] for row in result.fetchall()}
 
 
 def import_stock_data(connection_string: str):
@@ -34,69 +69,60 @@ def import_stock_data(connection_string: str):
     for file_path, snapshot_date in stock_files:
         print(f"  - {file_path.name}: {snapshot_date.date()}")
 
-    for file_path, snapshot_date in stock_files:
-        print(f"\nProcessing: {file_path.name}")
+    existing_dates = _check_existing_dates(engine, stock_files)
+    files_to_import = [
+        (path, date) for path, date in stock_files if date not in existing_dates
+    ]
+
+    if not files_to_import:
+        print("\nAll files already imported, nothing to do")
+        engine.dispose()
+        return
+
+    skipped = len(stock_files) - len(files_to_import)
+    if skipped > 0:
+        print(f"\nSkipping {skipped} already imported file(s)")
+
+    print(f"\nLoading {len(files_to_import)} file(s) in parallel...")
+    loaded_data = parallel_load(
+        files_to_import,
+        lambda info: _load_stock_file(loader, info),
+        desc="Loading stock files",
+    )
+
+    print(f"\nInserting {len(loaded_data)} file(s) to database...")
+    for file_path, snapshot_date, df in loaded_data:
         batch_id = str(uuid.uuid4())
 
+        batch_data = [
+            {
+                "snapshot_date": snapshot_date,
+                "sku": row.sku,
+                "product_name": getattr(row, "nazwa", ""),
+                "net_price": getattr(row, "cena_netto", 0),
+                "available_stock": getattr(row, "available_stock", 0),
+                "model": row.sku[:5] if len(row.sku) >= 5 else None,
+                "source_file": file_path.name,
+                "import_batch_id": batch_id,
+            }
+            for row in df.itertuples(index=False)
+        ]
+
         with engine.connect() as conn:
-            result = conn.execute(
+            conn.execute(
                 text(
                     """
-                                       SELECT COUNT(*)
-                                       FROM stock_snapshots
-                                       WHERE snapshot_date = :snapshot_date
-                                       """
+                    INSERT INTO stock_snapshots (snapshot_date, sku, product_name, net_price,
+                                                 available_stock, model, source_file, import_batch_id)
+                    VALUES (:snapshot_date, :sku, :product_name, :net_price,
+                            :available_stock, :model, :source_file, :import_batch_id)
+                    """
                 ),
-                {"snapshot_date": snapshot_date},
+                batch_data,
             )
+            conn.commit()
 
-            if result.fetchone()[0] > 0:
-                print(f"  Skipping - data for {snapshot_date.date()} already exists")
-                continue
-
-        try:
-            df = loader.load_stock_file(file_path)
-
-            if df.empty:
-                print("  Skipping empty file")
-                continue
-
-            batch_data = [
-                {
-                    "snapshot_date": snapshot_date,
-                    "sku": row.sku,
-                    "product_name": getattr(row, "nazwa", ""),
-                    "net_price": getattr(row, "cena_netto", 0),
-                    "available_stock": getattr(row, "available_stock", 0),
-                    "model": row.sku[:5] if len(row.sku) >= 5 else None,
-                    "source_file": file_path.name,
-                    "import_batch_id": batch_id,
-                }
-                for row in df.itertuples(index=False)
-            ]
-
-            with engine.connect() as conn:
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO stock_snapshots (
-                            snapshot_date, sku, product_name, net_price,
-                            available_stock, model, source_file, import_batch_id
-                        )
-                        VALUES (
-                            :snapshot_date, :sku, :product_name, :net_price,
-                            :available_stock, :model, :source_file, :import_batch_id
-                        )
-                        """
-                    ),
-                    batch_data,
-                )
-                conn.commit()
-
-            print(f"  OK Imported {len(batch_data)} stock records")
-
-        except (ValueError, OSError, IOError) as e:
-            print(f"  ERROR: {e}")
+        print(f"  OK Imported {len(batch_data)} stock records from {file_path.name}")
 
     print("=" * 60)
     print("Stock import complete")

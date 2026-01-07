@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from utils.logging_config import get_logger
+from utils.parallel_loader import parallel_load
 
 from .analyzer import SalesAnalyzer
 from .data_source import DataSource
@@ -45,6 +46,18 @@ class FileSource(DataSource):
 
         return self.loader.load_stock_file(stock_file)
 
+    def _load_stock_with_date(
+        self, file_info: tuple[Path, datetime]
+    ) -> pd.DataFrame | None:
+        file_path, snapshot_date = file_info
+        try:
+            df = self.loader.load_stock_file(file_path)
+            df["snapshot_date"] = snapshot_date
+            return df
+        except Exception as e:
+            logger.warning("Failed to load stock file %s: %s", file_path, e)
+            return None
+
     def load_stock_history(
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
@@ -61,14 +74,9 @@ class FileSource(DataSource):
         if not filtered_files:
             return pd.DataFrame()
 
-        all_stock_dfs = []
-        for file_path, snapshot_date in filtered_files:
-            try:
-                df = self.loader.load_stock_file(file_path)
-                df["snapshot_date"] = snapshot_date
-                all_stock_dfs.append(df)
-            except Exception as e:
-                logger.warning("Failed to load stock file %s: %s", file_path, e)
+        all_stock_dfs = parallel_load(
+            filtered_files, self._load_stock_with_date, desc="Loading stock history"
+        )
 
         if not all_stock_dfs:
             return pd.DataFrame()

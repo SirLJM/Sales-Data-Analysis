@@ -8,6 +8,8 @@ from typing import Any
 import pandas as pd
 from pandas import DataFrame
 
+from utils.parallel_loader import parallel_load
+
 from .dtype_optimizer import (
     get_optimal_sales_dtypes,
     optimize_dtypes,
@@ -405,6 +407,12 @@ class SalesDataLoader:
 
         return df
 
+    def _load_single_sales_file(self, file_info: tuple[Path, datetime, datetime]) -> pd.DataFrame:
+        file_path, _, _ = file_info
+        df = self.load_sales_file(file_path)
+        print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
+        return df
+
     def consolidate_all_files(self) -> pd.DataFrame:
         files_info = self.find_data_files()
 
@@ -417,13 +425,10 @@ class SalesDataLoader:
         for file_path, start_date, end_date in files_info:
             print(f"  - {file_path.name}: {start_date.date()} to {end_date.date()}")
 
-        all_dataframes = []
-
-        for file_path, start_date, end_date in files_info:
-            print(f"\nLoading: {file_path.name}...")
-            df = self.load_sales_file(file_path)
-            print(f"  Loaded {len(df):,} rows")
-            all_dataframes.append(df)
+        print("\nLoading files in parallel...")
+        all_dataframes = parallel_load(
+            files_info, self._load_single_sales_file, desc="Loading sales files"
+        )
 
         consolidated_df = pd.concat(all_dataframes, ignore_index=True)
         consolidated_df = optimize_dtypes(consolidated_df, verbose=True)
