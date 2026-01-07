@@ -115,8 +115,11 @@ ROTATED_TABLE_STYLE: Final[str] = """
 
 INPUT_FIELD_STYLE: Final[str] = """
 <style>
-/* Limit input field widths for compact UI */
-[data-testid="stTextInput"] {
+/* Limit input field widths for compact UI - only in sidebar and columns */
+[data-testid="stSidebar"] [data-testid="stTextInput"] {
+    max-width: 200px !important;
+}
+[data-testid="column"] [data-testid="stTextInput"] {
     max-width: 200px !important;
 }
 [data-testid="stNumberInput"] {

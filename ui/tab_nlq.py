@@ -25,20 +25,6 @@ EXAMPLE_QUERIES = [
     ("top 5 modeli wg sprzedazy", "Polish: Top 5 models by sales"),
 ]
 
-NLQ_INPUT_STYLE = """
-<style>
-    div[data-testid="stTextInput"][data-st-key="nlq_query_input"] {
-        max-width: 100% !important;
-        width: 100% !important;
-    }
-    div[data-testid="stTextInput"][data-st-key="nlq_query_input"] input {
-        font-size: 1.1rem;
-        padding: 0.75rem 1rem;
-        width: 100% !important;
-    }
-</style>
-"""
-
 
 def render(context: dict) -> None:
     try:
@@ -49,7 +35,6 @@ def render(context: dict) -> None:
 
 
 def _render_content(context: dict) -> None:
-    st.markdown(NLQ_INPUT_STYLE, unsafe_allow_html=True)
     st.title("🔍 Natural Language Query")
     st.caption("Query your data using natural language (English or Polish)")
 
