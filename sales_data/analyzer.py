@@ -7,7 +7,9 @@ import pandas as pd
 from sales_data.analysis import (
     aggregate_by_model,
     aggregate_by_sku,
+    aggregate_forecast_yearly,
     aggregate_order_by_model_color,
+    aggregate_yearly_sales,
     calculate_forecast_date_range,
     calculate_forecast_metrics,
     calculate_last_two_years_avg_sales,
@@ -244,3 +246,10 @@ class SalesAnalyzer:
             reference_date: datetime = None
     ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         return calculate_monthly_yoy_by_category(sales_df, category_df, reference_date)
+
+    def aggregate_yearly_sales(self, include_color: bool = False) -> pd.DataFrame:
+        return aggregate_yearly_sales(self.data, by_model=True, include_color=include_color)
+
+    @staticmethod
+    def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = False) -> pd.DataFrame:
+        return aggregate_forecast_yearly(forecast_df, include_color)
