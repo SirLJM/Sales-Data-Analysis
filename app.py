@@ -40,34 +40,59 @@ TAB_NAMES = [
 ]
 
 
-def _render_nav_buttons():
-    import streamlit.components.v1 as components
-    for i, name in enumerate(TAB_NAMES):
-        components.html(f"""
-        <button onclick="
-            var tabs = window.parent.document.querySelectorAll('button[data-baseweb=&quot;tab&quot;]');
-            if (tabs && tabs[{i}]) tabs[{i}].click();
-            var popoverBtn = window.parent.document.querySelector('button[data-testid=&quot;stPopoverButton&quot;]');
-            if (popoverBtn) popoverBtn.click();
-        " style="
-            display: block;
-            width: 100%;
-            padding: 10px 14px;
-            margin: 2px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            text-align: left;
-            font-size: 13px;
-        ">{name}</button>
-        """, height=42)
+NAV_INJECT_JS = """
+<script>
+(function() {
+    if (window.parent.document.getElementById('nav-menu-injected')) return;
 
+    var tabsContainer = window.parent.document.querySelector('div[data-testid="stTabs"]');
+    if (!tabsContainer) return;
 
-col_nav, col_spacer = st.columns([0.08, 0.92])
-with col_nav:
-    with st.popover("☰"):
-        _render_nav_buttons()
+    var navHtml = `
+    <div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">
+        <button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>
+        <div id="nav-dropdown" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);min-width:220px;padding:4px;">
+            """ + "".join([
+                f'<button class="nav-item" data-idx="{i}" style="display:block;width:100%;padding:6px 10px;border:none;background:transparent;text-align:left;cursor:pointer;font-size:12px;border-radius:3px;">{name}</button>'
+                for i, name in enumerate(TAB_NAMES)
+            ]) + """
+        </div>
+    </div>`;
+
+    tabsContainer.style.position = 'relative';
+    tabsContainer.style.marginLeft = '45px';
+    tabsContainer.insertAdjacentHTML('afterbegin', navHtml);
+
+    var btn = window.parent.document.getElementById('nav-btn');
+    var dropdown = window.parent.document.getElementById('nav-dropdown');
+
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+    });
+
+    dropdown.querySelectorAll('.nav-item').forEach(function(item) {
+        item.addEventListener('mouseover', function() { this.style.background = '#f5f5f5'; });
+        item.addEventListener('mouseout', function() { this.style.background = 'transparent'; });
+        item.addEventListener('click', function() {
+            var idx = parseInt(this.getAttribute('data-idx'));
+            var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+            if (tabs[idx]) tabs[idx].click();
+            dropdown.style.display = 'none';
+        });
+    });
+
+    window.parent.document.addEventListener('click', function(e) {
+        if (!e.target.closest('#nav-menu-injected')) {
+            dropdown.style.display = 'none';
+        }
+    });
+})();
+</script>
+"""
+
+import streamlit.components.v1 as components
+components.html(NAV_INJECT_JS, height=0)
 
 tabs = st.tabs(TAB_NAMES)
 
