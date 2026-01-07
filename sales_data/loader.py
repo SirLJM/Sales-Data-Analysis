@@ -8,13 +8,17 @@ from typing import Any
 import pandas as pd
 from pandas import DataFrame
 
+from utils.logging_config import get_logger
 from utils.parallel_loader import parallel_load
-
 from .dtype_optimizer import (
     get_optimal_sales_dtypes,
     optimize_dtypes,
 )
 from .validator import DataValidator
+
+USING_SHEET_S = "Using sheet: %s"
+
+logger = get_logger("loader")
 
 PATH_TO = "/path/to"
 
@@ -354,21 +358,21 @@ class SalesDataLoader:
         return df[["sku", "nazwa", "cena_netto", "available_stock"]].copy()
 
     def load_stock_file(self, file_path: Path) -> pd.DataFrame:
-        print(f"\nLoading stock file: {file_path.name}")
+        logger.info("Loading stock file: %s", file_path.name)
 
         sheet_name = (
             self.validator.find_stock_sheet(file_path) if file_path.suffix == XLSX else None
         )
         if sheet_name:
-            print(f"  Using sheet: {sheet_name}")
+            logger.debug(USING_SHEET_S, sheet_name)
         elif file_path.suffix == XLSX:
-            print("Using default sheet: Sheet1")
+            logger.debug("Using default sheet: Sheet1")
 
         df = self._read_file(file_path, self.validator.find_stock_sheet)
         df = self._validate_and_filter_stock_data(df)
         df = optimize_dtypes(df)
 
-        print(f"  Loaded {len(df):,} active SKUs")
+        logger.info("Loaded %d active SKUs", len(df))
 
         return df
 
@@ -389,28 +393,28 @@ class SalesDataLoader:
         return df
 
     def load_forecast_file(self, file_path: Path) -> pd.DataFrame:
-        print(f"\nLoading forecast file: {file_path.name}")
+        logger.info("Loading forecast file: %s", file_path.name)
 
         sheet_name = (
             self.validator.find_forecast_sheet(file_path) if file_path.suffix == XLSX else None
         )
         if sheet_name:
-            print(f"  Using sheet: {sheet_name}")
+            logger.debug(USING_SHEET_S, sheet_name)
         elif file_path.suffix == XLSX:
-            print("Using default sheet: Sheet1")
+            logger.debug("Using default sheet: Sheet1")
 
         df = self._read_file(file_path, self.validator.find_forecast_sheet)
         df = self._validate_and_prepare_forecast_data(df)
         df = optimize_dtypes(df)
 
-        print(f"  Loaded {len(df):,} forecast records for {df['sku'].nunique():,} SKUs")
+        logger.info("Loaded %d forecast records for %d SKUs", len(df), df['sku'].nunique())
 
         return df
 
     def _load_single_sales_file(self, file_info: tuple[Path, datetime, datetime]) -> pd.DataFrame:
         file_path, _, _ = file_info
         df = self.load_sales_file(file_path)
-        print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
+        logger.debug("Loaded: %s (%d rows)", file_path.name, len(df))
         return df
 
     def consolidate_all_files(self) -> pd.DataFrame:
@@ -421,22 +425,24 @@ class SalesDataLoader:
                 f"No data files found in {self.archival_sales_dir} or {self.current_sales_dir}"
             )
 
-        print(f"Found {len(files_info)} data file(s):")
+        logger.info("Found %d data file(s)", len(files_info))
         for file_path, start_date, end_date in files_info:
-            print(f"  - {file_path.name}: {start_date.date()} to {end_date.date()}")
+            logger.debug("  - %s: %s to %s", file_path.name, start_date.date(), end_date.date())
 
-        print("\nLoading files in parallel...")
+        logger.info("Loading files in parallel...")
         all_dataframes = parallel_load(
             files_info, self._load_single_sales_file, desc="Loading sales files"
         )
 
         consolidated_df = pd.concat(all_dataframes, ignore_index=True)
-        consolidated_df = optimize_dtypes(consolidated_df, verbose=True)
+        consolidated_df = optimize_dtypes(consolidated_df, verbose=False)
 
-        print("\nConsolidation complete!")
-        print(f"Total rows: {len(consolidated_df):,}")
-        print(f"Unique orders: {consolidated_df['order_id'].nunique():,}")
-        print(f"Unique products (SKUs): {consolidated_df['sku'].nunique():,}")
+        logger.info(
+            "Consolidation complete: %d rows, %d orders, %d SKUs",
+            len(consolidated_df),
+            consolidated_df['order_id'].nunique(),
+            consolidated_df['sku'].nunique()
+        )
 
         return consolidated_df
 
@@ -451,7 +457,7 @@ class SalesDataLoader:
         if data_dir.exists():
             for file_path in data_dir.glob(ANY_XLSX):
                 if "MODELE" in file_path.name.upper() and "KOLORY" in file_path.name.upper():
-                    print("(Using fallback: found in data/ folder)")
+                    logger.debug("Using fallback: found in data/ folder")
                     return file_path
 
         return None
@@ -462,17 +468,17 @@ class SalesDataLoader:
         elif file_path.suffix == XLSX:
             sheet_name = self.validator.find_model_metadata_sheet(file_path)
             if sheet_name:
-                print(f"  Using sheet: {sheet_name}")
+                logger.debug(USING_SHEET_S, sheet_name)
                 return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
             else:
-                print("  Could not find valid sheet with metadata columns")
+                logger.warning("Could not find valid sheet with metadata columns")
                 return None
         return None
 
     def _validate_and_prepare_metadata(self, df: pd.DataFrame) -> pd.DataFrame | None:
         is_valid, errors = self.validator.validate_model_metadata(df)
         if not is_valid:
-            print(f"  Warning: Invalid model metadata: {errors}")
+            logger.warning("Invalid model metadata: %s", errors)
             return None
 
         required_cols = [
@@ -491,10 +497,10 @@ class SalesDataLoader:
         file_path = self.find_model_metadata_file()
 
         if file_path is None:
-            print("\nModel metadata file not found")
+            logger.warning("Model metadata file not found")
             return None
 
-        print(f"\nLoading model metadata: {file_path.name}")
+        logger.info("Loading model metadata: %s", file_path.name)
 
         try:
             df = self._read_model_metadata_file(file_path)
@@ -505,21 +511,21 @@ class SalesDataLoader:
             if df is None:
                 return None
 
-            print(f"  Loaded {len(df):,} models with metadata")
+            logger.info("Loaded %d models with metadata", len(df))
             return df
 
         except PermissionError:
-            print("Warning: File is locked/open. Please close the Excel file and restart the app.")
+            logger.error("File is locked/open. Please close the Excel file and restart the app.")
             return None
         except Exception as e:
-            print(f"  Warning: Could not load model metadata: {e}")
+            logger.warning("Could not load model metadata: %s", e)
             return None
 
     def load_color_aliases(self) -> dict[str, str]:
         file_path = self.find_model_metadata_file()
 
         if file_path is None:
-            print("\nColor aliases file not found")
+            logger.warning("Color aliases file not found")
             return {}
 
         try:
@@ -531,7 +537,7 @@ class SalesDataLoader:
             return dict(zip(df["NUMER"], df["KOLOR"]))
 
         except Exception as e:
-            print(f"  Warning: Could not load color aliases: {e}")
+            logger.warning("Could not load color aliases: %s", e)
             return {}
 
     @staticmethod

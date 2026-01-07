@@ -146,7 +146,7 @@ def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
     results = []
 
     for entity_id, group in comparison_df.groupby("entity_id", observed=True):
-        valid = group[group["actual"] > 0].copy()
+        valid = group[group["actual"] > 0]
 
         if valid.empty:
             continue

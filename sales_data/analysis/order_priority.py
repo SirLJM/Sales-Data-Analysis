@@ -3,7 +3,6 @@ from __future__ import annotations
 import pandas as pd
 
 from .inventory_metrics import calculate_forecast_date_range
-from .utils import parse_sku_components
 
 
 def calculate_order_priority(
@@ -79,10 +78,10 @@ def _add_forecast_leadtime(
 
 
 def _add_sku_components(df: pd.DataFrame) -> pd.DataFrame:
-    sku_components = df["SKU"].apply(parse_sku_components)
-    df["MODEL"] = sku_components.apply(lambda x: x["model"])
-    df["COLOR"] = sku_components.apply(lambda x: x["color"])
-    df["SIZE"] = sku_components.apply(lambda x: x["size"])
+    sku_str = df["SKU"].astype(str)
+    df["MODEL"] = sku_str.str[:5]
+    df["COLOR"] = sku_str.str[5:7]
+    df["SIZE"] = sku_str.str[7:9]
     return df
 
 
@@ -124,6 +123,26 @@ def _calculate_priority_score(df: pd.DataFrame, config: dict) -> pd.DataFrame:
         + (df["FORECAST_LEADTIME"].clip(upper=config["demand_cap"]) * config["weight_demand"])
     ) * df["TYPE_MULTIPLIER"]
     return df
+
+
+def apply_priority_scoring(df: pd.DataFrame, settings: dict | None = None) -> pd.DataFrame:
+    if "FORECAST_LEADTIME" not in df.columns:
+        df["PRIORITY_SCORE"] = 0
+        return df
+
+    if settings is None:
+        from utils.settings_manager import load_settings
+        settings = load_settings()
+
+    config = _extract_priority_config(settings)
+    result = df.copy()
+
+    result = _calculate_stockout_risk(result, config)
+    result = _calculate_revenue_impact(result)
+    result = _apply_type_multipliers(result, config["type_multipliers"])
+    result = _calculate_priority_score(result, config)
+
+    return result
 
 
 def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:

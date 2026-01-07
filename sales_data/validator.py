@@ -165,8 +165,8 @@ class DataValidator:
             raise ValueError(f"File is empty: {file_path}")
         except PermissionError:
             raise PermissionError(f"Permission denied: {file_path}")
-        except Exception as e:
-            raise RuntimeError(f"An error occurred: {e}")
+        except (pd.errors.ParserError, ValueError) as e:
+            raise ValueError(f"Error parsing file {file_path}: {e}") from e
 
     @staticmethod
     def find_sales_sheet(file_path: Path) -> str | None:
@@ -200,8 +200,8 @@ class DataValidator:
             raise ValueError(f"File is empty: {file_path}")
         except PermissionError:
             raise PermissionError(f"Permission denied: {file_path}")
-        except Exception as e:
-            raise RuntimeError(f"An error occurred: {e}")
+        except (pd.errors.ParserError, ValueError) as e:
+            raise ValueError(f"Error parsing file {file_path}: {e}") from e
 
     @staticmethod
     def find_category_sheet(file_path: Path) -> str | None:

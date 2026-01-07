@@ -16,6 +16,7 @@ from .inventory_metrics import (
 )
 from .order_priority import (
     aggregate_order_by_model_color,
+    apply_priority_scoring,
     calculate_order_priority,
     find_urgent_colors,
     generate_order_recommendations,
@@ -78,6 +79,7 @@ __all__ = [
     "calculate_top_sales_report",
     "classify_sku_type",
     "determine_seasonal_months",
+    "apply_priority_scoring",
     "find_urgent_colors",
     "generate_order_recommendations",
     "generate_weekly_new_products_analysis",

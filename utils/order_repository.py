@@ -4,11 +4,12 @@ import json
 import os
 from abc import ABC, abstractmethod
 from datetime import datetime
-
-from sqlalchemy import create_engine, text
-
 from pathlib import Path
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
+
+from exceptions import OrderError
 from utils.logging_config import get_logger
 
 logger = get_logger("order_repository")
@@ -55,9 +56,9 @@ class FileOrderRepository(OrderRepository):
 
             logger.info("Order saved successfully: %s", filename)
             return True
-        except Exception as e:
+        except (OSError, IOError, json.JSONDecodeError) as e:
             logger.exception("File save error: %s", e)
-            return False
+            raise OrderError(f"Failed to save order: {e}") from e
 
     def get_active(self) -> list[dict]:
         try:
@@ -85,9 +86,9 @@ class FileOrderRepository(OrderRepository):
 
             active_orders.sort(key=lambda x: x.get("order_date", ""), reverse=True)
             return active_orders
-        except Exception as e:
+        except (OSError, IOError, json.JSONDecodeError) as e:
             logger.error("Error reading active orders from files: %s", e)
-            return []
+            raise OrderError(f"Failed to read orders: {e}") from e
 
     def archive(self, order_id: str) -> bool:
         try:
@@ -106,9 +107,9 @@ class FileOrderRepository(OrderRepository):
                 json.dump(order_data, f, indent=2, default=str)
 
             return True
-        except Exception as e:
+        except (OSError, IOError, json.JSONDecodeError) as e:
             logger.error("Error archiving order in file: %s", e)
-            return False
+            raise OrderError(f"Failed to archive order: {e}") from e
 
     def add_manual(self, order_id: str, order_data: dict) -> bool:
         order_date = order_data.get("order_date") or datetime.now()
@@ -166,9 +167,9 @@ class DatabaseOrderRepository(OrderRepository):
                 conn.commit()
             logger.info("Order saved to database: %s", order_data["order_id"])
             return True
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error("Database error saving order: %s", e)
-            return False
+            raise OrderError(f"Database error saving order: {e}") from e
 
     def get_active(self) -> list[dict]:
         engine = self._get_engine()
@@ -198,9 +199,9 @@ class DatabaseOrderRepository(OrderRepository):
                         "status": row.status,
                     })
                 return orders
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error("Database error getting active orders: %s", e)
-            return []
+            raise OrderError(f"Database error getting orders: {e}") from e
 
     def archive(self, order_id: str) -> bool:
         engine = self._get_engine()
@@ -217,9 +218,9 @@ class DatabaseOrderRepository(OrderRepository):
                 )
                 conn.commit()
             return True
-        except Exception as e:
+        except SQLAlchemyError as e:
             logger.error("Database error archiving order: %s", e)
-            return False
+            raise OrderError(f"Database error archiving order: {e}") from e
 
     def add_manual(self, order_id: str, order_data: dict) -> bool:
         order_data["order_id"] = order_id

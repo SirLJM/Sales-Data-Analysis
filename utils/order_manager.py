@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from exceptions import OrderError
 from utils.logging_config import get_logger
 from utils.order_repository_factory import create_order_repository
 
@@ -12,8 +13,7 @@ def save_order(order_data: dict) -> bool:
     try:
         repository = create_order_repository()
         return repository.save(order_data)
-    except Exception as e:
-        logger.error("Error saving order: %s", e)
+    except OrderError:
         return False
 
 
@@ -21,8 +21,7 @@ def get_active_orders() -> list:
     try:
         repository = create_order_repository()
         return repository.get_active()
-    except Exception as e:
-        logger.error("Error getting active orders: %s", e)
+    except OrderError:
         return []
 
 
@@ -30,8 +29,7 @@ def archive_order(order_id: str) -> bool:
     try:
         repository = create_order_repository()
         return repository.archive(order_id)
-    except Exception as e:
-        logger.error("Error archiving order: %s", e)
+    except OrderError:
         return False
 
 
@@ -43,6 +41,5 @@ def add_manual_order(order_id: str, order_data: dict) -> bool:
     try:
         repository = create_order_repository()
         return repository.add_manual(order_id, order_data)
-    except Exception as e:
-        logger.error("Error adding manual order: %s", e)
+    except OrderError:
         return False

@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from sales_data import SalesAnalyzer
+from sales_data.analysis import apply_priority_scoring
 from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
 from ui.shared.data_loaders import (
     load_color_aliases,
@@ -123,7 +124,7 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
 
     sku_summary = _merge_stock_data(sku_summary, stock_df)
     sku_summary = _merge_forecast_data(sku_summary, forecast_df, settings["lead_time"])
-    sku_summary = _calculate_priority(sku_summary, settings)
+    sku_summary = apply_priority_scoring(sku_summary, settings)
 
     return sku_summary
 
@@ -160,57 +161,6 @@ def _merge_forecast_data(
         return sku_summary
 
     return _add_forecast_data(sku_summary, forecast_df, lead_time)
-
-
-def _calculate_priority(sku_summary: pd.DataFrame, settings: dict) -> pd.DataFrame:
-    if "FORECAST_LEADTIME" not in sku_summary.columns:
-        sku_summary["PRIORITY_SCORE"] = 0
-        return sku_summary
-
-    df = sku_summary.copy()
-    priority_settings = settings.get("order_recommendations", {})
-
-    stockout_cfg = priority_settings.get("stockout_risk", {})
-    zero_stock_penalty = stockout_cfg.get("zero_stock_penalty", 100)
-    below_rop_max = stockout_cfg.get("below_rop_max_penalty", 80)
-
-    weights = priority_settings.get("priority_weights", {})
-    weight_stockout = weights.get("stockout_risk", 0.5)
-    weight_revenue = weights.get("revenue_impact", 0.3)
-    weight_demand = weights.get("demand_forecast", 0.2)
-
-    demand_cap = priority_settings.get("demand_cap", 100)
-    type_multipliers = priority_settings.get("type_multipliers", {})
-
-    df["STOCKOUT_RISK"] = 0.0
-    zero_stock_mask = (df["STOCK"] == 0) & (df["FORECAST_LEADTIME"] > 0)
-    df.loc[zero_stock_mask, "STOCKOUT_RISK"] = zero_stock_penalty
-
-    below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
-    df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
-            (df.loc[below_rop_mask, "ROP"] - df.loc[below_rop_mask, "STOCK"])
-            / df.loc[below_rop_mask, "ROP"].replace(0, 1)
-            * below_rop_max
-    )
-
-    if "PRICE" in df.columns:
-        df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
-        max_revenue = df["REVENUE_AT_RISK"].max()
-        df["REVENUE_IMPACT"] = df["REVENUE_AT_RISK"] / max_revenue * 100 if max_revenue > 0 else 0
-    else:
-        df["REVENUE_IMPACT"] = 0
-
-    df["DEMAND_SCORE"] = df["FORECAST_LEADTIME"].clip(upper=demand_cap)
-
-    df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_multipliers).fillna(1.0)
-
-    df["PRIORITY_SCORE"] = (
-                                   df["STOCKOUT_RISK"] * weight_stockout
-                                   + df["REVENUE_IMPACT"] * weight_revenue
-                                   + df["DEMAND_SCORE"] * weight_demand
-                           ) * df["TYPE_MULTIPLIER"]
-
-    return df
 
 
 @st.cache_data(ttl=3600)

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
+from pathlib import Path
 from typing import Any
 
-SETTINGS_FILE = "../settings.json"
+from utils.logging_config import get_logger
+
+logger = get_logger("settings_manager")
+
+SETTINGS_FILE = Path(__file__).parent.parent / "settings.json"
 
 DEFAULT_SETTINGS = {
     "data_source": {
@@ -65,7 +69,7 @@ DEFAULT_SETTINGS = {
 
 
 def load_settings() -> dict[str, Any]:
-    if not os.path.exists(SETTINGS_FILE):
+    if not SETTINGS_FILE.exists():
         return DEFAULT_SETTINGS.copy()
 
     try:
@@ -73,7 +77,7 @@ def load_settings() -> dict[str, Any]:
             settings = json.load(f)
         return _merge_with_defaults(settings)
     except (json.JSONDecodeError, IOError) as e:
-        print(f"Warning: Could not load settings from {SETTINGS_FILE}: {e}")
+        logger.warning("Could not load settings from %s: %s", SETTINGS_FILE, e)
         return DEFAULT_SETTINGS.copy()
 
 
@@ -83,7 +87,7 @@ def save_settings(settings: dict[str, Any]) -> bool:
             json.dump(settings, f, indent=2)
         return True
     except IOError as e:
-        print(f"Error: Could not save settings to {SETTINGS_FILE}: {e}")
+        logger.error("Could not save settings to %s: %s", SETTINGS_FILE, e)
         return False
 
 
