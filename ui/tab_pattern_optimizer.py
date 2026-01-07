@@ -84,7 +84,8 @@ def _get_active_pattern_set() -> PatternSet | None:
     return next((ps for ps in pattern_sets if ps.id == active_id), None)
 
 
-def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) -> tuple[dict[str, int], dict[str, int]]:
+def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) -> tuple[
+    dict[str, int], dict[str, int]]:
     st.markdown('<div class="section-header">Order Quantities</div>', unsafe_allow_html=True)
 
     if active_set:
@@ -123,7 +124,8 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
         if loaded_history:
             for size in sizes:
                 st.session_state[f"sales_{size}"] = loaded_history.get(size, 0)
-            st.session_state["loaded_sales_history_message"] = f"Loaded sales history for {model_code.upper()} (all colors)"
+            st.session_state[
+                "loaded_sales_history_message"] = f"Loaded sales history for {model_code.upper()} (all colors)"
             st.rerun()
         else:
             st.warning(f"No sales data found for {model_code.upper()}")
@@ -164,7 +166,7 @@ def _load_sales_history_for_model(model: str, active_set: PatternSet | None) -> 
 
 
 def _calculate_model_size_sales_history(
-    monthly_agg, model: str, size_aliases: dict[str, str] | None, months: int = 4
+        monthly_agg, model: str, size_aliases: dict[str, str] | None, months: int = 4
 ) -> dict[str, int]:
     df = monthly_agg.copy()
 
@@ -231,7 +233,17 @@ def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
         return {}
 
 
-@st.fragment
+def _clear_editor_form_state() -> None:
+    for key in st.session_state.keys():
+        if any([
+            key.startswith("size_name_"),
+            key.startswith("pname_"),
+            key.startswith("p") and "_" in key,
+            key in ("set_name_input", "num_sizes_input", "num_patterns_input"),
+        ]):
+            del st.session_state[key]
+
+
 def _render_pattern_sets_section() -> None:
     st.markdown('<div class="section-header">Pattern Sets</div>', unsafe_allow_html=True)
 
@@ -254,10 +266,12 @@ def _render_pattern_set_buttons() -> None:
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     with btn_col1:
         if st.button("New Set", key="new_set_btn"):
+            _clear_editor_form_state()
             st.session_state[SessionKeys.SHOW_ADD_PATTERN_SET] = True
             st.session_state[SessionKeys.EDIT_SET_ID] = None
             st.session_state[SessionKeys.NUM_PATTERNS] = Config.DEFAULT_NUM_PATTERNS
             st.session_state[SessionKeys.NUM_SIZES] = Config.DEFAULT_NUM_SIZES
+            st.rerun()
     with btn_col2:
         if st.button("Save All", key="save_all_btn"):
             save_pattern_sets(st.session_state[SessionKeys.PATTERN_SETS])
@@ -270,30 +284,34 @@ def _render_pattern_set_buttons() -> None:
             st.rerun()
 
 
-def _render_pattern_set_selector(pattern_sets: list[PatternSet]) -> PatternSet | None:
-    set_options = {ps.name: ps.id for ps in pattern_sets}
-
-    current_index = 0
-    active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
-    if active_id:
-        for idx, (name, ps_id) in enumerate(set_options.items()):
-            if ps_id == active_id:
-                current_index = idx
+def _on_pattern_set_change():
+    selected_name = st.session_state.get("pattern_set_selector")
+    if selected_name:
+        pattern_sets = st.session_state.get(SessionKeys.PATTERN_SETS, [])
+        for ps in pattern_sets:
+            if ps.name == selected_name:
+                st.session_state[SessionKeys.ACTIVE_SET_ID] = ps.id
                 break
+
+
+def _render_pattern_set_selector(pattern_sets: list[PatternSet]) -> PatternSet | None:
+    set_names = [ps.name for ps in pattern_sets]
+    active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
+    current_index = 0
+    for idx, ps in enumerate(pattern_sets):
+        if ps.id == active_id:
+            current_index = idx
+            break
 
     selected_set_name = st.selectbox(
         "Select Active Pattern Set:",
-        options=list(set_options.keys()),
+        options=set_names,
         index=current_index,
         key="pattern_set_selector",
+        on_change=_on_pattern_set_change,
     )
 
-    new_active_id = set_options[selected_set_name]
-    if new_active_id != st.session_state.get(SessionKeys.ACTIVE_SET_ID):
-        st.session_state[SessionKeys.ACTIVE_SET_ID] = new_active_id
-        st.rerun()
-
-    return next((ps for ps in pattern_sets if ps.id == new_active_id), None)
+    return next((ps for ps in pattern_sets if ps.name == selected_set_name), None)
 
 
 def _render_active_set_details(active_set: PatternSet) -> None:
@@ -308,6 +326,7 @@ def _render_active_set_details(active_set: PatternSet) -> None:
     btn_edit, btn_delete = st.columns(2)
     with btn_edit:
         if st.button("Edit Set", key="edit_set"):
+            _clear_editor_form_state()
             st.session_state[SessionKeys.SHOW_ADD_PATTERN_SET] = True
             st.session_state[SessionKeys.EDIT_SET_ID] = st.session_state[SessionKeys.ACTIVE_SET_ID]
             st.session_state[SessionKeys.NUM_PATTERNS] = len(active_set.patterns)
@@ -402,7 +421,7 @@ def _build_placeholder_text(size_names: list[str]) -> str:
 
 
 def _render_size_quantity_inputs(
-    pattern_index: int, size_names: list[str], existing_pattern: Pattern | None
+        pattern_index: int, size_names: list[str], existing_pattern: Pattern | None
 ) -> dict[str, int]:
     pattern_sizes = {}
     p_cols = st.columns(min(len(size_names), 5)) if size_names else st.columns(1)
@@ -424,7 +443,7 @@ def _render_size_quantity_inputs(
 
 
 def _render_single_pattern(
-    index: int, size_names: list[str], editing_set: PatternSet | None
+        index: int, size_names: list[str], editing_set: PatternSet | None
 ) -> Pattern | None:
     existing_pattern = _get_existing_pattern(editing_set, index)
     pattern_name = st.text_input(
@@ -505,10 +524,10 @@ def _render_editor_buttons(
 
 
 def _render_optimization_section(
-    quantities: dict[str, int],
-    sizes: list[str],
-    min_order_per_pattern: int,
-    sales_history: dict[str, int],
+        quantities: dict[str, int],
+        sizes: list[str],
+        min_order_per_pattern: int,
+        sales_history: dict[str, int],
 ) -> None:
     st.markdown('<div class="section-header">Optimization</div>', unsafe_allow_html=True)
 
@@ -524,11 +543,11 @@ def _render_optimization_section(
 
 
 def _run_optimization(
-    quantities: dict[str, int],
-    sizes: list[str],
-    min_order_per_pattern: int,
-    algorithm: str,
-    sales_history: dict[str, int],
+        quantities: dict[str, int],
+        sizes: list[str],
+        min_order_per_pattern: int,
+        algorithm: str,
+        sales_history: dict[str, int],
 ) -> None:
     pattern_sets = st.session_state.get(SessionKeys.PATTERN_SETS, [])
     active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
@@ -618,7 +637,7 @@ def _display_pattern_allocation(result: dict, active_set: PatternSet, min_order_
 
 
 def _display_production_comparison(
-    result: dict, quantities: dict[str, int], sizes: list[str], excluded_sizes: list[str] | None = None
+        result: dict, quantities: dict[str, int], sizes: list[str], excluded_sizes: list[str] | None = None
 ) -> None:
     st.markdown("### Production vs Required")
     production_data = []
