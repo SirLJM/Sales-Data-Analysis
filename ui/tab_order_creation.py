@@ -9,7 +9,6 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
 from ui.shared.data_loaders import (
     load_color_aliases,
-    load_data,
     load_model_metadata,
     load_size_aliases,
     load_size_aliases_reverse,
@@ -46,18 +45,13 @@ def _render_content(context: dict) -> None:
 def _render_manual_order_input(context: dict) -> None:
     st.subheader("📝 Manual Order Creation")
 
-    col_input, col_button = st.columns([3, 1])
-    with col_input:
+    with st.form("manual_order_creation_form"):
         manual_model = st.text_input(
             "Enter Model Code",
             placeholder="e.g., CH031",
             help="Enter any model code (5 characters) to create an order.",
-            key="manual_model_input",
         )
-    with col_button:
-        st.write("")
-        st.write("")
-        create_clicked = st.button("Create Order", key="create_manual_order", type="primary")
+        create_clicked = st.form_submit_button("Create Order", type="primary")
 
     if create_clicked:
         _process_manual_order(manual_model, context)
@@ -159,7 +153,7 @@ def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) 
 
 
 def _merge_forecast_data(
-    sku_summary: pd.DataFrame, forecast_df: pd.DataFrame | None, lead_time: float
+        sku_summary: pd.DataFrame, forecast_df: pd.DataFrame | None, lead_time: float
 ) -> pd.DataFrame:
     if forecast_df is None or forecast_df.empty:
         sku_summary["FORECAST_LEADTIME"] = 0
@@ -194,9 +188,9 @@ def _calculate_priority(sku_summary: pd.DataFrame, settings: dict) -> pd.DataFra
 
     below_rop_mask = (df["STOCK"] > 0) & (df["STOCK"] < df["ROP"])
     df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
-        (df.loc[below_rop_mask, "ROP"] - df.loc[below_rop_mask, "STOCK"])
-        / df.loc[below_rop_mask, "ROP"].replace(0, 1)
-        * below_rop_max
+            (df.loc[below_rop_mask, "ROP"] - df.loc[below_rop_mask, "STOCK"])
+            / df.loc[below_rop_mask, "ROP"].replace(0, 1)
+            * below_rop_max
     )
 
     if "PRICE" in df.columns:
@@ -211,10 +205,10 @@ def _calculate_priority(sku_summary: pd.DataFrame, settings: dict) -> pd.DataFra
     df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_multipliers).fillna(1.0)
 
     df["PRIORITY_SCORE"] = (
-        df["STOCKOUT_RISK"] * weight_stockout
-        + df["REVENUE_IMPACT"] * weight_revenue
-        + df["DEMAND_SCORE"] * weight_demand
-    ) * df["TYPE_MULTIPLIER"]
+                                   df["STOCKOUT_RISK"] * weight_stockout
+                                   + df["REVENUE_IMPACT"] * weight_revenue
+                                   + df["DEMAND_SCORE"] * weight_demand
+                           ) * df["TYPE_MULTIPLIER"]
 
     return df
 
@@ -447,9 +441,18 @@ def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results
 
 def _render_size_color_table(pattern_results: dict, pattern_set: PatternSet) -> None:
     size_color_table = _build_color_size_table(pattern_results, pattern_set)
+
+    tsv_data = size_color_table.to_csv(sep="\t", index=False)
+    _render_copy_button(tsv_data)
+
     st.markdown(ROTATED_TABLE_STYLE, unsafe_allow_html=True)
     html_table = size_color_table.to_html(index=False, classes="rotated-table", border=0)
     st.markdown(f'<div class="rotated-table">{html_table}</div>', unsafe_allow_html=True)
+
+
+def _render_copy_button(tsv_data: str) -> None:
+    from st_copy_to_clipboard import st_copy_to_clipboard
+    st_copy_to_clipboard(tsv_data, "📋 Copy table to clipboard")
 
 
 def _lookup_pattern_set(model: str) -> PatternSet | None:
@@ -483,7 +486,7 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
 
 
 def _optimize_color_pattern(
-    model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
+        model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
@@ -549,7 +552,7 @@ def _display_model_metadata(metadata: dict) -> None:
 
 
 def _load_last_4_months_sales(
-    model: str, colors: list[str], monthly_agg: pd.DataFrame | None = None
+        model: str, colors: list[str], monthly_agg: pd.DataFrame | None = None
 ) -> pd.DataFrame:
     try:
         if monthly_agg is None:
@@ -711,19 +714,10 @@ def _build_color_size_table(pattern_results: dict, pattern_set: PatternSet) -> p
 
 
 def _get_all_model_colors(pattern_results: dict) -> list[str]:
-    ordered_colors = sorted(pattern_results.keys())
-    sales_df = load_data()
-
-    if sales_df is None or sales_df.empty:
-        return ordered_colors
-
-    selected_items = st.session_state.get(SessionKeys.SELECTED_ORDER_ITEMS, [])
-    if not selected_items:
-        return ordered_colors
-
-    model_code = selected_items[0]["model"]
-    model_skus = sales_df[sales_df["sku"].astype(str).str[:5] == model_code]
-    return sorted(model_skus["sku"].astype(str).str[5:7].unique())
+    color_aliases = load_color_aliases()
+    if color_aliases:
+        return sorted(color_aliases.keys())
+    return sorted(pattern_results.keys())
 
 
 def _create_pattern_row(size: str, all_model_colors: list[str], color_aliases: dict, pattern_results: dict,

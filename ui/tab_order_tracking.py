@@ -26,6 +26,8 @@ def render() -> None:
 def _render_content() -> None:
     st.title("📦 Order Tracking")
 
+    _init_pdf_parser_lookup_data()
+
     st.markdown("---")
     _render_pdf_upload()
 
@@ -39,15 +41,22 @@ def _render_content() -> None:
     _render_facility_capacity()
 
 
-@st.fragment
-def _render_pdf_upload() -> None:
+def _init_pdf_parser_lookup_data() -> None:
+    if st.session_state.get("_pdf_parser_initialized"):
+        return
     from ui.shared import load_unique_categories, load_unique_facilities
-    from utils.order_manager import add_manual_order
-    from utils.pdf_parser import parse_order_pdf, set_lookup_data
+    from utils.pdf_parser import set_lookup_data
 
     facilities = load_unique_facilities()
     categories = load_unique_categories()
     set_lookup_data(facilities, categories)
+    st.session_state["_pdf_parser_initialized"] = True
+
+
+@st.fragment
+def _render_pdf_upload() -> None:
+    from utils.order_manager import add_manual_order
+    from utils.pdf_parser import parse_order_pdf
 
     st.subheader("📄 Import Order from PDF")
 
@@ -113,57 +122,52 @@ def _render_manual_order_form() -> None:
 
     st.subheader("📝 Add Manual Order")
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        manual_order_date = st.date_input(
-            ColumnNames.ORDER_DATE,
-            value=datetime.today(),
-            help="Date when the order was placed",
-            key="manual_order_date_input",
-        )
-    with col2:
-        manual_order_model = st.text_input(
-            "Model Code",
-            placeholder="e.g., ABC12",
-            key="manual_order_model_input",
-        )
-    with col3:
-        manual_product_name = st.text_input(
-            "Product Name",
-            placeholder="e.g., Bluza",
-            key="manual_product_name_input",
-        )
-    with col4:
-        manual_quantity = st.number_input(
-            "Quantity",
-            min_value=0,
-            value=0,
-            key="manual_quantity_input",
-        )
+    with st.form("manual_order_form"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            manual_order_date = st.date_input(
+                ColumnNames.ORDER_DATE,
+                value=datetime.today(),
+                help="Date when the order was placed",
+            )
+        with col2:
+            manual_order_model = st.text_input(
+                "Model Code",
+                placeholder="e.g., ABC12",
+            )
+        with col3:
+            manual_product_name = st.text_input(
+                "Product Name",
+                placeholder="e.g., Bluza",
+            )
+        with col4:
+            manual_quantity = st.number_input(
+                "Quantity",
+                min_value=0,
+                value=0,
+            )
 
-    col5, col6, col7, col8 = st.columns(4)
-    with col5:
-        manual_facility = st.text_input(
-            "Facility",
-            placeholder="e.g., Sieradz",
-            key="manual_facility_input",
-        )
-    with col6:
-        manual_operation = st.text_input(
-            "Operation",
-            placeholder="e.g., szycie i składanie",
-            key="manual_operation_input",
-        )
-    with col7:
-        manual_material = st.text_input(
-            "Material",
-            placeholder="e.g., DRES PĘTELKA 280 GSM",
-            key="manual_material_input",
-        )
-    with col8:
-        st.write("")
-        st.write("")
-        if st.button("Add Order", key="add_manual_order_btn", type="primary"):
+        col5, col6, col7, col8 = st.columns(4)
+        with col5:
+            manual_facility = st.text_input(
+                "Facility",
+                placeholder="e.g., Sieradz",
+            )
+        with col6:
+            manual_operation = st.text_input(
+                "Operation",
+                placeholder="e.g., szycie i składanie",
+            )
+        with col7:
+            manual_material = st.text_input(
+                "Material",
+                placeholder="e.g., DRES PĘTELKA 280 GSM",
+            )
+        with col8:
+            st.write("")
+
+        submitted = st.form_submit_button("Add Order", type="primary")
+        if submitted:
             if not manual_order_model:
                 st.warning(f"{Icons.WARNING} Please enter a model code")
             else:

@@ -1,5 +1,6 @@
 streamlit
 streamlit-aggrid
+st-copy-to-clipboard
 pandas
 numpy
 openpyxl

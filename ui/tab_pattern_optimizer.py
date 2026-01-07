@@ -108,16 +108,15 @@ def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) 
 
 
 def _render_sales_history_section(sizes: list[str], active_set: PatternSet | None) -> dict[str, int]:
-    col_model, col_load = st.columns([3, 1])
-
-    with col_model:
-        model_code = st.text_input(
-            "Model", placeholder="e.g., CH031", key="sales_history_model"
-        )
-    with col_load:
-        st.write("")
-        st.write("")
-        load_clicked = st.button("Load", key="load_sales_history")
+    with st.form("load_sales_history_form"):
+        col_model, col_load = st.columns([3, 1])
+        with col_model:
+            model_code = st.text_input(
+                "Model", placeholder="e.g., CH031", key="sales_history_model"
+            )
+        with col_load:
+            st.write("")
+        load_clicked = st.form_submit_button("Load Sales History")
 
     if load_clicked and model_code:
         loaded_history = _load_sales_history_for_model(model_code.upper(), active_set)
@@ -349,19 +348,21 @@ def _render_pattern_editor() -> None:
     _render_editor_buttons(set_name, size_names, patterns, editing_set)
 
 
+def _on_num_sizes_change():
+    st.session_state[SessionKeys.NUM_SIZES] = st.session_state["num_sizes_input"]
+
+
 def _render_size_inputs(editing_set: PatternSet | None) -> list[str]:
-    num_sizes = st.number_input(
+    st.number_input(
         "Number of size categories",
         min_value=1,
         max_value=20,
         value=len(editing_set.size_names) if editing_set else st.session_state[SessionKeys.NUM_SIZES],
         step=1,
         key="num_sizes_input",
+        on_change=_on_num_sizes_change,
     )
-
-    if num_sizes != st.session_state[SessionKeys.NUM_SIZES]:
-        st.session_state[SessionKeys.NUM_SIZES] = int(num_sizes)
-        st.rerun()
+    num_sizes = st.session_state.get("num_sizes_input", st.session_state[SessionKeys.NUM_SIZES])
 
     st.write("**Define size categories:**")
     size_names = []
@@ -441,19 +442,21 @@ def _render_single_pattern(
     return None
 
 
+def _on_num_patterns_change():
+    st.session_state[SessionKeys.NUM_PATTERNS] = st.session_state["num_patterns_input"]
+
+
 def _render_pattern_inputs(editing_set: PatternSet | None, size_names: list[str]) -> list[Pattern]:
-    num_patterns = st.number_input(
+    st.number_input(
         "Number of patterns in this set",
         min_value=1,
         max_value=20,
         value=_get_num_patterns_value(editing_set),
         step=1,
         key="num_patterns_input",
+        on_change=_on_num_patterns_change,
     )
-
-    if num_patterns != st.session_state[SessionKeys.NUM_PATTERNS]:
-        st.session_state[SessionKeys.NUM_PATTERNS] = int(num_patterns)
-        st.rerun()
+    num_patterns = st.session_state.get("num_patterns_input", st.session_state[SessionKeys.NUM_PATTERNS])
 
     patterns = []
     for i in range(int(num_patterns)):

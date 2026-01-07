@@ -13,6 +13,8 @@ from ui.shared.sku_utils import extract_model
 from ui.shared.styles import SIDEBAR_STYLE
 from utils.logging_config import get_logger
 
+YO_Y_ = "YoY %"
+
 logger = get_logger("tab_sales_analysis")
 
 
@@ -652,6 +654,8 @@ def _render_yearly_sales_trend() -> None:
 
     st.caption(f"📦 {len(available_ids)} items available")
 
+    _render_yearly_summary_table(yearly_sales, yearly_forecast, id_col, include_color)
+
     if not selected_id:
         return
 
@@ -662,6 +666,143 @@ def _render_yearly_sales_trend() -> None:
         return
 
     _render_yearly_trend_chart(yearly_sales, yearly_forecast, selected_id, id_col, include_color)
+
+
+def _render_yearly_summary_table(
+        yearly_sales: pd.DataFrame,
+        yearly_forecast: pd.DataFrame | None,
+        id_col: str,
+        include_color: bool,
+) -> None:
+    from datetime import datetime
+    current_year = datetime.now().year
+    prev_year = current_year - 1
+    prev_prev_year = current_year - 2
+
+    summary_data = _build_yearly_summary_data(
+        yearly_sales, yearly_forecast, id_col, current_year, prev_year, prev_prev_year
+    )
+
+    if summary_data.empty:
+        st.info("No data available for summary table")
+        return
+
+    with st.expander("📋 All Items Summary Table", expanded=False):
+        col_filter, col_sort = st.columns([2, 2])
+
+        with col_filter:
+            search_filter = st.text_input(
+                "Filter by code:",
+                placeholder="Type to filter...",
+                key="yearly_summary_filter"
+            )
+
+        with col_sort:
+            sort_options = [
+                f"{prev_year} Sales (desc)",
+                f"{prev_year} Sales (asc)",
+                "YoY Change % (desc)",
+                "YoY Change % (asc)",
+                "Forecast (desc)",
+            ]
+            sort_by = st.selectbox("Sort by:", options=sort_options, key="yearly_summary_sort")
+
+        filtered_data = summary_data.copy()
+        if search_filter:
+            filtered_data = filtered_data[
+                filtered_data[id_col].str.contains(search_filter.upper(), na=False)
+            ]
+
+        filtered_data = _sort_yearly_summary(filtered_data, sort_by, prev_year)
+
+        st.dataframe(
+            filtered_data,
+            use_container_width=True,
+            hide_index=True,
+            height=400,
+        )
+
+        csv_data = filtered_data.to_csv(index=False)
+        entity_label = "model_color" if include_color else "model"
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name=f"yearly_sales_{entity_label}.csv",
+            mime=MimeTypes.TEXT_CSV,
+        )
+
+
+def _build_yearly_summary_data(
+        yearly_sales: pd.DataFrame,
+        yearly_forecast: pd.DataFrame | None,
+        id_col: str,
+        current_year: int,
+        prev_year: int,
+        prev_prev_year: int,
+) -> pd.DataFrame:
+    pivot = yearly_sales.pivot_table(
+        index=id_col,
+        columns="YEAR",
+        values="QUANTITY",
+        aggfunc="sum",
+        fill_value=0
+    ).reset_index()
+
+    summary = pd.DataFrame({id_col: pivot[id_col]})
+
+    if prev_prev_year in pivot.columns:
+        summary[str(prev_prev_year)] = pivot[prev_prev_year].astype(int)
+    else:
+        summary[str(prev_prev_year)] = 0
+
+    if prev_year in pivot.columns:
+        summary[str(prev_year)] = pivot[prev_year].astype(int)
+    else:
+        summary[str(prev_year)] = 0
+
+    if current_year in pivot.columns:
+        summary[f"{current_year} YTD"] = pivot[current_year].astype(int)
+    else:
+        summary[f"{current_year} YTD"] = 0
+
+    summary[YO_Y_] = summary.apply(
+        lambda row: _calc_yoy_change(row[str(prev_prev_year)], row[str(prev_year)]),
+        axis=1
+    )
+
+    if yearly_forecast is not None and not yearly_forecast.empty:
+        forecast_agg = yearly_forecast.groupby(id_col)["QUANTITY"].sum().reset_index()
+        forecast_agg.columns = [id_col, "Forecast"]
+        forecast_agg["Forecast"] = forecast_agg["Forecast"].astype(int)
+        summary = summary.merge(forecast_agg, on=id_col, how="left")
+        summary["Forecast"] = summary["Forecast"].fillna(0).astype(int)
+    else:
+        summary["Forecast"] = 0
+
+    return summary
+
+
+def _calc_yoy_change(prev_val: float, curr_val: float) -> float:
+    if prev_val > 0:
+        return round(((curr_val - prev_val) / prev_val) * 100, 1)
+    if curr_val > 0:
+        return 100.0
+    return 0.0
+
+
+def _sort_yearly_summary(data: pd.DataFrame, sort_by: str, prev_year: int) -> pd.DataFrame:
+    prev_year_col = str(prev_year)
+    if "Sales (desc)" in sort_by:
+        return data.sort_values(prev_year_col, ascending=False)
+    if "Sales (asc)" in sort_by:
+        return data.sort_values(prev_year_col, ascending=True)
+    if "YoY Change % (desc)" in sort_by:
+        return data.sort_values(YO_Y_, ascending=False)
+    if "YoY Change % (asc)" in sort_by:
+        return data.sort_values(YO_Y_, ascending=True)
+    if "Forecast (desc)" in sort_by:
+        return data.sort_values("Forecast", ascending=False)
+    return data
 
 
 def _render_yearly_trend_chart(
