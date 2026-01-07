@@ -11,6 +11,8 @@ python-dotenv
 camelot-py[base]
 statsmodels
 sktime
+lightgbm
+scikit-learn
 
 # Testing
 pytest

@@ -22,6 +22,10 @@ class SessionKeys:
     MONTHLY_YOY_METADATA: Final[str] = "monthly_yoy_metadata"
     FORECAST_COMPARISON_DATA: Final[str] = "forecast_comparison_data"
     FORECAST_COMPARISON_PARAMS: Final[str] = "forecast_comparison_params"
+    ML_FORECAST_DATA: Final[str] = "ml_forecast_data"
+    ML_FORECAST_PARAMS: Final[str] = "ml_forecast_params"
+    ML_TRAINED_MODELS: Final[str] = "ml_trained_models"
+    ML_TRAINING_STATS: Final[str] = "ml_training_stats"
 
 
 class ColumnNames:

@@ -53,6 +53,8 @@ def _initialize_tab_session_state() -> None:
         st.session_state[SessionKeys.SZWALNIA_INCLUDE_FILTER] = []
     if SessionKeys.SZWALNIA_EXCLUDE_FILTER not in st.session_state:
         st.session_state[SessionKeys.SZWALNIA_EXCLUDE_FILTER] = []
+    if "forecast_source" not in st.session_state:
+        st.session_state["forecast_source"] = "External"
 
 
 @st.fragment
@@ -207,11 +209,25 @@ def _render_facility_filters() -> None:
 
 
 def _render_controls_row() -> None:
-    col_top_n, col_calc, col_clear = st.columns([3, 1, 1])
+    col_source, col_top_n, col_calc, col_clear = st.columns([2, 2, 1, 1])
+
+    with col_source:
+        ml_models_count = _get_ml_models_count()
+        source_options = ["External"]
+        if ml_models_count > 0:
+            source_options.append(f"ML ({ml_models_count} models)")
+
+        st.session_state["forecast_source"] = st.selectbox(
+            "Forecast Source:",
+            options=source_options,
+            index=0,
+            key="forecast_source_select",
+            help="External uses loaded forecast file. ML uses trained ML models from Tab 10.",
+        )
 
     with col_top_n:
         top_n = st.slider(
-            "Number of top priority items to show:",
+            "Top priority items:",
             min_value=5, max_value=50,
             value=st.session_state[SessionKeys.RECOMMENDATIONS_TOP_N],
             step=5,
@@ -230,6 +246,15 @@ def _render_controls_row() -> None:
         if st.button("Clear", type="secondary"):
             st.session_state[SessionKeys.RECOMMENDATIONS_DATA] = None
             st.rerun()
+
+
+def _get_ml_models_count() -> int:
+    try:
+        from utils.ml_model_repository import create_ml_model_repository
+        repo = create_ml_model_repository()
+        return repo.get_model_count()
+    except (ImportError, AttributeError, OSError):
+        return 0
 
 
 def _render_results(context: dict) -> None:
@@ -267,10 +292,19 @@ def _generate_recommendations(context: dict) -> None:
     forecast_df = context.get("forecast_df")
     settings = get_settings()
 
+    forecast_source = st.session_state.get("forecast_source", "External")
+    use_ml = forecast_source.startswith("ML")
+
     # noinspection PyTypeChecker
     with st.spinner("Calculating order priorities..."):
         try:
             sku_summary = _build_sku_summary(analyzer, seasonal_data, stock_df, settings)
+
+            if use_ml:
+                forecast_df = _load_ml_forecast(settings)
+                if forecast_df is None or forecast_df.empty:
+                    st.error("No ML forecasts available. Train models first in Tab 10.")
+                    return
 
             forecast_time = settings["lead_time"]
             recommendations = SalesAnalyzer.generate_order_recommendations(
@@ -285,8 +319,9 @@ def _generate_recommendations(context: dict) -> None:
             recommendations = _apply_facility_filters(recommendations)
 
             set_session_value(SessionKeys.RECOMMENDATIONS_DATA, recommendations)
+            source_label = "ML" if use_ml else "External"
             st.success(
-                f"{Icons.SUCCESS} Analyzed {len(recommendations['priority_skus'])} SKUs - scroll down to view results")
+                f"{Icons.SUCCESS} Analyzed {len(recommendations['priority_skus'])} SKUs using {source_label} forecast - scroll down to view results")
 
         except Exception as e:
             logger.exception("Error generating recommendations")
@@ -350,6 +385,74 @@ def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) 
         sku_summary["PRICE"] = sku_summary["PRICE"].astype(float).fillna(0)
 
     return sku_summary
+
+
+def _period_to_timestamp(p) -> pd.Timestamp:
+    if hasattr(p, "to_timestamp"):
+        return p.to_timestamp()
+    return pd.Timestamp(str(p))
+
+
+def _process_single_forecast(
+        monthly_agg: pd.DataFrame,
+        model_meta: dict,
+        repo,
+        horizon: int,
+) -> pd.DataFrame | None:
+    from sales_data.analysis.ml_forecast import generate_ml_forecast
+
+    entity_id = model_meta["entity_id"]
+    entity_type = model_meta["entity_type"]
+
+    model_info = repo.get_model(entity_id, entity_type)
+    if model_info is None:
+        return None
+
+    result = generate_ml_forecast(monthly_agg, entity_id, model_info, horizon)
+
+    if not result["success"] or result["forecast_df"] is None:
+        return None
+
+    forecast_df = result["forecast_df"].copy()
+    forecast_df["sku"] = f"{entity_id}0000" if entity_type == "model" else entity_id
+    forecast_df["data"] = forecast_df["period"].apply(_period_to_timestamp)
+
+    return forecast_df[["sku", "data", "forecast"]]
+
+
+def _load_ml_forecast(settings: dict) -> pd.DataFrame | None:
+    from utils.ml_model_repository import create_ml_model_repository
+    from ui.shared.session_manager import get_data_source
+
+    try:
+        repo = create_ml_model_repository()
+        models = repo.list_models(limit=500)
+
+        if not models:
+            return None
+
+        data_source = get_data_source()
+        monthly_agg = data_source.get_monthly_aggregations()
+
+        if monthly_agg is None or monthly_agg.empty:
+            return None
+
+        horizon = int(settings.get("lead_time", 3))
+        all_forecasts = []
+
+        for model_meta in models:
+            forecast_df = _process_single_forecast(monthly_agg, model_meta, repo, horizon)
+            if forecast_df is not None:
+                all_forecasts.append(forecast_df)
+
+        if all_forecasts:
+            return pd.concat(all_forecasts, ignore_index=True)
+
+        return None
+
+    except (ImportError, AttributeError, KeyError) as e:
+        logger.warning("Error loading ML forecast: %s", e)
+        return None
 
 
 def _filter_active_orders(recommendations: dict) -> dict:

@@ -33,6 +33,7 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 | **Order Tracking**        | Track, manage, and archive production orders with delivery countdown       |
 | **Forecast Accuracy**     | Monitor forecast quality vs actual sales with accuracy metrics             |
 | **Forecast Comparison**   | Generate internal forecasts and compare with external forecasts            |
+| **ML Forecast**           | Machine learning forecasts with auto-model selection per entity            |
 
 ---
 
@@ -588,6 +589,214 @@ The system automatically selects the best method for each entity:
 
 ---
 
+### Tab 10: ML Forecast
+
+**Purpose:** Train machine learning models to generate forecasts with automatic model selection per SKU/Model. Uses
+cross-validation to select the best performing model for each entity.
+
+**When to Use:**
+
+- When you have sufficient historical data (12+ months recommended)
+- To compare ML-based forecasts against statistical or external forecasts
+- To leverage advanced feature engineering for better predictions
+- When demand patterns may be captured by lagged features and rolling statistics
+
+**Key Concept:**
+This tab trains multiple ML models (LightGBM, RandomForest, Ridge, Lasso) plus optional statistical models (SARIMA,
+Holt-Winters, Exponential Smoothing) for each entity and selects the best performer via time-series cross-validation.
+
+#### Three Sub-tabs
+
+**1. Train Models** - Train and select the best models per entity
+**2. Generate Forecasts** - Use trained models to generate predictions
+**3. Manage Models** - View, compare, and delete saved models
+
+---
+
+#### Train Models Tab: Step-by-Step
+
+1. **Select Entity Level**:
+    - **Model** (recommended): Faster training, more stable results
+    - **SKU**: Granular but requires more data per entity
+
+2. **Set Top N**:
+    - Limit training to top N entities by sales volume
+    - Start with 50–100 for testing, increase for production use
+
+3. **Select Models to Train**:
+    - **LightGBM**: Gradient boosting, handles complex patterns well
+    - **RandomForest**: Ensemble method, robust to outliers
+    - **Ridge/Lasso**: Regularized linear models, fast training
+    - **Statistical**: Includes SARIMA, Holt-Winters, ETS (optional)
+
+4. **Configure Cross-Validation**:
+    - **CV Splits**: Number of time-series splits (default: 3)
+    - **Test Size**: Months per test fold (default: 3)
+    - **Metric**: MAPE (default) or MAE/RMSE
+
+5. **Click "Train Models"**
+
+#### Feature Engineering
+
+The system automatically creates features for ML models:
+
+| Feature Type      | Description                                   |
+|-------------------|-----------------------------------------------|
+| **Time Features** | Month, quarter, day of week, is_month_end     |
+| **Lag Features**  | Sales from 1, 2, 3, 6, 12 months ago          |
+| **Rolling Stats** | 3-month and 6-month moving averages and stdev |
+| **YoY Features**  | Year-over-year change and ratio               |
+| **Product Info**  | Product type encoding (basic, seasonal, etc.) |
+
+#### Understanding Training Results
+
+**Training Progress:**
+
+- Shows entity-by-entity progress
+- Displays the best model selected for each entity
+- Reports CV score (MAPE) for the winning model
+
+**Training Summary:**
+
+- Total entities trained
+- Model distribution (how many chose each model type)
+- Average CV MAPE across all entities
+- Training time
+
+**Model Storage:**
+
+- Models saved to `data/ml_models/` directory
+- Each model includes metadata (CV score, features used, training date)
+- Models persist across sessions
+
+---
+
+#### Generate Forecasts Tab: Step-by-Step
+
+1. **Select Trained Models**:
+    - System shows available trained models
+    - Select entities to forecast (or all)
+
+2. **Set Forecast Horizon**:
+    - Months ahead to predict (default: matches lead time)
+    - Maximum: 12 months
+
+3. **Click "Generate Forecasts"**
+
+#### Forecast Output
+
+**Forecast Table:**
+| Column | Description |
+|------------------|---------------------------------------|
+| Entity | SKU or Model code |
+| Forecast Month | Target prediction month |
+| Predicted Qty | Model prediction |
+| Lower Bound | 95% confidence interval lower |
+| Upper Bound | 95% confidence interval upper |
+| Model Used | Which ML model made the prediction |
+
+**Prediction Intervals:**
+
+- Based on cross-validation residuals
+- 95% confidence level by default (configurable in settings)
+
+---
+
+#### Manage Models Tab: Step-by-Step
+
+1. **View Saved Models**:
+    - List of all trained models with metadata
+    - Training date, CV score, features used
+
+2. **Model Statistics**:
+    - Distribution by model type
+    - Average performance metrics
+    - Age of models (days since training)
+
+3. **Delete Models**:
+    - Remove outdated or poor-performing models
+    - Clear all models to retrain from scratch
+
+---
+
+#### Integration with Order Recommendations
+
+ML forecasts can be used in Tab 5 (Order Recommendations):
+
+1. Train models in Tab 10
+2. Go to Tab 5: Order Recommendations
+3. Select "ML" as a forecast source (dropdown shows the count of available models)
+4. Generate recommendations using ML predictions
+
+**Fallback Behavior:**
+
+- If the ML model is unavailable for an entity, it falls back to external forecast
+- Mixed sources are clearly indicated in the output
+
+---
+
+#### ML Models Explained
+
+| Model            | Strengths                       | Best For                        |
+|------------------|---------------------------------|---------------------------------|
+| **LightGBM**     | Fast, handles nonlinearity      | Complex patterns, large data    |
+| **RandomForest** | Robust, feature importance      | General use, outlier resistance |
+| **Ridge**        | Fast, interpretable             | Linear trends, quick baseline   |
+| **Lasso**        | Feature selection built-in      | Sparse patterns                 |
+| **SARIMA**       | Captures seasonality explicitly | Strong seasonal patterns        |
+| **Holt-Winters** | Trend + seasonality             | Clear growth/decline trends     |
+| **ExpSmoothing** | Smooth predictions              | Stable demand patterns          |
+
+---
+
+#### Practical Examples
+
+**Example 1: Initial ML Setup**
+
+*Goal: Train ML models for top-selling items*
+
+1. Train Models → Model level → Top 100
+2. Select: LightGBM + RandomForest (fastest, most reliable)
+3. CV Settings: three splits, 3-month test size
+4. Click "Train Models"
+5. Review summary: ~60% LightGBM wins, ~30% RandomForest, ~10% Ridge
+6. Generate Forecasts → All trained models → 3-month horizon
+
+**Example 2: Compare ML vs Statistical**
+
+*Goal: Are ML models better than statistical methods?*
+
+1. Train Models with statistical methods included
+2. Review model distribution:
+    - If ML dominates (>70%), ML adds value
+    - If statistically competitive, consider hybrid
+3. Compare Tab 9 internal forecasts vs. Tab 10 ML forecasts
+
+**Example 3: Use ML for Order Recommendations**
+
+*Goal: Replace external forecast with ML predictions*
+
+1. Ensure models are trained for relevant entities
+2. Tab 5 → Select "ML (N models)" as a forecast source
+3. Generate recommendations
+4. Compare priority scores with an external forecast source
+5. Monitor accuracy over time via Tab 8
+
+---
+
+#### Key Differences: Tab 9 vs Tab 10
+
+| Aspect              | Tab 9: Forecast Comparison   | Tab 10: ML Forecast            |
+|---------------------|------------------------------|--------------------------------|
+| **Methods**         | Statistical only             | ML + Statistical               |
+| **Model Selection** | Rule-based by product type   | Cross-validation per entity    |
+| **Feature Eng.**    | None (time series methods)   | Lags, rolling stats, YoY       |
+| **Persistence**     | Forecast batches saved       | Individual models saved        |
+| **Primary Use**     | Compare internal vs external | Production forecasting         |
+| **Best When**       | Evaluating forecast sources  | Maximizing prediction accuracy |
+
+---
+
 ## Statistical Calculations Explained
 
 ### Product Type Classification
@@ -1036,6 +1245,9 @@ src/
 │       ├── pattern_helpers.py  # Pattern optimization helpers
 │       ├── projection.py       # Stock projection
 │       ├── reports.py          # Weekly/monthly analysis
+│       ├── ml_feature_engineering.py  # ML feature creation
+│       ├── ml_model_selection.py      # Cross-validation model selection
+│       ├── ml_forecast.py             # ML training and prediction
 │       └── utils.py            # Shared utilities
 │
 ├── ui/                         # Presentation layer
@@ -1050,6 +1262,7 @@ src/
 │   ├── tab_order_tracking.py
 │   ├── tab_forecast_accuracy.py
 │   ├── tab_forecast_comparison.py
+│   ├── tab_ml_forecast.py      # ML forecast UI
 │   └── shared/                 # Shared UI components
 │       ├── data_loaders.py     # Cached data loading
 │       ├── display_helpers.py  # Display utilities
@@ -1065,6 +1278,7 @@ src/
 │   ├── order_repository.py     # Repository pattern (abstract)
 │   ├── order_repository_factory.py # Repository factory
 │   ├── internal_forecast_repository.py # Internal forecast storage
+│   ├── ml_model_repository.py  # ML model persistence
 │   ├── import_utils.py         # Import helpers
 │   └── logging_config.py       # Logging setup (LOG_LEVEL from .env)
 │
@@ -1278,6 +1492,7 @@ If you manufacture or order in cutting patterns:
 | Forecast MAPE   | Mean Absolute Percentage Error  | Under 20% | Tab 8          |
 | Forecast Bias   | Over/under forecasting tendency | Near 0%   | Tab 8          |
 | Internal vs Ext | Internal forecast win rate      | Track     | Tab 9          |
+| ML Model MAPE   | Average CV MAPE of ML models    | Under 25% | Tab 10         |
 | Active Orders   | Orders in production            | Track     | Tab 7          |
 | Orders Ready    | Orders past delivery threshold  | Process   | Tab 7          |
 
@@ -1357,6 +1572,30 @@ If you manufacture or order in cutting patterns:
 5. Compare win rates and MAPE values
 6. **Action:** If improving, continue the current approach; if not, review parameter changes
 
+#### Scenario 9: Setting Up ML Forecasting
+
+*Goal: Start using ML models for forecasting*
+
+1. Open **Tab 10: ML Forecast** → Train Models tab
+2. Select Model level (faster), Top 100 entities
+3. Select LightGBM + RandomForest (the best combination)
+4. Keep default CV settings (three splits, 3-month test)
+5. Click "Train Models" and wait for completion
+6. Review model distribution: which model types won most often
+7. Go to the Generate Forecasts tab → generate a 3-month horizon
+8. **Action:** Compare ML forecasts with external forecasts in Tab 9
+
+#### Scenario 10: Using ML Forecasts for Order Recommendations
+
+*Goal: Replace external forecast with ML predictions*
+
+1. Ensure ML models are trained (Tab 10)
+2. Open **Tab 5: Order Recommendations**
+3. Select "ML (N models)" from the forecast source dropdown
+4. Click "Generate Recommendations"
+5. Compare results with an external forecast source
+6. **Action:** If ML recommendations align better with business intuition, switch permanently
+
 ### Adjusting Settings for Your Business
 
 **Conservative Approach** (fewer stockouts, more inventory):
@@ -1396,6 +1635,9 @@ If you manufacture or order in cutting patterns:
 | Compare internal vs external  | Tab 9    | Generate New → set horizon → Generate Comparison |
 | Save forecast for history     | Tab 9    | After generating, add notes, Save to History     |
 | Load historical forecast      | Tab 9    | Historical Forecasts tab → select → Load         |
+| Train ML models               | Tab 10   | Train Models tab → select models → Train         |
+| Generate ML forecasts         | Tab 10   | Generate Forecasts tab → select horizon          |
+| Use ML for recommendations    | Tab 5    | Select "ML" as forecast source                   |
 | Filter by production facility | Tab 5    | Use Include/Exclude facility filters             |
 
 ---
@@ -1414,6 +1656,8 @@ If you manufacture or order in cutting patterns:
 10. **Manual Orders**: Use Tab 7 for orders placed outside the system to maintain accurate filtering
 11. **Compare Forecasts**: Use Tab 9 to evaluate if internal models could improve forecast accuracy
 12. **Save Forecast History**: Regularly save internal forecasts to track accuracy improvements over time
+13. **ML Training**: Retrain ML models monthly to capture recent demand patterns
+14. **ML Model Selection**: Start with LightGBM + RandomForest for best results with reasonable training time
 
 ---
 
@@ -1462,6 +1706,13 @@ If you manufacture or order in cutting patterns:
 - Internal forecasts require at least 3 months of sales history per entity
 - SARIMA method may fail for entities with sparse data - the system falls back to simpler methods
 - Historical forecasts require database mode or write access to data/internal_forecasts/ directory
+
+**ML Forecast issues:**
+
+- Require lightgbm and scikit-learn packages installed
+- Training requires at least 12 months of sales history for reliable features
+- Models are saved in data/ml_models/ directory
+- Cross-validation may fail for sparse data - increase minimum data requirements
 
 **Pattern optimizer sales history not loading:**
 
