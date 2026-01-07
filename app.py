@@ -11,6 +11,7 @@ from ui import tab_forecast_accuracy
 from ui import tab_forecast_comparison
 from ui import tab_ml_forecast
 from ui import tab_monthly_analysis
+from ui import tab_nlq
 from ui import tab_order_creation
 from ui import tab_order_recommendations
 from ui import tab_order_tracking
@@ -37,6 +38,7 @@ TAB_NAMES = [
     "📈 Forecast Accuracy",
     "🔬 Forecast Comparison",
     "🤖 ML Forecast",
+    "🔍 NL Query",
 ]
 
 
@@ -133,3 +135,6 @@ with tabs[8]:
 
 with tabs[9]:
     tab_ml_forecast.render()
+
+with tabs[10]:
+    tab_nlq.render(context)

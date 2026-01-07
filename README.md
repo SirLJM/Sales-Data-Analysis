@@ -21,19 +21,20 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 
 ## Features Overview
 
-| Feature                   | Description                                                                |
-|---------------------------|----------------------------------------------------------------------------|
-| **Sales Analysis**        | Statistical analysis with Safety Stock and Reorder Point calculations      |
-| **Stock Projection**      | Visual forecasting of when items will reach critical levels                |
-| **Pattern Optimizer**     | Cutting pattern optimization with automatic sales history loading          |
-| **Order Recommendations** | Priority-based ordering with facility filters and active order filtering   |
-| **Weekly Analysis**       | Week-over-week sales comparison and trending                               |
-| **Monthly Analysis**      | Year-over-year category performance                                        |
-| **Order Creation**        | Transform recommendations into production orders with manual entry support |
-| **Order Tracking**        | Track, manage, and archive production orders with delivery countdown       |
-| **Forecast Accuracy**     | Monitor forecast quality vs actual sales with accuracy metrics             |
-| **Forecast Comparison**   | Generate internal forecasts and compare with external forecasts            |
-| **ML Forecast**           | Machine learning forecasts with auto-model selection per entity            |
+| Feature                    | Description                                                                |
+|----------------------------|----------------------------------------------------------------------------|
+| **Sales Analysis**         | Statistical analysis with Safety Stock and Reorder Point calculations      |
+| **Stock Projection**       | Visual forecasting of when items will reach critical levels                |
+| **Pattern Optimizer**      | Cutting pattern optimization with automatic sales history loading          |
+| **Order Recommendations**  | Priority-based ordering with facility filters and active order filtering   |
+| **Weekly Analysis**        | Week-over-week sales comparison and trending                               |
+| **Monthly Analysis**       | Year-over-year category performance                                        |
+| **Order Creation**         | Transform recommendations into production orders with manual entry support |
+| **Order Tracking**         | Track, manage, and archive production orders with delivery countdown       |
+| **Forecast Accuracy**      | Monitor forecast quality vs actual sales with accuracy metrics             |
+| **Forecast Comparison**    | Generate internal forecasts and compare with external forecasts            |
+| **ML Forecast**            | Machine learning forecasts with auto-model selection per entity            |
+| **Natural Language Query** | Query data using natural language (English or Polish)                      |
 
 ---
 
@@ -747,8 +748,6 @@ ML forecasts can be used in Tab 5 (Order Recommendations):
 | **Holt-Winters** | Trend + seasonality             | Clear growth/decline trends     |
 | **ExpSmoothing** | Smooth predictions              | Stable demand patterns          |
 
----
-
 #### Practical Examples
 
 **Example 1: Initial ML Setup**
@@ -794,6 +793,154 @@ ML forecasts can be used in Tab 5 (Order Recommendations):
 | **Persistence**     | Forecast batches saved       | Individual models saved        |
 | **Primary Use**     | Compare internal vs external | Production forecasting         |
 | **Best When**       | Evaluating forecast sources  | Maximizing prediction accuracy |
+
+---
+
+### Tab 11: Natural Language Query
+
+**Purpose:** Query your data using natural language instead of navigating through tabs and filters. Supports both
+English and Polish queries.
+
+**When to Use:**
+
+- Quick ad-hoc queries without navigating multiple tabs
+- When you know what you want but not where to find it
+- For users who prefer typing queries over clicking through filters
+- To quickly check sales, stock, or forecast data for specific models
+
+**Key Concept:**
+This tab uses a rule-based parser to interpret natural language queries and generate SQL. Queries are executed via
+DuckDB (file mode) or PostgreSQL (database mode), providing fast results on your data.
+
+#### Supported Query Types
+
+| Query Type        | Example Queries                                              |
+|-------------------|--------------------------------------------------------------|
+| **Sales data**    | "sales of model CH086 last 2 years", "sprzedaz modelu JU386" |
+| **Stock data**    | "stock below rop", "stan ponizej rop", "zero stock"          |
+| **Forecast data** | "forecast for model DO322"                                   |
+| **Aggregations**  | "sales by month for model CH086", "top 10 models by sales"   |
+| **Filters**       | "stock type = seasonal", "bestseller items"                  |
+
+#### Language Support
+
+The parser supports both English and Polish keywords:
+
+| English  | Polish            |
+|----------|-------------------|
+| sales    | sprzedaz          |
+| stock    | stan, zapas       |
+| forecast | prognoza          |
+| model    | model             |
+| last     | ostatnie          |
+| year(s)  | rok, lat, lata    |
+| month(s) | miesiac, miesiace |
+| below    | ponizej           |
+| top      | top, najlepsze    |
+
+#### Step-by-Step Workflow
+
+1. **Enter your query** in the text input field
+2. **Click "Execute"** to run the query
+3. **Review results**:
+    - Confidence score shows how well the system understood your query
+    - Generated SQL is displayed for transparency
+    - Results table with row/column counts
+    - Download the button for CSV export
+
+#### Understanding the Output
+
+**Query Interpretation Section:**
+
+- **Confidence**: 0–100% indicating how well the query was parsed
+    - 70%+ = High confidence, results likely match intent
+    - 50-70% = Medium confidence, review results carefully
+    - <50% = Low confidence, consider rephrasing
+
+- **Generated SQL**: The actual SQL query executed on your data
+    - Useful for debugging or learning SQL patterns
+    - Can be copied for use in external tools
+
+**Results Section:**
+
+- Row and column counts
+- Interactive data table
+- CSV download button
+
+#### Example Queries
+
+**Sales Queries:**
+
+```
+sales of model CH086 last 4 years
+sales by month for model CH086
+top 10 models by sales
+sprzedaz modelu JU386 ostatnie 2 lata
+top 5 modeli wg sprzedazy
+```
+
+**Stock Queries:**
+
+```
+stock below rop
+stock type = seasonal
+zero stock
+stan ponizej rop
+```
+
+**Forecast Queries:**
+
+```
+forecast for model DO322
+prognoza dla modelu CH086
+```
+
+#### Query Syntax Tips
+
+1. **Model identifiers**: Use 5-character model codes (e.g., "CH086", "JU386")
+2. **Time ranges**: Specify "last N years/months" for time filtering
+3. **Aggregations**: Use "by month", "by year", "by model" for grouping
+4. **Limits**: Use "top N" to limit results
+5. **Filters**: Use keywords like "below rop", "seasonal", "bestseller"
+
+#### Architecture
+
+The NLQ system consists of:
+
+| Component            | Description                                                 |
+|----------------------|-------------------------------------------------------------|
+| **QueryParser**      | Normalizes input, matches patterns, extracts intent         |
+| **QueryIntent**      | Structured representation of parsed query                   |
+| **SQLGenerator**     | Generates SQL from QueryIntent (DuckDB/PostgreSQL dialects) |
+| **DuckDBExecutor**   | Executes SQL on pandas DataFrames via DuckDB (file mode)    |
+| **PostgresExecutor** | Executes SQL on PostgreSQL database (database mode)         |
+
+#### Limitations
+
+- Complex multi-table joins not supported
+- Custom date ranges (specific dates) are not yet implemented
+- Boolean combinations (AND/OR) limited
+- Subqueries not supported
+
+#### Troubleshooting
+
+**"Could not understand the query":**
+
+- Try rephrasing using simpler keywords
+- Check example queries for reference
+- Use English or Polish consistently (not mixed)
+
+**Low confidence warning:**
+
+- Results may not match your intent
+- Try being more specific
+- Use exact model codes
+
+**No results found:**
+
+- Verify data is loaded (sales/stock/forecast)
+- Check if model code exists in the data
+- Adjust time range (data may not exist for a requested period)
 
 ---
 
@@ -1263,6 +1410,7 @@ src/
 │   ├── tab_forecast_accuracy.py
 │   ├── tab_forecast_comparison.py
 │   ├── tab_ml_forecast.py      # ML forecast UI
+│   ├── tab_nlq.py              # Natural Language Query UI
 │   └── shared/                 # Shared UI components
 │       ├── data_loaders.py     # Cached data loading
 │       ├── display_helpers.py  # Display utilities
@@ -1270,6 +1418,17 @@ src/
 │       ├── session_manager.py  # Session state management
 │       ├── sku_utils.py        # SKU parsing utilities
 │       └── styles.py           # CSS styles
+│
+├── nlq/                        # Natural Language Query
+│   ├── __init__.py             # Package exports
+│   ├── vocabulary.py           # Polish-English translations
+│   ├── patterns.py             # Pattern definitions for parsing
+│   ├── intent.py               # QueryIntent dataclass
+│   ├── parser.py               # QueryParser class
+│   ├── sql_generator.py        # SQL generation from intent
+│   ├── executor.py             # Legacy executor (deprecated)
+│   ├── duckdb_executor.py      # DuckDB execution (file mode)
+│   └── postgres_executor.py    # PostgreSQL execution (database mode)
 │
 ├── utils/                      # Utilities
 │   ├── pattern_optimizer.py    # Pattern optimization
@@ -1639,6 +1798,9 @@ If you manufacture or order in cutting patterns:
 | Generate ML forecasts         | Tab 10   | Generate Forecasts tab → select horizon          |
 | Use ML for recommendations    | Tab 5    | Select "ML" as forecast source                   |
 | Filter by production facility | Tab 5    | Use Include/Exclude facility filters             |
+| Query data with natural lang  | Tab 11   | Type query in English/Polish, click Execute      |
+| Get sales for specific model  | Tab 11   | "sales of model CH086 last 2 years"              |
+| Find items below ROP          | Tab 11   | "stock below rop" or "stan ponizej rop"          |
 
 ---
 
@@ -1719,6 +1881,14 @@ If you manufacture or order in cutting patterns:
 - Ensure model code exists in sales data
 - System aggregates all colors for the model
 - Requires at least 4 months of sales history
+
+**Natural Language Query issues:**
+
+- Requires duckdb package installed (file mode)
+- Query isn’t understood: try rephrasing with simpler keywords
+- Low confidence: use exact model codes and standard keywords
+- No results: verify data is loaded and model/SKU exists
+- Mixed language queries may fail - use English or Polish consistently
 
 ---
 
