@@ -18,28 +18,17 @@ from ui import tab_order_tracking
 from ui import tab_pattern_optimizer
 from ui import tab_sales_analysis
 from ui import tab_weekly_analysis
+from ui.i18n import t, Keys, get_tab_names
 from ui.shared.session_manager import initialize_session_state
 from ui.shared.styles import INPUT_FIELD_STYLE, RESPONSIVE_TABS_STYLE
 
-st.set_page_config(page_title="Inventory & Pattern Optimizer", page_icon="📊", layout="wide")
+st.set_page_config(page_title=t(Keys.PAGE_TITLE), page_icon="📊", layout="wide")
 
 st.markdown(RESPONSIVE_TABS_STYLE + INPUT_FIELD_STYLE, unsafe_allow_html=True)
 
 initialize_session_state()
 
-TAB_NAMES = [
-    "📊 Sales & Inventory Analysis",
-    "✂️ Size Pattern Optimizer",
-    "📋 Weekly Analysis",
-    "📆 Monthly Analysis",
-    "🎯 Order Recommendations",
-    "🛒 Order Creation",
-    "🚚 Order Tracking",
-    "📈 Forecast Accuracy",
-    "🔬 Forecast Comparison",
-    "🤖 ML Forecast",
-    "🔍 NL Query",
-]
+TAB_NAMES = get_tab_names()
 
 
 NAV_INJECT_JS = """

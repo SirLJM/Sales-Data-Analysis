@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import duckdb
+import numpy as np
 import pandas as pd
 
 from nlq.intent import QueryIntent
@@ -84,6 +85,7 @@ class DuckDBExecutor:
     @staticmethod
     def _prepare_sales_df(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
+        df = DuckDBExecutor._sanitize_dataframe(df)
         if "model" not in df.columns and "sku" in df.columns:
             df["model"] = df["sku"].astype(str).str[:5]
         if not pd.api.types.is_datetime64_any_dtype(df.get("data")):
@@ -93,6 +95,7 @@ class DuckDBExecutor:
     @staticmethod
     def _prepare_stock_df(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
+        df = DuckDBExecutor._sanitize_dataframe(df)
         if "model" not in df.columns and "sku" in df.columns:
             df["model"] = df["sku"].astype(str).str[:5]
         return df
@@ -100,11 +103,23 @@ class DuckDBExecutor:
     @staticmethod
     def _prepare_forecast_df(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
+        df = DuckDBExecutor._sanitize_dataframe(df)
         if "model" not in df.columns and "sku" in df.columns:
             df["model"] = df["sku"].astype(str).str[:5]
         date_col = "data" if "data" in df.columns else "forecast_date"
         if date_col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[date_col]):
             df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+        return df
+
+    @staticmethod
+    def _sanitize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+        for col in df.columns:
+            if df[col].dtype == object:
+                first_valid = df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+                if isinstance(first_valid, np.ndarray):
+                    df[col] = df[col].apply(
+                        lambda x: x.tolist() if isinstance(x, np.ndarray) else x
+                    )
         return df
 
     def close(self) -> None:

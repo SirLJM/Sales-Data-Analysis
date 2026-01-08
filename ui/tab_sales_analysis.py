@@ -7,6 +7,7 @@ import streamlit as st
 
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
+from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_data, load_forecast, load_stock, load_yearly_sales, load_yearly_forecast
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
@@ -23,12 +24,12 @@ def render(context: dict) -> None:
         _render_content(context)
     except Exception as e:
         logger.exception("Error in Sales Analysis")
-        st.error(f"{Icons.ERROR} Error in Sales Analysis: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_SALES_ANALYSIS).format(error=str(e))}")
 
 
 def _render_content(context: dict) -> None:
     st.markdown(SIDEBAR_STYLE, unsafe_allow_html=True)
-    st.title("Sales Data Analysis")
+    st.title(t(Keys.TITLE_SALES_DATA_ANALYSIS))
 
     settings = get_settings()
     group_by_model = context.get("group_by_model", False)
@@ -118,7 +119,7 @@ def _process_stock_data(
 
     stock_df, _ = load_stock()
     if stock_df is None:
-        st.info(f"{Icons.INFO} No stock file found. Stock-related columns will not be available.")
+        st.info(f"{Icons.INFO} {t(Keys.MSG_NO_STOCK_FILE)}")
         return None, None, False
 
     stock_df = stock_df.rename(columns={
@@ -191,7 +192,7 @@ def _process_forecast_data(
 
     forecast_df, forecast_date, _ = load_forecast()
     if forecast_df is None:
-        st.info(f"{Icons.INFO} No forecast file found. Forecast columns will not be available.")
+        st.info(f"{Icons.INFO} {t(Keys.MSG_NO_FORECAST_FILE)}")
         return None, None
 
     try:
@@ -208,7 +209,7 @@ def _process_forecast_data(
             summary["FORECAST_LEADTIME"] = summary["FORECAST_LEADTIME"].fillna(0)
 
     except Exception as e:
-        st.error(f"{Icons.ERROR} Error processing forecast data: {e}")
+        st.error(f"{Icons.ERROR} {t(Keys.MSG_ERROR_PROCESSING_FORECAST).format(error=e)}")
 
     return forecast_df, forecast_date
 
@@ -252,24 +253,24 @@ def _render_filters(
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col1:
-        search_label = "Search for Model:" if group_by_model else "Search for SKU:"
-        search_placeholder = "Enter Model or partial Model..." if group_by_model else "Enter SKU or partial SKU..."
+        search_label = t(Keys.SEARCH_MODEL) if group_by_model else t(Keys.SEARCH_SKU)
+        search_placeholder = t(Keys.SEARCH_MODEL_PLACEHOLDER) if group_by_model else t(Keys.SEARCH_SKU_PLACEHOLDER)
         search_term = st.text_input(search_label, placeholder=search_placeholder)
 
     with col2:
         st.write("")
-        show_only_below_rop = st.checkbox("Show only below ROP", value=False) if stock_loaded else False
+        show_only_below_rop = st.checkbox(t(Keys.SHOW_ONLY_BELOW_ROP), value=False) if stock_loaded else False
 
     with col3:
         if group_by_model:
             st.write("")
-            show_bestsellers = st.checkbox("Bestsellers (>300/mo)", value=False)
+            show_bestsellers = st.checkbox(t(Keys.BESTSELLERS), value=False)
         else:
             show_bestsellers = False
 
     with col4:
         type_filter = st.multiselect(
-            "Filter by Type:",
+            t(Keys.FILTER_BY_TYPE),
             options=["basic", "regular", "seasonal", "new"],
             default=[],
         )
@@ -278,14 +279,14 @@ def _render_filters(
     show_overstocked = False
 
     if stock_loaded:
-        st.markdown("**Overstocked Filter:**")
+        st.markdown(t(Keys.OVERSTOCKED_FILTER))
         col_over1, col_over2 = st.columns([1, 3])
         with col_over1:
-            show_overstocked = st.checkbox("Show overstocked items", value=False)
+            show_overstocked = st.checkbox(t(Keys.SHOW_OVERSTOCKED), value=False)
         with col_over2:
             if show_overstocked:
                 overstock_threshold = st.slider(
-                    "Overstocked by %:", min_value=0, max_value=200, value=20, step=5
+                    t(Keys.OVERSTOCKED_BY_PCT), min_value=0, max_value=200, value=20, step=5
                 )
 
     filtered = summary.copy()
@@ -315,8 +316,8 @@ def _render_data_table(
         summary: pd.DataFrame,
         group_by_model: bool,
 ) -> None:
-    item_label = "Model(s)" if group_by_model else "SKU(s)"
-    st.write(f"Showing {len(filtered_summary)} of {len(summary)} {item_label}")
+    item_label = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
+    st.write(t(Keys.SHOWING_N_OF_M).format(count=len(filtered_summary), total=len(summary), items=item_label))
 
     from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
 
@@ -326,14 +327,14 @@ def _render_data_table(
 
 
 def _render_type_metrics(display_data: pd.DataFrame) -> None:
-    st.subheader("TYPE")
+    st.subheader(t(Keys.COL_TYPE))
     type_counts = display_data["TYPE"].value_counts()
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Basic", type_counts.get("basic", 0))
-    col2.metric("Regular", type_counts.get("regular", 0))
-    col3.metric("Seasonal", type_counts.get("seasonal", 0))
-    col4.metric("New", type_counts.get("new", 0))
+    col1.metric(t(Keys.TYPE_BASIC), type_counts.get("basic", 0))
+    col2.metric(t(Keys.TYPE_REGULAR), type_counts.get("regular", 0))
+    col3.metric(t(Keys.TYPE_SEASONAL), type_counts.get("seasonal", 0))
+    col4.metric(t(Keys.TYPE_NEW), type_counts.get("new", 0))
 
 
 def _render_stock_metrics(
@@ -343,11 +344,11 @@ def _render_stock_metrics(
 ) -> None:
     if not stock_loaded:
         col1, col2 = st.columns(2)
-        col1.metric("Total SKUs", len(display_data))
-        col2.metric("Total Quantity", f"{display_data['QUANTITY'].sum():,.0f}")
+        col1.metric(t(Keys.METRIC_TOTAL_SKUS), len(display_data))
+        col2.metric(t(Keys.METRIC_TOTAL_QUANTITY), f"{display_data['QUANTITY'].sum():,.0f}")
         return
 
-    st.subheader("Stock Status")
+    st.subheader(t(Keys.TITLE_STOCK_STATUS))
 
     col1, col2, col3 = st.columns(3)
 
@@ -359,10 +360,10 @@ def _render_stock_metrics(
         items_below_rop = valid_stock[valid_stock["BELOW_ROP"]]
         total_deficit = items_below_rop["DEFICIT"].sum() if len(items_below_rop) > 0 else 0
 
-        col1.metric(ColumnNames.BELOW_ROP, int(below_rop_count), delta=None, delta_color="inverse")
-        col2.metric("Total Deficit (units)", f"{total_deficit:,.0f}")
+        col1.metric(t(Keys.METRIC_BELOW_ROP), int(below_rop_count), delta=None, delta_color="inverse")
+        col2.metric(t(Keys.METRIC_TOTAL_DEFICIT), f"{total_deficit:,.0f}")
         col3.metric(
-            "% Below ROP",
+            t(Keys.METRIC_PCT_BELOW_ROP),
             f"{(below_rop_count / valid_stock_count * 100):.1f}%" if valid_stock_count > 0 else "0%",
         )
 
@@ -371,7 +372,7 @@ def _render_stock_metrics(
         normal_count = valid_stock_count - below_rop_count - overstocked_count
 
         pie_data = {
-            "Status": [ColumnNames.BELOW_ROP, "Overstocked", "Normal"],
+            "Status": [t(Keys.METRIC_BELOW_ROP), t(Keys.METRIC_OVERSTOCKED), t(Keys.METRIC_NORMAL)],
             "Count": [below_rop_count, overstocked_count, normal_count],
         }
 
@@ -379,12 +380,12 @@ def _render_stock_metrics(
             pie_data,
             values="Count",
             names="Status",
-            title=f"Stock Status Distribution (Overstock threshold: {overstock_threshold}%)",
+            title=t(Keys.STOCK_STATUS_DISTRIBUTION).format(threshold=overstock_threshold),
             color="Status",
             color_discrete_map={
-                ColumnNames.BELOW_ROP: "#ff4b4b",
-                "Overstocked": "#ffa500",
-                "Normal": "#00cc00",
+                t(Keys.METRIC_BELOW_ROP): "#ff4b4b",
+                t(Keys.METRIC_OVERSTOCKED): "#ffa500",
+                t(Keys.METRIC_NORMAL): "#00cc00",
             },
         )
         fig.update_traces(textposition="inside", textinfo="percent+label+value")
@@ -392,15 +393,15 @@ def _render_stock_metrics(
 
     if stock_df is not None:
         col1, col2, col3 = st.columns(3)
-        col1.metric("Total SKUs", len(display_data))
+        col1.metric(t(Keys.METRIC_TOTAL_SKUS), len(display_data))
         total_stock = stock_df[ColumnNames.STOCK].sum()
         total_value = stock_df[ColumnNames.VALUE].sum()
-        col2.metric("Total STOCK", f"{total_stock:,.0f}")
-        col3.metric("Total Stock Value", f"{total_value:,.2f}")
+        col2.metric(t(Keys.METRIC_TOTAL_STOCK), f"{total_stock:,.0f}")
+        col3.metric(t(Keys.METRIC_TOTAL_STOCK_VALUE), f"{total_value:,.2f}")
 
 
 def _render_download_button(display_data: pd.DataFrame, group_by_model: bool) -> None:
-    download_label = "Download Model Summary CSV" if group_by_model else "Download SKU Summary CSV"
+    download_label = t(Keys.DOWNLOAD_MODEL_SUMMARY) if group_by_model else t(Keys.DOWNLOAD_SKU_SUMMARY)
     download_filename = "model_summary.csv" if group_by_model else "sku_summary.csv"
     st.download_button(
         download_label,
@@ -419,7 +420,7 @@ def _render_stock_projection(
         group_by_model: bool,
 ) -> None:
     st.markdown("---")
-    st.subheader("📈 Stock Projection Analysis")
+    st.subheader(t(Keys.TITLE_STOCK_PROJECTION))
 
     if group_by_model:
         forecast_df_copy = forecast_df.copy()
@@ -441,32 +442,29 @@ def _render_stock_projection(
         )
 
     if len(available_ids) == 0:
-        entity_type = "Models" if group_by_model else "SKUs"
-        st.info(
-            f"No {entity_type} have both stock and forecast data available. Load both datasets to use this feature."
-        )
+        entity_type = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
+        st.info(t(Keys.MSG_LOAD_BOTH_DATASETS).format(entity_type=entity_type))
         return
 
     col_input, col_months, _ = st.columns([1, 1, 2])
 
     with col_input:
-        input_label = "Enter Model to analyze:" if group_by_model else "Enter SKU to analyze:"
-        input_placeholder = "Type Model..." if group_by_model else "Type SKU..."
-        input_help = f"Enter a {'model' if group_by_model else 'SKU'} with both stock and forecast data available"
-        selected_id = st.text_input(input_label, placeholder=input_placeholder, help=input_help)
+        input_label = t(Keys.ENTER_MODEL_TO_ANALYZE) if group_by_model else t(Keys.ENTER_SKU_TO_ANALYZE)
+        input_placeholder = t(Keys.SEARCH_MODEL_PLACEHOLDER) if group_by_model else t(Keys.SEARCH_SKU_PLACEHOLDER)
+        selected_id = st.text_input(input_label, placeholder=input_placeholder)
 
     with col_months:
-        projection_months = st.slider("Projection months:", min_value=1, max_value=12, value=6, step=1)
+        projection_months = st.slider(t(Keys.PROJECTION_MONTHS), min_value=1, max_value=12, value=6, step=1)
 
-    entity_type = "Models" if group_by_model else "SKUs"
-    st.caption(f"📦 {len(available_ids)} {entity_type} available with complete data")
+    entity_type = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
+    st.caption(t(Keys.ITEMS_AVAILABLE).format(count=len(available_ids), entity_type=entity_type))
 
     if not selected_id:
         return
 
     if selected_id not in available_ids:
-        entity_name = "Model" if group_by_model else "SKU"
-        st.warning(f"{Icons.WARNING} {entity_name} '{selected_id}' not found or missing stock/forecast data.")
+        t(Keys.GROUP_MODEL) if group_by_model else "SKU"
+        st.warning(f"{Icons.WARNING} {t(Keys.MSG_NOT_FOUND).format(id=selected_id)}")
         return
 
     _render_projection_chart(
@@ -511,8 +509,8 @@ def _render_projection_chart(
         )
 
     if projection_df.empty:
-        entity_name = "Model" if group_by_model else "SKU"
-        st.info(f"No forecast data available for this {entity_name} in the projection window.")
+        entity_name = t(Keys.GROUP_MODEL) if group_by_model else "SKU"
+        st.info(t(Keys.MSG_NO_FORECAST_DATA).format(entity=entity_name))
         return
 
     fig = go.Figure()
@@ -521,7 +519,7 @@ def _render_projection_chart(
         x=projection_df["date"],
         y=projection_df["projected_stock"],
         mode="lines+markers",
-        name="Projected Stock",
+        name=t(Keys.CHART_PROJECTED_STOCK),
         line={"color": "blue", "width": 3},
         marker={"size": 6},
     ))
@@ -530,7 +528,7 @@ def _render_projection_chart(
         x=projection_df["date"],
         y=projection_df["rop"],
         mode="lines",
-        name=f"ROP ({rop:.0f})",
+        name=t(Keys.CHART_ROP).format(value=rop),
         line={"color": "orange", "width": 2, "dash": "dash"},
     ))
 
@@ -538,7 +536,7 @@ def _render_projection_chart(
         x=projection_df["date"],
         y=projection_df["safety_stock"],
         mode="lines",
-        name=f"Safety Stock ({safety_stock:.0f})",
+        name=t(Keys.CHART_SAFETY_STOCK).format(value=safety_stock),
         line={"color": "yellow", "width": 2, "dash": "dot"},
     ))
 
@@ -546,7 +544,7 @@ def _render_projection_chart(
         x=projection_df["date"],
         y=[0] * len(projection_df),
         mode="lines",
-        name="Zero Stock",
+        name=t(Keys.CHART_ZERO_STOCK),
         line={"color": "red", "width": 2, "dash": "dash"},
     ))
 
@@ -562,7 +560,7 @@ def _render_projection_chart(
         fig.add_annotation(
             x=first_rop["date"],
             y=first_rop["projected_stock"],
-            text="ROP Reached",
+            text=t(Keys.CHART_ROP_REACHED),
             showarrow=True,
             arrowhead=2,
             arrowcolor="orange",
@@ -576,7 +574,7 @@ def _render_projection_chart(
         fig.add_annotation(
             x=first_zero["date"],
             y=first_zero["projected_stock"],
-            text="Stockout!",
+            text=t(Keys.CHART_STOCKOUT),
             showarrow=True,
             arrowhead=2,
             arrowcolor="red",
@@ -585,11 +583,11 @@ def _render_projection_chart(
             font={"color": "white"},
         )
 
-    entity_name = "Model" if group_by_model else "SKU"
+    entity_name = t(Keys.GROUP_MODEL) if group_by_model else "SKU"
     fig.update_layout(
-        title=f"Stock Projection for {entity_name} {selected_id}",
-        xaxis_title="Date",
-        yaxis_title="Quantity",
+        title=t(Keys.STOCK_PROJECTION_FOR).format(entity=entity_name, id=selected_id),
+        xaxis_title=t(Keys.CHART_DATE),
+        yaxis_title=t(Keys.CHART_QUANTITY),
         hovermode="x unified",
         height=500,
         showlegend=True,
@@ -600,43 +598,44 @@ def _render_projection_chart(
 
     metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
     with metric_col1:
-        st.metric("Current Stock", f"{current_stock:.0f}")
+        st.metric(t(Keys.METRIC_CURRENT_STOCK), f"{current_stock:.0f}")
     with metric_col2:
-        st.metric("ROP", f"{rop:.0f}")
+        st.metric(t(Keys.METRIC_ROP), f"{rop:.0f}")
     with metric_col3:
-        st.metric("Safety Stock", f"{safety_stock:.0f}")
+        st.metric(t(Keys.METRIC_SAFETY_STOCK), f"{safety_stock:.0f}")
     with metric_col4:
-        st.metric("Avg Monthly Sales", f"{avg_sales:.0f}")
+        st.metric(t(Keys.METRIC_AVG_MONTHLY_SALES), f"{avg_sales:.0f}")
 
     if not rop_cross.empty:
         days_to_rop = (rop_cross.iloc[0]["date"] - forecast_date).days
+        date_str = rop_cross.iloc[0]['date'].strftime('%Y-%m-%d')
         if days_to_rop <= 30:
-            st.error(
-                f"{Icons.WARNING} Stock will reach ROP in {days_to_rop} days ({rop_cross.iloc[0]['date'].strftime('%Y-%m-%d')})")
+            st.error(f"{Icons.WARNING} {t(Keys.WARN_ROP_IN_DAYS).format(days=days_to_rop, date=date_str)}")
         else:
-            st.warning(f"Stock will reach ROP in {days_to_rop} days ({rop_cross.iloc[0]['date'].strftime('%Y-%m-%d')})")
+            st.warning(t(Keys.WARN_ROP_IN_DAYS).format(days=days_to_rop, date=date_str))
 
     if not zero_cross.empty:
         days_to_zero = (zero_cross.iloc[0]["date"] - forecast_date).days
-        st.error(f"🚨 Stockout predicted in {days_to_zero} days ({zero_cross.iloc[0]['date'].strftime('%Y-%m-%d')})")
+        date_str = zero_cross.iloc[0]['date'].strftime('%Y-%m-%d')
+        st.error(t(Keys.ERR_STOCKOUT_IN_DAYS).format(days=days_to_zero, date=date_str))
 
 
 def _render_yearly_sales_trend() -> None:
     st.markdown("---")
-    st.subheader("📊 Yearly Sales Trend")
-    st.caption("Track product lifecycle: historical sales and forecast to identify candidates for discontinuation")
+    st.subheader(t(Keys.TITLE_YEARLY_SALES_TREND))
+    st.caption(t(Keys.YEARLY_CAPTION))
 
     col_mode, col_input = st.columns([1, 3])
 
     with col_mode:
         view_mode = st.radio(
-            "Group by:",
-            options=["Model", "Model + Color"],
+            t(Keys.GROUP_BY),
+            options=[t(Keys.GROUP_MODEL), t(Keys.GROUP_MODEL_COLOR)],
             horizontal=True,
             key="yearly_trend_view_mode"
         )
 
-    include_color = view_mode == "Model + Color"
+    include_color = view_mode == t(Keys.GROUP_MODEL_COLOR)
     id_col = "MODEL_COLOR" if include_color else "MODEL"
 
     yearly_sales = load_yearly_sales(include_color=include_color)
@@ -645,14 +644,14 @@ def _render_yearly_sales_trend() -> None:
     available_ids = sorted(yearly_sales[id_col].unique())
 
     with col_input:
-        input_label = "Model + Color (e.g. AB123RD):" if include_color else "Model (e.g. AB123):"
+        input_label = t(Keys.INPUT_MODEL_COLOR) if include_color else t(Keys.INPUT_MODEL)
         selected_id = st.text_input(
             input_label,
-            placeholder="Enter code...",
+            placeholder=t(Keys.ENTER_CODE_PLACEHOLDER),
             key="yearly_trend_input"
         )
 
-    st.caption(f"📦 {len(available_ids)} items available")
+    st.caption(t(Keys.ITEMS_AVAILABLE_SHORT).format(count=len(available_ids)))
 
     _render_yearly_summary_table(yearly_sales, yearly_forecast, id_col, include_color)
 
@@ -662,7 +661,7 @@ def _render_yearly_sales_trend() -> None:
     selected_id = selected_id.upper()
 
     if selected_id not in available_ids:
-        st.warning(f"{Icons.WARNING} '{selected_id}' not found in sales data.")
+        st.warning(f"{Icons.WARNING} {t(Keys.NOT_FOUND_IN_SALES).format(id=selected_id)}")
         return
 
     _render_yearly_trend_chart(yearly_sales, yearly_forecast, selected_id, id_col, include_color)
@@ -684,16 +683,16 @@ def _render_yearly_summary_table(
     )
 
     if summary_data.empty:
-        st.info("No data available for summary table")
+        st.info(t(Keys.NO_DATA_FOR_SUMMARY))
         return
 
-    with st.expander("📋 All Items Summary Table", expanded=False):
+    with st.expander(t(Keys.ALL_ITEMS_SUMMARY), expanded=False):
         col_filter, col_sort = st.columns([2, 2])
 
         with col_filter:
             search_filter = st.text_input(
-                "Filter by code:",
-                placeholder="Type to filter...",
+                t(Keys.FILTER_BY_CODE),
+                placeholder=t(Keys.TYPE_TO_FILTER),
                 key="yearly_summary_filter"
             )
 
@@ -705,7 +704,7 @@ def _render_yearly_summary_table(
                 "YoY Change % (asc)",
                 "Forecast (desc)",
             ]
-            sort_by = st.selectbox("Sort by:", options=sort_options, key="yearly_summary_sort")
+            sort_by = st.selectbox(t(Keys.SORT_BY), options=sort_options, key="yearly_summary_sort")
 
         filtered_data = summary_data.copy()
         if search_filter:
@@ -725,7 +724,7 @@ def _render_yearly_summary_table(
         csv_data = filtered_data.to_csv(index=False)
         entity_label = "model_color" if include_color else "model"
         st.download_button(
-            label="Download CSV",
+            label=t(Keys.BTN_DOWNLOAD_CSV),
             data=csv_data,
             file_name=f"yearly_sales_{entity_label}.csv",
             mime=MimeTypes.TEXT_CSV,
@@ -830,7 +829,7 @@ def _render_yearly_trend_chart(
     fig.add_trace(go.Bar(
         x=sales_data["YEAR"],
         y=sales_data["QUANTITY"],
-        name="Historical Sales",
+        name=t(Keys.CHART_HISTORICAL_SALES),
         marker={"color": "#1f77b4"},
         text=sales_data["QUANTITY"].round(0).astype(int),
         textposition="outside",
@@ -840,18 +839,18 @@ def _render_yearly_trend_chart(
         fig.add_trace(go.Bar(
             x=forecast_data["YEAR"],
             y=forecast_data["QUANTITY"],
-            name="Forecast",
+            name=t(Keys.CHART_FORECAST),
             marker={"color": "#ff7f0e"},
             text=forecast_data["QUANTITY"].round(0).astype(int),
             textposition="outside",
             opacity=0.7,
         ))
 
-    entity_label = "Model+Color" if include_color else "Model"
+    entity_label = t(Keys.GROUP_MODEL_COLOR) if include_color else t(Keys.GROUP_MODEL)
     fig.update_layout(
-        title=f"Yearly Sales Trend: {entity_label} {selected_id}",
-        xaxis_title="Year",
-        yaxis_title="Quantity Sold",
+        title=t(Keys.YEARLY_SALES_TREND_FOR).format(entity=entity_label, id=selected_id),
+        xaxis_title=t(Keys.CHART_YEAR),
+        yaxis_title=t(Keys.CHART_QUANTITY_SOLD),
         barmode="group",
         hovermode="x unified",
         height=450,
@@ -876,16 +875,16 @@ def _render_trend_metrics(
     years_active = len(sales_data) if not sales_data.empty else 0
 
     with col1:
-        st.metric("First Sale Year", first_year if first_year else "N/A")
+        st.metric(t(Keys.METRIC_FIRST_SALE_YEAR), first_year if first_year else "N/A")
     with col2:
-        st.metric("Years Active", years_active)
+        st.metric(t(Keys.METRIC_YEARS_ACTIVE), years_active)
     with col3:
-        st.metric("Total Historical Sales", f"{total_historical:,}")
+        st.metric(t(Keys.METRIC_TOTAL_HISTORICAL_SALES), f"{total_historical:,}")
 
     if not forecast_data.empty:
         forecast_qty = int(forecast_data["QUANTITY"].sum())
         with col4:
-            st.metric("Forecast (Future)", f"{forecast_qty:,}")
+            st.metric(t(Keys.METRIC_FORECAST_FUTURE), f"{forecast_qty:,}")
 
     if len(sales_data) >= 2:
         recent_years = sales_data.tail(2).reset_index(drop=True)
@@ -898,7 +897,7 @@ def _render_trend_metrics(
                 yoy_change = ((last_year_qty - prev_year_qty) / prev_year_qty) * 100
                 trend_icon, trend_color = _get_trend_indicator(yoy_change)
                 st.markdown(
-                    f"**YoY Trend ({prev_year} → {last_year}):** {trend_icon} "
+                    f"**{t(Keys.YOY_TREND).format(prev=prev_year, curr=last_year)}** {trend_icon} "
                     f"<span style='color:{trend_color}'>{yoy_change:+.1f}%</span> "
                     f"({int(prev_year_qty):,} → {int(last_year_qty):,})",
                     unsafe_allow_html=True

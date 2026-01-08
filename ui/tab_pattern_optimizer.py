@@ -3,6 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from ui.constants import AlgorithmModes, Config, Icons, SessionKeys
+from ui.i18n import Keys, t
 from ui.shared.data_loaders import load_size_aliases, load_size_aliases_reverse
 from ui.shared.display_helpers import display_optimization_metrics
 from ui.shared.session_manager import get_data_source, get_settings
@@ -25,11 +26,11 @@ def render() -> None:
         _render_content()
     except Exception as e:
         logger.exception("Error in Pattern Optimizer")
-        st.error(f"{Icons.ERROR} Error in Pattern Optimizer: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_PATTERN_OPTIMIZER).format(error=str(e))}")
 
 
 def _render_content() -> None:
-    st.title("Size Pattern Optimizer")
+    st.title(t(Keys.TITLE_SIZE_PATTERN_OPTIMIZER))
 
     _initialize_pattern_session_state()
 
@@ -37,7 +38,7 @@ def _render_content() -> None:
 
     min_order_per_pattern = get_min_order_per_pattern()
     st.markdown(
-        f'<div class="info-box">Minimum order per pattern: {min_order_per_pattern} units</div>',
+        f'<div class="info-box">{t(Keys.MIN_ORDER_PER_PATTERN).format(min=min_order_per_pattern)}</div>',
         unsafe_allow_html=True,
     )
 
@@ -86,10 +87,10 @@ def _get_active_pattern_set() -> PatternSet | None:
 
 def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) -> tuple[
     dict[str, int], dict[str, int]]:
-    st.markdown('<div class="section-header">Order Quantities</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">{t(Keys.TITLE_ORDER_QUANTITIES)}</div>', unsafe_allow_html=True)
 
     if active_set:
-        st.info(f"Using sizes from: {active_set.name}")
+        st.info(t(Keys.USING_SIZES_FROM).format(name=active_set.name))
 
     quantities = {}
     num_cols = min(len(sizes), 5)
@@ -100,8 +101,8 @@ def _render_quantities_section(sizes: list[str], active_set: PatternSet | None) 
         with cols[col_idx]:
             quantities[size] = st.number_input(size, min_value=0, value=0, step=1, key=f"qty_{size}")
 
-    st.markdown('<div class="section-header">Sales History (last 4 months)</div>', unsafe_allow_html=True)
-    st.caption("Enter total sales per size or load automatically. Sizes with < 3 sales will be excluded.")
+    st.markdown(f'<div class="section-header">{t(Keys.TITLE_SALES_HISTORY)}</div>', unsafe_allow_html=True)
+    st.caption(t(Keys.ENTER_SALES_PER_SIZE))
 
     sales_history = _render_sales_history_section(sizes, active_set)
 
@@ -113,11 +114,11 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
         col_model, col_load = st.columns([3, 1])
         with col_model:
             model_code = st.text_input(
-                "Model", placeholder="e.g., CH031", key="sales_history_model"
+                t(Keys.MODEL), placeholder="e.g., CH031", key="sales_history_model"
             )
         with col_load:
             st.write("")
-        load_clicked = st.form_submit_button("Load Sales History")
+        load_clicked = st.form_submit_button(t(Keys.BTN_LOAD_SALES_HISTORY))
 
     if load_clicked and model_code:
         loaded_history = _load_sales_history_for_model(model_code.upper(), active_set)
@@ -125,10 +126,10 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
             for size in sizes:
                 st.session_state[f"sales_{size}"] = loaded_history.get(size, 0)
             st.session_state[
-                "loaded_sales_history_message"] = f"Loaded sales history for {model_code.upper()} (all colors)"
+                "loaded_sales_history_message"] = t(Keys.LOADED_SALES_HISTORY).format(model=model_code.upper())
             st.rerun()
         else:
-            st.warning(f"No sales data found for {model_code.upper()}")
+            st.warning(t(Keys.NO_SALES_DATA_FOR_MODEL).format(model=model_code.upper()))
 
     if st.session_state.get("loaded_sales_history_message"):
         st.success(st.session_state.pop("loaded_sales_history_message"))
@@ -141,7 +142,7 @@ def _render_sales_history_section(sizes: list[str], active_set: PatternSet | Non
         col_idx = i % num_cols
         with cols[col_idx]:
             sales_history[size] = st.number_input(
-                f"{size} sales", min_value=0, value=0, step=1, key=f"sales_{size}"
+                f"{size} {t(Keys.SALES)}", min_value=0, value=0, step=1, key=f"sales_{size}"
             )
 
     return sales_history
@@ -245,7 +246,7 @@ def _clear_editor_form_state() -> None:
 
 
 def _render_pattern_sets_section() -> None:
-    st.markdown('<div class="section-header">Pattern Sets</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">{t(Keys.TITLE_PATTERN_SETS)}</div>', unsafe_allow_html=True)
 
     _render_pattern_set_buttons()
 
@@ -256,7 +257,7 @@ def _render_pattern_sets_section() -> None:
         if active_set:
             _render_active_set_details(active_set)
     else:
-        st.info("No pattern sets defined. Create a pattern set to get started!")
+        st.info(t(Keys.NO_PATTERN_SETS))
 
     if st.session_state.get(SessionKeys.SHOW_ADD_PATTERN_SET):
         _render_pattern_editor()
@@ -265,7 +266,7 @@ def _render_pattern_sets_section() -> None:
 def _render_pattern_set_buttons() -> None:
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     with btn_col1:
-        if st.button("New Set", key="new_set_btn"):
+        if st.button(t(Keys.BTN_NEW_SET), key="new_set_btn"):
             _clear_editor_form_state()
             st.session_state[SessionKeys.SHOW_ADD_PATTERN_SET] = True
             st.session_state[SessionKeys.EDIT_SET_ID] = None
@@ -273,11 +274,11 @@ def _render_pattern_set_buttons() -> None:
             st.session_state[SessionKeys.NUM_SIZES] = Config.DEFAULT_NUM_SIZES
             st.rerun()
     with btn_col2:
-        if st.button("Save All", key="save_all_btn"):
+        if st.button(t(Keys.BTN_SAVE_ALL), key="save_all_btn"):
             save_pattern_sets(st.session_state[SessionKeys.PATTERN_SETS])
-            st.success("Pattern sets saved!")
+            st.success(t(Keys.PATTERN_SETS_SAVED))
     with btn_col3:
-        if st.button("Reload", key="reload_btn"):
+        if st.button(t(Keys.BTN_RELOAD), key="reload_btn"):
             st.session_state[SessionKeys.PATTERN_SETS] = load_pattern_sets()
             pattern_sets = st.session_state[SessionKeys.PATTERN_SETS]
             st.session_state[SessionKeys.ACTIVE_SET_ID] = pattern_sets[0].id if pattern_sets else None
@@ -304,7 +305,7 @@ def _render_pattern_set_selector(pattern_sets: list[PatternSet]) -> PatternSet |
             break
 
     selected_set_name = st.selectbox(
-        "Select Active Pattern Set:",
+        t(Keys.SELECT_ACTIVE_PATTERN_SET),
         options=set_names,
         index=current_index,
         key="pattern_set_selector",
@@ -316,8 +317,8 @@ def _render_pattern_set_selector(pattern_sets: list[PatternSet]) -> PatternSet |
 
 def _render_active_set_details(active_set: PatternSet) -> None:
     st.write(f"**{active_set.name}**")
-    st.write(f"Sizes: {', '.join(active_set.size_names)}")
-    st.write(f"Patterns: {len(active_set.patterns)}")
+    st.write(f"{t(Keys.SIZES)}: {', '.join(active_set.size_names)}")
+    st.write(f"{t(Keys.PATTERNS)}: {len(active_set.patterns)}")
 
     for pattern in active_set.patterns:
         sizes_str = " + ".join([f"{count} × {size}" for size, count in pattern.sizes.items()])
@@ -325,7 +326,7 @@ def _render_active_set_details(active_set: PatternSet) -> None:
 
     btn_edit, btn_delete = st.columns(2)
     with btn_edit:
-        if st.button("Edit Set", key="edit_set"):
+        if st.button(t(Keys.BTN_EDIT_SET), key="edit_set"):
             _clear_editor_form_state()
             st.session_state[SessionKeys.SHOW_ADD_PATTERN_SET] = True
             st.session_state[SessionKeys.EDIT_SET_ID] = st.session_state[SessionKeys.ACTIVE_SET_ID]
@@ -333,7 +334,7 @@ def _render_active_set_details(active_set: PatternSet) -> None:
             st.session_state[SessionKeys.NUM_SIZES] = len(active_set.size_names)
             st.rerun()
     with btn_delete:
-        if st.button("Delete Set", key="delete_set"):
+        if st.button(t(Keys.BTN_DELETE_SET), key="delete_set"):
             st.session_state[SessionKeys.PATTERN_SETS] = [
                 ps for ps in st.session_state[SessionKeys.PATTERN_SETS]
                 if ps.id != st.session_state[SessionKeys.ACTIVE_SET_ID]
@@ -352,10 +353,10 @@ def _render_pattern_editor() -> None:
         )
 
     st.markdown("---")
-    st.subheader("Create/Edit Pattern Set")
+    st.subheader(t(Keys.CREATE_EDIT_PATTERN_SET))
 
     set_name = st.text_input(
-        "Set Name",
+        t(Keys.PATTERN_SET_NAME),
         placeholder="e.g., Kids Collection",
         value=editing_set.name if editing_set else "",
         key="set_name_input",
@@ -373,7 +374,7 @@ def _on_num_sizes_change():
 
 def _render_size_inputs(editing_set: PatternSet | None) -> list[str]:
     st.number_input(
-        "Number of size categories",
+        t(Keys.NUM_SIZE_CATEGORIES),
         min_value=1,
         max_value=20,
         value=len(editing_set.size_names) if editing_set else st.session_state[SessionKeys.NUM_SIZES],
@@ -383,7 +384,7 @@ def _render_size_inputs(editing_set: PatternSet | None) -> list[str]:
     )
     num_sizes = st.session_state.get("num_sizes_input", st.session_state[SessionKeys.NUM_SIZES])
 
-    st.write("**Define size categories:**")
+    st.write(f"**{t(Keys.DEFINE_SIZE_CATEGORIES)}**")
     size_names = []
     size_cols = st.columns(min(int(num_sizes), 5))
 
@@ -395,7 +396,7 @@ def _render_size_inputs(editing_set: PatternSet | None) -> list[str]:
                 if editing_set and i < len(editing_set.size_names)
                 else f"size_{i + 1}"
             )
-            size_name = st.text_input(f"Size {i + 1}", value=default_name, key=f"size_name_{i}")
+            size_name = st.text_input(t(Keys.SIZE_N).format(n=i + 1), value=default_name, key=f"size_name_{i}")
             if size_name:
                 size_names.append(size_name)
 
@@ -447,13 +448,13 @@ def _render_single_pattern(
 ) -> Pattern | None:
     existing_pattern = _get_existing_pattern(editing_set, index)
     pattern_name = st.text_input(
-        "Pattern Name",
+        t(Keys.PATTERN_NAME),
         placeholder=_build_placeholder_text(size_names),
         key=f"pname_{index}",
         value=existing_pattern.name if existing_pattern else "",
     )
 
-    st.write("Quantities per size:")
+    st.write(f"{t(Keys.QUANTITIES_PER_SIZE)}:")
     pattern_sizes = _render_size_quantity_inputs(index, size_names, existing_pattern)
 
     if pattern_name and pattern_sizes:
@@ -467,7 +468,7 @@ def _on_num_patterns_change():
 
 def _render_pattern_inputs(editing_set: PatternSet | None, size_names: list[str]) -> list[Pattern]:
     st.number_input(
-        "Number of patterns in this set",
+        t(Keys.NUM_PATTERNS),
         min_value=1,
         max_value=20,
         value=_get_num_patterns_value(editing_set),
@@ -479,7 +480,7 @@ def _render_pattern_inputs(editing_set: PatternSet | None, size_names: list[str]
 
     patterns = []
     for i in range(int(num_patterns)):
-        with st.expander(f"Pattern {i + 1}", expanded=(i < 3)):
+        with st.expander(f"{t(Keys.PATTERN)} {i + 1}", expanded=(i < 3)):
             pattern = _render_single_pattern(i, size_names, editing_set)
             if pattern:
                 patterns.append(pattern)
@@ -495,7 +496,7 @@ def _render_editor_buttons(
 
     col_submit, col_cancel = st.columns(2)
     with col_submit:
-        if st.button("Save Pattern Set", key="submit_set"):
+        if st.button(t(Keys.BTN_SAVE_PATTERN_SET), key="submit_set"):
             if set_name and len(size_names) == num_sizes and len(patterns) == num_patterns:
                 if editing_set:
                     editing_set.name = set_name
@@ -513,11 +514,11 @@ def _render_editor_buttons(
                 st.rerun()
             else:
                 st.error(
-                    f"Please complete all fields: set name, {int(num_sizes)} size names, and {int(num_patterns)} patterns!"
+                    t(Keys.COMPLETE_ALL_FIELDS).format(num_sizes=int(num_sizes), num_patterns=int(num_patterns))
                 )
 
     with col_cancel:
-        if st.button("Cancel", key="cancel_set"):
+        if st.button(t(Keys.BTN_CANCEL), key="cancel_set"):
             st.session_state[SessionKeys.SHOW_ADD_PATTERN_SET] = False
             st.session_state[SessionKeys.EDIT_SET_ID] = None
             st.rerun()
@@ -529,16 +530,16 @@ def _render_optimization_section(
         min_order_per_pattern: int,
         sales_history: dict[str, int],
 ) -> None:
-    st.markdown('<div class="section-header">Optimization</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">{t(Keys.TITLE_OPTIMIZATION)}</div>', unsafe_allow_html=True)
 
     settings = get_settings()
     current_algorithm = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
     algorithm_display = (
         AlgorithmModes.GREEDY_OVERSHOOT if current_algorithm == "greedy_overshoot" else AlgorithmModes.CLASSIC_GREEDY
     )
-    st.info(f"Using algorithm: **{algorithm_display}** (change in sidebar)")
+    st.info(t(Keys.USING_ALGORITHM).format(algorithm=algorithm_display))
 
-    if st.button("Run Optimization", type="primary", key="run_optimization"):
+    if st.button(t(Keys.BTN_RUN_OPTIMIZATION), type="primary", key="run_optimization"):
         _run_optimization(quantities, sizes, min_order_per_pattern, current_algorithm, sales_history)
 
 
@@ -553,21 +554,21 @@ def _run_optimization(
     active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
 
     if not pattern_sets:
-        st.error("Please add at least one pattern set before optimizing!")
+        st.error(t(Keys.ERR_NO_PATTERN_SETS))
         return
 
     if active_id is None:
-        st.error("Please select an active pattern set!")
+        st.error(t(Keys.ERR_SELECT_PATTERN_SET))
         return
 
     if not any(quantities.values()):
-        st.warning("Please enter quantities to optimize!")
+        st.warning(t(Keys.ERR_ENTER_QUANTITIES))
         return
 
     active_set = next((ps for ps in pattern_sets if ps.id == active_id), None)
 
     if not active_set:
-        st.error("Active pattern set not found!")
+        st.error(t(Keys.ERR_PATTERN_SET_NOT_FOUND))
         return
 
     size_sales = sales_history if any(sales_history.values()) else None
@@ -589,24 +590,24 @@ def _display_optimization_results(
 ) -> None:
     excluded_sizes = result.get("excluded_sizes", [])
     if excluded_sizes:
-        st.warning(f"Excluded sizes (sales < 3 in last 4 months): {', '.join(excluded_sizes)}")
+        st.warning(t(Keys.EXCLUDED_SIZES).format(sizes=", ".join(excluded_sizes)))
 
     has_violations = len(result["min_order_violations"]) > 0
 
     if result["all_covered"] and not has_violations:
         st.markdown(
-            '<div class="success-box">All requirements covered and minimum orders met!</div>',
+            f'<div class="success-box">{t(Keys.ALL_REQUIREMENTS_MET)}</div>',
             unsafe_allow_html=True,
         )
     elif has_violations:
         violation_text = ", ".join([f"{name} ({count})" for name, count in result["min_order_violations"]])
         st.markdown(
-            f'<div class="warning-box">Minimum order violations (need {min_order_per_pattern} per pattern): {violation_text}</div>',
+            f'<div class="warning-box">{t(Keys.MIN_ORDER_VIOLATIONS).format(min=min_order_per_pattern, violations=violation_text)}</div>',
             unsafe_allow_html=True,
         )
     elif not result["all_covered"]:
         st.markdown(
-            '<div class="warning-box">Some requirements not covered</div>',
+            f'<div class="warning-box">{t(Keys.SOME_NOT_COVERED)}</div>',
             unsafe_allow_html=True,
         )
 
@@ -615,7 +616,7 @@ def _display_optimization_results(
 
 
 def _display_pattern_allocation(result: dict, active_set: PatternSet, min_order_per_pattern: int) -> None:
-    st.markdown("### Pattern Allocation")
+    st.markdown(f"### {t(Keys.PATTERN_ALLOCATION)}")
     allocation_data = []
 
     for pattern in active_set.patterns:
@@ -624,33 +625,33 @@ def _display_pattern_allocation(result: dict, active_set: PatternSet, min_order_
             sizes_str = " + ".join([f"{c}×{s}" for s, c in pattern.sizes.items()])
             status = Icons.WARNING if count < min_order_per_pattern else Icons.SUCCESS
             allocation_data.append({
-                "Pattern": pattern.name,
-                "Count": count,
-                "Composition": sizes_str,
-                "Status": status,
+                t(Keys.PATTERN): pattern.name,
+                t(Keys.COUNT): count,
+                t(Keys.COMPOSITION): sizes_str,
+                t(Keys.STATUS): status,
             })
 
     if allocation_data:
         st.dataframe(allocation_data, hide_index=True)
     else:
-        st.info("No patterns allocated")
+        st.info(t(Keys.NO_PATTERNS_ALLOCATED))
 
 
 def _display_production_comparison(
         result: dict, quantities: dict[str, int], sizes: list[str], excluded_sizes: list[str] | None = None
 ) -> None:
-    st.markdown("### Production vs Required")
+    st.markdown(f"### {t(Keys.PRODUCTION_VS_REQUIRED)}")
     production_data = []
     excluded_sizes = excluded_sizes or []
 
     for size in sizes:
         if size in excluded_sizes:
             production_data.append({
-                "Size": size,
-                "Required": quantities[size],
-                "Produced": 0,
-                "Excess": "-",
-                "Status": "⛔ excluded",
+                t(Keys.SIZE): size,
+                t(Keys.REQUIRED): quantities[size],
+                t(Keys.PRODUCED): 0,
+                t(Keys.EXCESS): "-",
+                t(Keys.STATUS): f"⛔ {t(Keys.EXCLUDED)}",
             })
         else:
             produced = result["produced"].get(size, 0)
@@ -658,11 +659,11 @@ def _display_production_comparison(
             excess = result["excess"].get(size, 0)
             status = Icons.SUCCESS if produced >= required else Icons.ERROR
             production_data.append({
-                "Size": size,
-                "Required": required,
-                "Produced": produced,
-                "Excess": f"{excess:+d}",
-                "Status": status,
+                t(Keys.SIZE): size,
+                t(Keys.REQUIRED): required,
+                t(Keys.PRODUCED): produced,
+                t(Keys.EXCESS): f"{excess:+d}",
+                t(Keys.STATUS): status,
             })
 
     active_sizes = [s for s in sizes if s not in excluded_sizes]
@@ -670,11 +671,11 @@ def _display_production_comparison(
     total_produced = sum(result["produced"].get(size, 0) for size in active_sizes)
     total_excess = sum(result["excess"].get(size, 0) for size in active_sizes)
     production_data.append({
-        "Size": "**TOTAL**",
-        "Required": total_required,
-        "Produced": total_produced,
-        "Excess": f"{total_excess:+d}",
-        "Status": "",
+        t(Keys.SIZE): f"**{t(Keys.TOTAL)}**",
+        t(Keys.REQUIRED): total_required,
+        t(Keys.PRODUCED): total_produced,
+        t(Keys.EXCESS): f"{total_excess:+d}",
+        t(Keys.STATUS): "",
     })
 
     st.dataframe(production_data, hide_index=True)

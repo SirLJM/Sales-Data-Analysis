@@ -16,6 +16,7 @@ from sales_data.analysis.internal_forecast import (
     get_available_methods,
 )
 from ui.constants import Icons, MimeTypes
+from ui.i18n import Keys, t
 from ui.shared.session_manager import get_data_source, get_settings
 from utils.internal_forecast_repository import create_internal_forecast_repository
 from utils.logging_config import get_logger
@@ -77,14 +78,14 @@ def render() -> None:
         _render_content()
     except Exception as e:
         logger.exception("Error in Forecast Comparison")
-        st.error(f"{Icons.ERROR} Error in Forecast Comparison: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.FC_ERROR_IN_TAB).format(error=str(e))}")
 
 
 def _render_content() -> None:
-    st.title("Forecast Comparison")
-    st.write("Compare internal forecasts (generated using statsmodels) vs external forecasts")
+    st.title(t(Keys.TITLE_FORECAST_COMPARISON))
+    st.write(t(Keys.COMPARE_FORECASTS))
 
-    tab_new, tab_history = st.tabs(["Generate New", "Historical Forecasts"])
+    tab_new, tab_history = st.tabs([t(Keys.GENERATE_NEW), t(Keys.HISTORICAL_FORECASTS)])
 
     with tab_new:
         _render_new_forecast_tab()
@@ -98,10 +99,10 @@ def _render_new_forecast_tab() -> None:
 
     col_gen, col_clear = st.columns([1, 1])
     with col_gen:
-        if st.button("Generate Comparison", type="primary", key="gen_comparison"):
+        if st.button(t(Keys.BTN_GENERATE), type="primary", key="gen_comparison"):
             _generate_comparison(params)
     with col_clear:
-        if st.button("Clear Results", key="clear_comparison"):
+        if st.button(t(Keys.FC_CLEAR_RESULTS), key="clear_comparison"):
             st.session_state.pop(SESSION_KEY_DATA, None)
             st.session_state.pop(SESSION_KEY_PARAMS, None)
             st.session_state.pop(SESSION_KEY_INTERNAL_FORECASTS, None)
@@ -113,13 +114,13 @@ def _render_new_forecast_tab() -> None:
 
 
 def _render_parameters() -> dict:
-    with st.expander("Parameters", expanded=True):
+    with st.expander(t(Keys.FC_PARAMETERS), expanded=True):
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             settings = get_settings()
             horizon = st.number_input(
-                "Forecast Horizon (months)",
+                t(Keys.FORECAST_HORIZON),
                 min_value=1,
                 max_value=12,
                 value=int(settings.get("lead_time", 2)),
@@ -128,20 +129,20 @@ def _render_parameters() -> dict:
 
         with col2:
             entity_type = st.selectbox(
-                "Analysis Level",
+                t(Keys.ANALYSIS_LEVEL),
                 options=["model", "sku"],
-                format_func=lambda x: "Model (faster)" if x == "model" else "SKU (slower)",
+                format_func=lambda x: t(Keys.FC_MODEL_FASTER) if x == "model" else t(Keys.FC_SKU_SLOWER),
                 key="fc_entity_type",
             )
 
         with col3:
             filter_type = st.selectbox(
-                "Entity Filter",
+                t(Keys.ENTITY_FILTER),
                 options=["all", "top_n", "by_type"],
                 format_func=lambda x: {
-                    "all": "All entities",
-                    "top_n": "Top N by volume",
-                    "by_type": "By product type",
+                    "all": t(Keys.ALL_ENTITIES),
+                    "top_n": t(Keys.TOP_N_BY_VOLUME),
+                    "by_type": t(Keys.BY_PRODUCT_TYPE),
                 }[x],
                 key="fc_filter_type",
             )
@@ -149,20 +150,20 @@ def _render_parameters() -> dict:
         with col4:
             available_methods = get_available_methods()
             method_labels = {
-                "auto": "Auto (select by type)",
-                "moving_avg": "Moving Average",
-                "exp_smoothing": "Exponential Smoothing",
-                "holt_winters": "Holt-Winters",
-                "sarima": "SARIMA",
-                "auto_arima": "AutoARIMA (sktime)",
+                "auto": t(Keys.AUTO_SELECT),
+                "moving_avg": t(Keys.FC_MOVING_AVG),
+                "exp_smoothing": t(Keys.FC_EXP_SMOOTHING),
+                "holt_winters": t(Keys.FC_HOLT_WINTERS),
+                "sarima": t(Keys.FC_SARIMA),
+                "auto_arima": t(Keys.FC_AUTO_ARIMA),
             }
             method_options = ["auto"] + available_methods
             forecast_method = st.selectbox(
-                "Forecast Method",
+                t(Keys.FORECAST_METHOD),
                 options=method_options,
                 format_func=lambda x: method_labels.get(x, x),
                 key="fc_method",
-                help="Auto selects method based on product type. AutoARIMA automatically finds best ARIMA parameters.",
+                help=t(Keys.FORECAST_METHOD_HELP),
             )
 
         st.markdown("---")
@@ -170,30 +171,27 @@ def _render_parameters() -> dict:
 
         with col_date1:
             generation_date = st.date_input(
-                "Generate 'as of' date",
+                t(Keys.GENERATE_AS_OF),
                 value=pd.Timestamp.now().date(),
-                help="Simulate forecast generation as if it was this date. Only sales data up to this date will be used.",
+                help=t(Keys.FC_GENERATE_AS_OF_HELP),
                 key="fc_generation_date",
             )
 
         with col_date2:
             comparison_date = st.date_input(
-                "Compare 'as of' date",
+                t(Keys.COMPARE_AS_OF),
                 value=pd.Timestamp.now().date(),
-                help="Date up to which actual sales are loaded for comparison. Set to future date of generation date to see forecast accuracy.",
+                help=t(Keys.FC_COMPARE_AS_OF_HELP),
                 key="fc_comparison_date",
             )
 
         with col_info:
-            st.caption(
-                "**Generation date**: Only sales up to this date are used to generate forecast. "
-                "**Comparison date**: Actual sales from forecast period up to this date are loaded for accuracy comparison."
-            )
+            st.caption(t(Keys.DATE_CAPTION))
 
         filter_params = {}
         if filter_type == "top_n":
             filter_params["top_n"] = st.slider(
-                "Number of top entities",
+                t(Keys.NUMBER_TOP_ENTITIES),
                 min_value=10,
                 max_value=200,
                 value=50,
@@ -202,7 +200,7 @@ def _render_parameters() -> dict:
             )
         elif filter_type == "by_type":
             filter_params["product_types"] = st.multiselect(
-                "Product Types",
+                t(Keys.PRODUCT_TYPES),
                 options=["basic", "regular", "seasonal", "new"],
                 default=["basic", "regular", "seasonal"],
                 key="fc_product_types",
@@ -210,7 +208,7 @@ def _render_parameters() -> dict:
 
         if entity_type == "sku":
             filter_params["model_filter"] = st.text_input(
-                "Filter by Model (optional)",
+                t(Keys.FILTER_BY_MODEL),
                 placeholder="e.g., CH031",
                 key="fc_model_filter",
             )
@@ -244,55 +242,54 @@ def _filter_monthly_agg_by_date(monthly_agg: pd.DataFrame, cutoff_date) -> pd.Da
 
 
 def _generate_comparison(params: dict) -> None:
-    progress_bar = st.progress(0, text="Loading data...")
+    progress_bar = st.progress(0, text=t(Keys.FC_LOADING_DATA))
 
     generation_date = params.get("generation_date", pd.Timestamp.now().date())
     comparison_date = params.get("comparison_date", pd.Timestamp.now().date())
 
     try:
-        progress_bar.progress(5, text="Loading monthly aggregations...")
+        progress_bar.progress(5, text=t(Keys.FC_LOADING_MONTHLY_AGG))
 
         monthly_agg = _load_monthly_aggregations_cached()
         if monthly_agg is None or monthly_agg.empty:
-            st.error("No monthly aggregation data available")
+            st.error(t(Keys.FC_NO_MONTHLY_AGG))
             return
 
         monthly_agg_filtered = _filter_monthly_agg_by_date(monthly_agg, generation_date)
         if monthly_agg_filtered.empty:
-            st.error(f"No data available before {generation_date}")
+            st.error(t(Keys.FC_NO_DATA_BEFORE_DATE).format(date=generation_date))
             return
 
-        progress_bar.progress(10, text="Loading forecasts...")
+        progress_bar.progress(10, text=t(Keys.FC_LOADING_FORECASTS))
 
         external_forecast = _load_external_forecast_cached()
         if external_forecast is None or external_forecast.empty:
-            st.warning("No external forecast data available. Will only generate internal forecasts.")
+            st.warning(t(Keys.FC_NO_EXTERNAL_FORECAST))
 
-        progress_bar.progress(20, text="Loading sales data for comparison...")
+        progress_bar.progress(20, text=t(Keys.FC_LOADING_SALES))
 
         forecast_start_period = pd.Period(pd.Timestamp(generation_date), freq="M") + 1
         comparison_sales_df = _load_sales_for_period(str(forecast_start_period), comparison_date)
 
         if comparison_sales_df is None or comparison_sales_df.empty:
-            st.warning(
-                f"No sales data available for comparison period ({forecast_start_period} to {comparison_date}). Actual values will be zero.")
+            st.warning(t(Keys.FC_NO_SALES_FOR_COMPARISON).format(start=forecast_start_period, end=comparison_date))
             comparison_sales_df = pd.DataFrame()
 
-        progress_bar.progress(30, text="Preparing entities...")
+        progress_bar.progress(30, text=t(Keys.FC_PREPARING_ENTITIES))
 
         entities = _prepare_entity_list(monthly_agg_filtered, params)
 
         if not entities:
-            st.warning("No entities found matching the filter criteria")
+            st.warning(t(Keys.FC_NO_ENTITIES_FOUND))
             return
 
-        st.info(f"Processing {len(entities)} entities (data up to {generation_date})...")
+        st.info(t(Keys.FC_PROCESSING_ENTITIES).format(count=len(entities), date=generation_date))
 
         def progress_callback(current, total, entity_id):
             pct = 30 + int((current / total) * 60)
-            progress_bar.progress(pct, text=f"Forecasting {current}/{total}: {entity_id}")
+            progress_bar.progress(pct, text=t(Keys.FC_FORECASTING_PROGRESS).format(current=current, total=total, entity=entity_id))
 
-        progress_bar.progress(35, text="Generating internal forecasts...")
+        progress_bar.progress(35, text=t(Keys.FC_GENERATING_FORECASTS))
 
         internal_forecasts, stats = batch_generate_forecasts(
             monthly_agg_filtered,
@@ -302,10 +299,10 @@ def _generate_comparison(params: dict) -> None:
             method_override=params.get("forecast_method"),
         )
 
-        progress_bar.progress(90, text="Calculating comparison metrics...")
+        progress_bar.progress(90, text=t(Keys.FC_CALCULATING_METRICS))
 
         if internal_forecasts.empty:
-            st.error("Failed to generate any internal forecasts")
+            st.error(t(Keys.FC_NO_INTERNAL_FORECASTS))
             return
 
         comparison_df = align_forecasts(
@@ -322,7 +319,7 @@ def _generate_comparison(params: dict) -> None:
 
         overall_summary = calculate_overall_summary(metrics_df)
 
-        progress_bar.progress(100, text="Done!")
+        progress_bar.progress(100, text=t(Keys.FC_DONE))
 
         st.session_state[SESSION_KEY_DATA] = {
             "metrics_df": metrics_df,
@@ -337,16 +334,15 @@ def _generate_comparison(params: dict) -> None:
         st.session_state[SESSION_KEY_PARAMS] = params
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = internal_forecasts
 
-        st.success(
-            f"Comparison complete! Processed {stats['success']} entities successfully. Generated as of {generation_date}, compared against sales up to {comparison_date}.")
+        st.success(t(Keys.FC_COMPARISON_COMPLETE).format(success=stats['success'], gen_date=generation_date, comp_date=comparison_date))
         if stats["failed"] > 0:
-            st.warning(f"{stats['failed']} entities failed to forecast")
+            st.warning(t(Keys.FC_ENTITIES_FAILED).format(count=stats['failed']))
 
         st.rerun()
 
     except Exception as e:
         logger.exception("Error generating comparison")
-        st.error(f"Error: {str(e)}")
+        st.error(t(Keys.FC_ERROR).format(error=str(e)))
 
 
 def _prepare_entity_list(monthly_agg: pd.DataFrame, params: dict) -> list[dict]:
@@ -407,10 +403,13 @@ def _display_results() -> None:
     stats = data["stats"]
 
     if data.get("generation_date"):
-        st.info(
-            f"Forecast generated 'as of': {data['generation_date']} | Forecast period: {data.get('forecast_start', 'N/A')} | Comparison data up to: {data.get('as_of_date', 'N/A')}")
+        st.info(t(Keys.FC_FORECAST_INFO).format(
+            gen_date=data['generation_date'],
+            start=data.get('forecast_start', 'N/A'),
+            end=data.get('as_of_date', 'N/A')
+        ))
     elif data.get("forecast_start") and data.get("as_of_date"):
-        st.info(f"Forecast period: {data['forecast_start']} to {data['as_of_date']}")
+        st.info(t(Keys.FC_FORECAST_PERIOD).format(start=data['forecast_start'], end=data['as_of_date']))
 
     st.markdown("---")
     _display_overall_summary(overall_summary, stats)
@@ -429,15 +428,15 @@ def _display_results() -> None:
 
 
 def _display_all_forecasts_table(data: dict) -> None:
-    st.subheader("All Forecast Items")
+    st.subheader(t(Keys.FC_ALL_FORECAST_ITEMS))
 
     comparison_df = data.get("comparison_df")
     if comparison_df is None or comparison_df.empty:
-        st.info("No forecast data available")
+        st.info(t(Keys.FC_NO_FORECAST_DATA))
         return
 
-    with st.expander("View All Forecast Items", expanded=False):
-        search = st.text_input("Search by Entity ID", key="fc_all_search")
+    with st.expander(t(Keys.FC_VIEW_ALL_ITEMS), expanded=False):
+        search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_all_search")
 
         df = comparison_df.copy()
         if search:
@@ -446,18 +445,18 @@ def _display_all_forecasts_table(data: dict) -> None:
         col1, col2 = st.columns(2)
         with col1:
             sort_by = st.selectbox(
-                "Sort by",
+                t(Keys.SORT_BY),
                 options=["entity_id", "year_month", "actual", "internal_forecast", "external_forecast"],
                 key="fc_all_sort",
             )
         with col2:
             sort_order = st.selectbox(
-                "Order",
-                options=["Ascending", "Descending"],
+                t(Keys.FC_ORDER),
+                options=[t(Keys.FC_ASCENDING), t(Keys.FC_DESCENDING)],
                 key="fc_all_order",
             )
 
-        df = df.sort_values(sort_by, ascending=(sort_order == "Ascending"))
+        df = df.sort_values(sort_by, ascending=(sort_order == t(Keys.FC_ASCENDING)))
 
         display_df = df[[
             "entity_id", "year_month", "internal_forecast", "external_forecast", "actual", "method"
@@ -467,16 +466,16 @@ def _display_all_forecasts_table(data: dict) -> None:
         display_df["external_forecast"] = display_df["external_forecast"].apply(lambda x: f"{x:,.0f}")
         display_df["actual"] = display_df["actual"].apply(lambda x: f"{x:,.0f}")
 
-        display_df.columns = ["Entity", "Period", "Internal Forecast", "External Forecast", "Actual Sales", "Method"]
+        display_df.columns = [t(Keys.FC_COL_ENTITY), t(Keys.FC_COL_PERIOD), t(Keys.FC_COL_INTERNAL_FORECAST), t(Keys.FC_COL_EXTERNAL_FORECAST), t(Keys.FC_COL_ACTUAL_SALES), t(Keys.FC_COL_METHOD)]
 
         from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
-        render_dataframe_with_aggrid(display_df, height=400, pinned_columns=["Entity"])
+        render_dataframe_with_aggrid(display_df, height=400, pinned_columns=[t(Keys.FC_COL_ENTITY)])
 
-        st.caption(f"Total rows: {len(df)}")
+        st.caption(t(Keys.FC_TOTAL_ROWS).format(count=len(df)))
 
         csv = comparison_df.to_csv(index=False)
         st.download_button(
-            "Download All Forecasts (CSV)",
+            t(Keys.FC_DOWNLOAD_ALL_FORECASTS),
             csv,
             "all_forecasts.csv",
             MimeTypes.TEXT_CSV,
@@ -485,44 +484,44 @@ def _display_all_forecasts_table(data: dict) -> None:
 
 
 def _display_overall_summary(summary: dict, stats: dict) -> None:
-    st.subheader("Overall Comparison Summary")
+    st.subheader(t(Keys.FC_OVERALL_SUMMARY))
 
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.metric(
-            "Internal MAPE",
+            t(Keys.FC_INTERNAL_MAPE),
             f"{summary.get('avg_internal_mape', 0):.1f}%",
         )
     with col2:
         st.metric(
-            "External MAPE",
+            t(Keys.FC_EXTERNAL_MAPE),
             f"{summary.get('avg_external_mape', 0):.1f}%",
         )
     with col3:
         internal_wins = summary.get("internal_wins", 0)
         external_wins = summary.get("external_wins", 0)
         if internal_wins > external_wins:
-            winner_text = f"Internal ({internal_wins})"
+            winner_text = t(Keys.FC_INTERNAL_WINS).format(count=internal_wins)
         elif external_wins > internal_wins:
-            winner_text = f"External ({external_wins})"
+            winner_text = t(Keys.FC_EXTERNAL_WINS).format(count=external_wins)
         else:
-            winner_text = "Tie"
-        st.metric("More Accurate", winner_text)
+            winner_text = t(Keys.FC_TIE)
+        st.metric(t(Keys.FC_MORE_ACCURATE), winner_text)
     with col4:
         st.metric(
-            "Avg Improvement",
+            t(Keys.FC_AVG_IMPROVEMENT),
             f"{summary.get('median_improvement', 0):.1f}%",
         )
 
-    st.caption(f"Methods used: {stats.get('methods', {})}")
+    st.caption(t(Keys.FC_METHODS_USED).format(methods=stats.get('methods', {})))
 
 
 def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
-    st.subheader("Winner Breakdown by Product Type")
+    st.subheader(t(Keys.FC_WINNER_BY_TYPE))
 
     if type_summary.empty:
-        st.info("No type breakdown available")
+        st.info(t(Keys.FC_NO_TYPE_BREAKDOWN))
         return
 
     display_df = type_summary[[
@@ -536,37 +535,46 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
         "avg_external_mape",
     ]].copy()
 
-    display_df.columns = MAPE_AVG_EXT_MAPE_
+    col_type = t(Keys.FC_COL_TYPE)
+    col_total = t(Keys.FC_COL_TOTAL)
+    col_int_wins = t(Keys.FC_COL_INTERNAL_WINS)
+    col_ext_wins = t(Keys.FC_COL_EXTERNAL_WINS)
+    col_ties = t(Keys.FC_COL_TIES)
+    col_int_win_pct = t(Keys.FC_COL_INTERNAL_WIN_PCT)
+    col_avg_int_mape = t(Keys.FC_COL_AVG_INT_MAPE)
+    col_avg_ext_mape = t(Keys.FC_COL_AVG_EXT_MAPE)
 
-    display_df[INTERNAL_WIN_PERCENTILE] = display_df[INTERNAL_WIN_PERCENTILE].apply(lambda x: f"{x:.1f}%")
-    display_df[AVG_INT_MAPE] = display_df[AVG_INT_MAPE].apply(lambda x: f"{x:.1f}%")
-    display_df[AVG_EXT_MAPE] = display_df[AVG_EXT_MAPE].apply(lambda x: f"{x:.1f}%")
+    display_df.columns = [col_type, col_total, col_int_wins, col_ext_wins, col_ties, col_int_win_pct, col_avg_int_mape, col_avg_ext_mape]
+
+    display_df[col_int_win_pct] = display_df[col_int_win_pct].apply(lambda x: f"{x:.1f}%")
+    display_df[col_avg_int_mape] = display_df[col_avg_int_mape].apply(lambda x: f"{x:.1f}%")
+    display_df[col_avg_ext_mape] = display_df[col_avg_ext_mape].apply(lambda x: f"{x:.1f}%")
 
     from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
     render_dataframe_with_aggrid(display_df, max_height=300)
 
 
 def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
-    st.subheader("Detailed Comparison")
+    st.subheader(t(Keys.FC_DETAILED_COMPARISON))
 
     if metrics_df.empty:
-        st.info("No comparison data available")
+        st.info(t(Keys.FC_NO_COMPARISON_DATA))
         return
 
-    search = st.text_input("Search by Entity ID", key="fc_search")
+    search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_search")
 
     display_df = metrics_df.copy()
     if search:
         display_df = display_df[display_df["entity_id"].str.contains(search.upper())]
 
     sort_col = st.selectbox(
-        "Sort by",
+        t(Keys.SORT_BY),
         options=["improvement_pct", "internal_mape", "external_mape", "entity_id"],
         format_func=lambda x: {
-            "improvement_pct": "Improvement %",
-            "internal_mape": "Internal MAPE",
-            "external_mape": "External MAPE",
-            "entity_id": "Entity ID",
+            "improvement_pct": t(Keys.FC_IMPROVEMENT),
+            "internal_mape": t(Keys.FC_INTERNAL_MAPE),
+            "external_mape": t(Keys.FC_EXTERNAL_MAPE),
+            "entity_id": t(Keys.FC_COL_ENTITY),
         }[x],
         key="fc_sort",
     )
@@ -574,27 +582,33 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
     ascending = sort_col == "entity_id"
     display_df = display_df.sort_values(sort_col, ascending=ascending)
 
+    col_entity = t(Keys.FC_COL_ENTITY)
+    col_method = t(Keys.FC_COL_METHOD)
+    col_months = t(Keys.FC_COL_MONTHS)
+    col_actual_vol = t(Keys.FC_COL_ACTUAL_VOLUME)
+    col_int_mape = t(Keys.FC_COL_INT_MAPE)
+    col_ext_mape = t(Keys.FC_COL_EXT_MAPE)
+    col_winner = t(Keys.FC_COL_WINNER)
+    col_improvement = t(Keys.FC_IMPROVEMENT)
+
     show_df = display_df[[
         "entity_id", "method", "months_compared", "total_actual",
         "internal_mape", "external_mape", "winner", "improvement_pct"
     ]].copy()
 
-    show_df.columns = [
-        "Entity", "Method", "Months", ACTUAL_VOLUME,
-        INT_MAPE, EXT_MAPE, "Winner", "Improvement"
-    ]
+    show_df.columns = [col_entity, col_method, col_months, col_actual_vol, col_int_mape, col_ext_mape, col_winner, col_improvement]
 
-    show_df[INT_MAPE] = show_df[INT_MAPE].apply(lambda x: f"{x:.1f}%")
-    show_df[EXT_MAPE] = show_df[EXT_MAPE].apply(lambda x: f"{x:.1f}%")
-    show_df["Improvement"] = show_df["Improvement"].apply(lambda x: f"{x:+.1f}%")
-    show_df[ACTUAL_VOLUME] = show_df[ACTUAL_VOLUME].apply(lambda x: f"{x:,.0f}")
+    show_df[col_int_mape] = show_df[col_int_mape].apply(lambda x: f"{x:.1f}%")
+    show_df[col_ext_mape] = show_df[col_ext_mape].apply(lambda x: f"{x:.1f}%")
+    show_df[col_improvement] = show_df[col_improvement].apply(lambda x: f"{x:+.1f}%")
+    show_df[col_actual_vol] = show_df[col_actual_vol].apply(lambda x: f"{x:,.0f}")
 
     from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
-    render_dataframe_with_aggrid(show_df, height=400, pinned_columns=["Entity"])
+    render_dataframe_with_aggrid(show_df, height=400, pinned_columns=[col_entity])
 
     csv = metrics_df.to_csv(index=False)
     st.download_button(
-        "Download Full Report (CSV)",
+        t(Keys.FC_DOWNLOAD_FULL_REPORT),
         csv,
         "forecast_comparison_report.csv",
         MimeTypes.TEXT_CSV,
@@ -603,16 +617,16 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
 
 
 def _display_entity_chart(data: dict) -> None:
-    with st.expander("Entity Detail Chart", expanded=False):
+    with st.expander(t(Keys.FC_ENTITY_DETAIL_CHART), expanded=False):
         comparison_df = data["comparison_df"]
 
         if comparison_df.empty:
-            st.info("No comparison data available for charting")
+            st.info(t(Keys.FC_NO_DATA_FOR_CHART))
             return
 
         entities = sorted(comparison_df["entity_id"].unique())
         selected = st.selectbox(
-            "Select Entity",
+            t(Keys.FC_SELECT_ENTITY),
             options=entities,
             key="fc_chart_entity",
         )
@@ -626,7 +640,7 @@ def _display_entity_chart(data: dict) -> None:
                 x=entity_data["year_month"],
                 y=entity_data["actual"],
                 mode=LINES_MARKERS,
-                name="Actual",
+                name=t(Keys.FC_CHART_ACTUAL),
                 line={"color": "green", "width": 2},
             ))
 
@@ -634,7 +648,7 @@ def _display_entity_chart(data: dict) -> None:
                 x=entity_data["year_month"],
                 y=entity_data["internal_forecast"],
                 mode=LINES_MARKERS,
-                name="Internal Forecast",
+                name=t(Keys.FC_CHART_INTERNAL),
                 line={"color": "blue", "width": 2, "dash": "dash"},
             ))
 
@@ -642,14 +656,14 @@ def _display_entity_chart(data: dict) -> None:
                 x=entity_data["year_month"],
                 y=entity_data["external_forecast"],
                 mode=LINES_MARKERS,
-                name="External Forecast",
+                name=t(Keys.FC_CHART_EXTERNAL),
                 line={"color": "orange", "width": 2, "dash": "dot"},
             ))
 
             fig.update_layout(
-                title=f"Forecast Comparison: {selected}",
-                xaxis_title="Month",
-                yaxis_title="Quantity",
+                title=t(Keys.FC_CHART_TITLE).format(entity=selected),
+                xaxis_title=t(Keys.FC_CHART_MONTH),
+                yaxis_title=t(Keys.QUANTITY),
                 hovermode="x unified",
                 height=400,
             )
@@ -666,19 +680,19 @@ def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
 
 def _render_save_section() -> None:
     st.markdown("---")
-    st.subheader("Save Forecast")
+    st.subheader(t(Keys.FC_SAVE_FORECAST))
 
     if SESSION_KEY_INTERNAL_FORECASTS not in st.session_state:
-        st.info("No forecast data to save")
+        st.info(t(Keys.FC_NO_FORECAST_TO_SAVE))
         return
 
     notes = st.text_input(
-        "Notes (optional)",
-        placeholder="e.g., Monthly comparison run",
+        t(Keys.FC_NOTES_OPTIONAL),
+        placeholder=t(Keys.FC_NOTES_PLACEHOLDER),
         key="fc_save_notes",
     )
 
-    if st.button("Save Forecast to History", key="fc_save_btn"):
+    if st.button(t(Keys.FC_SAVE_TO_HISTORY), key="fc_save_btn"):
         try:
             forecasts_df = st.session_state[SESSION_KEY_INTERNAL_FORECASTS]
             params = st.session_state.get(SESSION_KEY_PARAMS, {})
@@ -695,10 +709,10 @@ def _render_save_section() -> None:
                 notes=notes or None,
             )
 
-            st.success(f"{Icons.SUCCESS} Forecast saved! Batch ID: {batch_id[:8]}...")
+            st.success(f"{Icons.SUCCESS} {t(Keys.FC_FORECAST_SAVED).format(batch_id=batch_id[:8])}")
         except Exception as e:
             logger.exception("Error saving forecast")
-            st.error(f"{Icons.ERROR} Error saving forecast: {e}")
+            st.error(f"{Icons.ERROR} {t(Keys.FC_ERROR_SAVING).format(error=e)}")
 
 
 def _format_batch_label(batch: dict) -> str:
@@ -736,53 +750,50 @@ def _get_forecast_date_range(batch: dict) -> tuple[str, str]:
 
 
 def _handle_batch_actions(batch_id: str, batch: dict, repo) -> None:
-    st.markdown("#### Analysis Settings")
+    st.markdown(f"#### {t(Keys.FC_ANALYSIS_SETTINGS)}")
 
     forecast_start, forecast_end = _get_forecast_date_range(batch)
-    st.caption(f"Forecast covers periods: {forecast_start} to {forecast_end}")
+    st.caption(t(Keys.FC_FORECAST_COVERS).format(start=forecast_start, end=forecast_end))
 
     col_date, col_info = st.columns([2, 3])
     with col_date:
         as_of_date = st.date_input(
-            "Analyze 'as of' date",
+            t(Keys.FC_ANALYZE_AS_OF),
             value=pd.Timestamp.now().date(),
-            help="Select a date in the past to compare forecast against actual sales that occurred after the forecast was generated",
+            help=t(Keys.FC_ANALYZE_AS_OF_HELP),
             key="fc_as_of_date",
         )
     with col_info:
-        st.info(
-            "Set 'as of' date to analyze historical accuracy. "
-            "Sales data will be loaded from forecast period up to this date."
-        )
+        st.info(t(Keys.FC_SET_AS_OF_INFO))
 
     col1, col2 = st.columns([1, 1])
     with col1:
-        if st.button("Load and Compare", key="fc_load_historical", type="primary"):
+        if st.button(t(Keys.FC_LOAD_COMPARE), key="fc_load_historical", type="primary"):
             _load_historical_forecast(batch_id, batch, as_of_date)
     with col2:
-        if st.button("Delete", key="fc_delete_historical"):
+        if st.button(t(Keys.FC_DELETE), key="fc_delete_historical"):
             if repo.delete_forecast_batch(batch_id):
-                st.success("Forecast deleted")
+                st.success(t(Keys.FC_FORECAST_DELETED))
                 st.rerun()
             else:
-                st.error("Failed to delete forecast")
+                st.error(t(Keys.FC_DELETE_FAILED))
 
 
 @st.fragment
 def _render_historical_tab() -> None:
-    st.subheader("Historical Internal Forecasts")
+    st.subheader(t(Keys.FC_HISTORICAL_INTERNAL))
 
     repo = create_internal_forecast_repository()
     batches = repo.get_forecast_batches(limit=20)
 
     if not batches:
-        st.info("No historical forecasts found. Generate and save a forecast first.")
+        st.info(t(Keys.FC_NO_HISTORICAL))
         return
 
     batch_options = _build_batch_options(batches)
 
     selected_label = st.selectbox(
-        "Select Historical Forecast",
+        t(Keys.FC_SELECT_HISTORICAL),
         options=list(batch_options.keys()),
         key="fc_history_select",
     )
@@ -804,20 +815,20 @@ def _display_batch_details(batch: dict) -> None:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric("Entity Type", batch.get("entity_type", "?"))
+        st.metric(t(Keys.FC_ENTITY_TYPE), batch.get("entity_type", "?"))
     with col2:
-        st.metric("Horizon", f"{batch.get('horizon_months', '?')} months")
+        st.metric(t(Keys.FC_HORIZON).format(months=batch.get('horizon_months', '?')), "")
     with col3:
-        st.metric("Success", batch.get("success_count", 0))
+        st.metric(t(Keys.FC_SUCCESS), batch.get("success_count", 0))
     with col4:
-        st.metric("Failed", batch.get("failed_count", 0))
+        st.metric(t(Keys.FC_FAILED), batch.get("failed_count", 0))
 
     methods = batch.get("methods_used", {})
     if methods:
-        st.caption(f"Methods: {methods}")
+        st.caption(t(Keys.FC_METHODS).format(methods=methods))
 
     if batch.get("notes"):
-        st.caption(f"Notes: {batch['notes']}")
+        st.caption(t(Keys.FC_NOTES).format(notes=batch['notes']))
 
 
 def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
@@ -851,18 +862,18 @@ def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
     forecasts_df = repo.get_forecast_batch(batch_id)
 
     if forecasts_df is None or forecasts_df.empty:
-        st.error("Failed to load forecast data")
+        st.error(t(Keys.FC_FAILED_LOAD))
         return
 
     # noinspection PyTypeChecker
-    with st.spinner("Loading data and calculating metrics..."):
+    with st.spinner(t(Keys.FC_LOADING_DATA)):
         external_forecast = _load_external_forecast_cached()
 
         forecast_start, _ = _get_forecast_date_range(batch)
         sales_df = _load_sales_for_period(forecast_start, as_of_date)
 
         if sales_df is None or sales_df.empty:
-            st.warning("No sales data available for the selected period. Actual values will be zero.")
+            st.warning(t(Keys.FC_NO_SALES_FOR_PERIOD))
             sales_df = pd.DataFrame()
 
         entity_type = forecasts_df["entity_type"].iloc[0] if "entity_type" in forecasts_df.columns else "model"
@@ -904,5 +915,5 @@ def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
         }
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = forecasts_df
 
-        st.success(f"Historical forecast loaded! Sales data from {forecast_start} to {as_of_date}")
+        st.success(t(Keys.FC_HISTORICAL_LOADED).format(start=forecast_start, end=as_of_date))
         st.rerun()

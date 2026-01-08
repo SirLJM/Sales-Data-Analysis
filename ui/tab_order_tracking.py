@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.constants import ColumnNames, Config, Icons, SessionKeys
+from ui.i18n import Keys, t
 from utils.logging_config import get_logger
 
 MONTHLY_CAPACITY = "Monthly Capacity"
@@ -20,11 +21,11 @@ def render() -> None:
         _render_content()
     except Exception as e:
         logger.exception("Error in Order Tracking")
-        st.error(f"{Icons.ERROR} Error in Order Tracking: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_ORDER_TRACKING).format(error=str(e))}")
 
 
 def _render_content() -> None:
-    st.title("📦 Order Tracking")
+    st.title(t(Keys.TITLE_ORDER_TRACKING))
 
     _init_pdf_parser_lookup_data()
 
@@ -58,12 +59,12 @@ def _render_pdf_upload() -> None:
     from utils.order_manager import add_manual_order
     from utils.pdf_parser import parse_order_pdf
 
-    st.subheader("📄 Import Order from PDF")
+    st.subheader(t(Keys.TITLE_IMPORT_PDF))
 
     uploaded_file = st.file_uploader(
-        "Upload order PDF file",
+        t(Keys.UPLOAD_PDF),
         type=["pdf"],
-        help="Upload a PDF file containing order details",
+        help=t(Keys.HELP_UPLOAD_PDF),
         key="pdf_upload",
     )
 
@@ -71,46 +72,47 @@ def _render_pdf_upload() -> None:
         col1, col2 = st.columns([3, 1])
 
         with col1:
-            st.info(f"{Icons.INFO} File uploaded: {uploaded_file.name}")
+            st.info(f"{Icons.INFO} {t(Keys.FILE_UPLOADED).format(filename=uploaded_file.name)}")
 
         with col2:
-            if st.button("Parse PDF", key="parse_pdf_btn", type="primary"):
+            if st.button(t(Keys.BTN_PARSE_PDF), key="parse_pdf_btn", type="primary"):
                 # noinspection PyTypeChecker
-                with st.spinner("Parsing PDF..."):
+                with st.spinner(t(Keys.LABEL_PARSING_PDF)):
                     order_data = parse_order_pdf(uploaded_file)
                     if order_data:
                         st.session_state["parsed_order_data"] = order_data
                     else:
-                        st.error(f"{Icons.ERROR} Failed to parse PDF. Please check the file format.")
+                        st.error(f"{Icons.ERROR} {t(Keys.FAILED_PARSE_PDF)}")
 
     if "parsed_order_data" in st.session_state:
         order_data = st.session_state["parsed_order_data"]
-        st.success(f"{Icons.SUCCESS} PDF parsed successfully")
+        st.success(f"{Icons.SUCCESS} {t(Keys.PDF_PARSED)}")
         _display_parsed_order(order_data)
 
-        if st.button("Create Order from PDF", key="create_from_pdf_btn", type="primary"):
+        if st.button(t(Keys.BTN_CREATE_FROM_PDF), key="create_from_pdf_btn", type="primary"):
             order_id = f"ORD_{order_data.get('model', 'UNKNOWN')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             if add_manual_order(order_id, order_data):
-                st.success(f"{Icons.SUCCESS} Order {order_id} created from PDF")
+                st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_CREATED_PDF).format(order_id=order_id)}")
                 del st.session_state["parsed_order_data"]
                 _invalidate_orders_cache()
                 st.rerun()
             else:
-                st.error(f"{Icons.ERROR} Failed to create order")
+                st.error(f"{Icons.ERROR} {t(Keys.FAILED_CREATE_ORDER)}")
 
 
 def _display_parsed_order(order_data: dict) -> None:
     order_date = order_data.get('order_date')
-    date_str = order_date.strftime('%Y-%m-%d') if order_date else 'N/A'
+    na_value = t(Keys.NA)
+    date_str = order_date.strftime('%Y-%m-%d') if order_date else na_value
 
     parsed_df = pd.DataFrame([{
-        "Order Date": date_str,
-        "Model": order_data.get('model', 'N/A'),
-        "Product": order_data.get('product_name', 'N/A'),
-        "Quantity": order_data.get('total_quantity', 'N/A'),
-        "Facility": order_data.get('facility', 'N/A'),
-        "Operation": order_data.get('operation', 'N/A'),
-        "Material": order_data.get('material', 'N/A'),
+        t(Keys.ORDER_DATE): date_str,
+        t(Keys.MODEL): order_data.get('model', na_value),
+        t(Keys.PRODUCT): order_data.get('product_name', na_value),
+        t(Keys.QUANTITY): order_data.get('total_quantity', na_value),
+        t(Keys.FACILITY): order_data.get('facility', na_value),
+        t(Keys.OPERATION): order_data.get('operation', na_value),
+        t(Keys.MATERIAL): order_data.get('material', na_value),
     }])
 
     st.dataframe(parsed_df, hide_index=True)
@@ -120,29 +122,29 @@ def _display_parsed_order(order_data: dict) -> None:
 def _render_manual_order_form() -> None:
     from utils.order_manager import add_manual_order
 
-    st.subheader("📝 Add Manual Order")
+    st.subheader(t(Keys.TITLE_MANUAL_ORDER))
 
     with st.form("manual_order_form"):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             manual_order_date = st.date_input(
-                ColumnNames.ORDER_DATE,
+                t(Keys.ORDER_DATE),
                 value=datetime.today(),
-                help="Date when the order was placed",
+                help=t(Keys.HELP_ORDER_DATE),
             )
         with col2:
             manual_order_model = st.text_input(
-                "Model Code",
-                placeholder="e.g., ABC12",
+                t(Keys.LABEL_MODEL_CODE),
+                placeholder=t(Keys.PLACEHOLDER_MODEL_CODE),
             )
         with col3:
             manual_product_name = st.text_input(
-                "Product Name",
-                placeholder="e.g., Bluza",
+                t(Keys.LABEL_PRODUCT_NAME),
+                placeholder=t(Keys.PLACEHOLDER_PRODUCT_NAME),
             )
         with col4:
             manual_quantity = st.number_input(
-                "Quantity",
+                t(Keys.QUANTITY),
                 min_value=0,
                 value=0,
             )
@@ -150,26 +152,26 @@ def _render_manual_order_form() -> None:
         col5, col6, col7, col8 = st.columns(4)
         with col5:
             manual_facility = st.text_input(
-                "Facility",
-                placeholder="e.g., Sieradz",
+                t(Keys.FACILITY),
+                placeholder=t(Keys.PLACEHOLDER_FACILITY),
             )
         with col6:
             manual_operation = st.text_input(
-                "Operation",
-                placeholder="e.g., szycie i składanie",
+                t(Keys.OPERATION),
+                placeholder=t(Keys.PLACEHOLDER_OPERATION),
             )
         with col7:
             manual_material = st.text_input(
-                "Material",
-                placeholder="e.g., DRES PĘTELKA 280 GSM",
+                t(Keys.MATERIAL),
+                placeholder=t(Keys.PLACEHOLDER_MATERIAL),
             )
         with col8:
             st.write("")
 
-        submitted = st.form_submit_button("Add Order", type="primary")
+        submitted = st.form_submit_button(t(Keys.BTN_ADD_ORDER), type="primary")
         if submitted:
             if not manual_order_model:
-                st.warning(f"{Icons.WARNING} Please enter a model code")
+                st.warning(f"{Icons.WARNING} {t(Keys.MSG_ENTER_MODEL_CODE)}")
             else:
                 order_id = f"ORD_{manual_order_model.upper()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 order_data = {
@@ -182,11 +184,11 @@ def _render_manual_order_form() -> None:
                     "material": manual_material or None,
                 }
                 if add_manual_order(order_id, order_data):
-                    st.success(f"{Icons.SUCCESS} Order {order_id} added to active orders")
+                    st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ADDED).format(order_id=order_id)}")
                     _invalidate_orders_cache()
                     st.rerun()
                 else:
-                    st.error(f"{Icons.ERROR} Failed to add order")
+                    st.error(f"{Icons.ERROR} {t(Keys.FAILED_ADD_ORDER)}")
 
 
 def _get_cached_active_orders() -> list[dict]:
@@ -205,42 +207,32 @@ def _invalidate_orders_cache() -> None:
 
 @st.fragment
 def _render_active_orders() -> None:
-    st.subheader("📋 Active Orders")
+    from ui.shared import render_dataframe_with_aggrid
+
+    st.subheader(t(Keys.TITLE_ACTIVE_ORDERS))
 
     active_orders = _get_cached_active_orders()
 
     if not active_orders:
-        st.info(f"{Icons.INFO} No active orders. Create orders in Tab 5 or add manual orders above.")
+        st.info(f"{Icons.INFO} {t(Keys.NO_ACTIVE_ORDERS)}")
         return
 
     order_list = _build_order_list(active_orders)
     orders_df = pd.DataFrame(order_list)
 
-    edited_orders = st.data_editor(
+    grid_response = render_dataframe_with_aggrid(
         orders_df,
-        hide_index=True,
-        disabled=[
-            ColumnNames.ORDER_ID, ColumnNames.ORDER_DATE, "Model", "Product",
-            "Quantity", "Facility", "Operation", "Material",
-            ColumnNames.DAYS_ELAPSED, "Status"
-        ],
-        column_config={
-            "Archive": st.column_config.CheckboxColumn(
-                "Archive",
-                help="Check to archive this order",
-                default=False,
-            )
-        },
-        height=min(Config.DATAFRAME_HEIGHT, len(order_list) * 35 + 38),
+        selection_mode="multiple",
+        pinned_columns=[ColumnNames.ORDER_ID],
+        max_height=Config.DATAFRAME_HEIGHT,
     )
 
-    _handle_archive_selection(edited_orders)
+    selected_rows = grid_response.selected_rows
+    _handle_aggrid_archive_selection(selected_rows)
 
-    st.caption(f"📦 Total active orders: {len(active_orders)}")
+    st.caption(t(Keys.TOTAL_ACTIVE_ORDERS).format(count=len(active_orders)))
     ready_count = len([o for o in order_list if o["Days Elapsed"] >= Config.DELIVERY_THRESHOLD_DAYS])
-    st.caption(
-        f"🚚 Orders ready for delivery (should be in stock now) (>= {Config.DELIVERY_THRESHOLD_DAYS} days): {ready_count}"
-    )
+    st.caption(t(Keys.ORDERS_READY).format(threshold=Config.DELIVERY_THRESHOLD_DAYS, count=ready_count))
 
 
 def _build_order_list(active_orders: list[dict]) -> list[dict]:
@@ -263,11 +255,10 @@ def _build_order_list(active_orders: list[dict]) -> list[dict]:
             "Material": order.get("material") or "",
             ColumnNames.DAYS_ELAPSED: days_elapsed,
             "Status": (
-                "🚚 Ready"
+                t(Keys.STATUS_READY)
                 if is_ready
-                else f"⏳ {Config.DELIVERY_THRESHOLD_DAYS - days_elapsed}d"
+                else t(Keys.STATUS_PENDING).format(days=Config.DELIVERY_THRESHOLD_DAYS - days_elapsed)
             ),
-            "Archive": False,
         })
 
     return order_list
@@ -281,35 +272,41 @@ def _parse_order_date(order_date) -> datetime:
     return order_date
 
 
-def _handle_archive_selection(edited_orders: pd.DataFrame) -> None:
+def _handle_aggrid_archive_selection(selected_rows) -> None:
     from utils.order_manager import archive_order
 
-    selected_to_archive = edited_orders[edited_orders["Archive"] == True]
+    if selected_rows is None or len(selected_rows) == 0:
+        return
 
-    if not selected_to_archive.empty:
-        if st.button(f"Archive {len(selected_to_archive)} Order(s)", type="secondary"):
-            for _, row in selected_to_archive.iterrows():
-                if archive_order(row[ColumnNames.ORDER_ID]):
-                    st.success(f"{Icons.SUCCESS} Archived order {row[ColumnNames.ORDER_ID]}")
-                else:
-                    st.error(f"{Icons.ERROR} Failed to archive order {row[ColumnNames.ORDER_ID]}")
-            _invalidate_orders_cache()
-            st.rerun()
+    selected_df = pd.DataFrame(selected_rows) if not isinstance(selected_rows, pd.DataFrame) else selected_rows
+
+    if selected_df.empty:
+        return
+
+    if st.button(t(Keys.BTN_ARCHIVE_N_ORDERS).format(count=len(selected_df)), type="secondary"):
+        for _, row in selected_df.iterrows():
+            order_id = row[ColumnNames.ORDER_ID]
+            if archive_order(order_id):
+                st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ARCHIVED).format(order_id=order_id)}")
+            else:
+                st.error(f"{Icons.ERROR} {t(Keys.FAILED_ARCHIVE_ORDER).format(order_id=order_id)}")
+        _invalidate_orders_cache()
+        st.rerun()
 
 
 def _render_facility_capacity() -> None:
-    st.subheader("🏭 Facility Capacity")
+    st.subheader(t(Keys.TITLE_FACILITY_CAPACITY))
 
     active_orders = _get_cached_active_orders()
 
     if not active_orders:
-        st.info(f"{Icons.INFO} No active orders to calculate facility capacity.")
+        st.info(f"{Icons.INFO} {t(Keys.MSG_NO_CAPACITY_DATA)}")
         return
 
     capacity_data = _calculate_facility_capacity(active_orders)
 
     if not capacity_data:
-        st.info(f"{Icons.INFO} No facility data available in active orders.")
+        st.info(f"{Icons.INFO} {t(Keys.MSG_NO_FACILITY_DATA)}")
         return
 
     facility_capacities = _get_facility_capacities()
@@ -328,12 +325,12 @@ def _render_facility_capacity() -> None:
         capacity_df,
         hide_index=True,
         column_config={
-            "Facility": st.column_config.TextColumn("Facility", width="medium"),
-            "Order Count": st.column_config.NumberColumn("Orders", format="%d"),
-            TOTAL_QUANTITY: st.column_config.NumberColumn("Total Qty", format="%d"),
-            MONTHLY_CAPACITY: st.column_config.NumberColumn("Capacity", format="%d"),
+            "Facility": st.column_config.TextColumn(t(Keys.FACILITY), width="medium"),
+            "Order Count": st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
+            TOTAL_QUANTITY: st.column_config.NumberColumn(t(Keys.LABEL_TOTAL_QTY), format="%d"),
+            MONTHLY_CAPACITY: st.column_config.NumberColumn(t(Keys.LABEL_CAPACITY), format="%d"),
             "Utilization %": st.column_config.ProgressColumn(
-                "Utilization",
+                t(Keys.LABEL_UTILIZATION),
                 format="%.0f%%",
                 min_value=0,
                 max_value=100,
@@ -342,7 +339,7 @@ def _render_facility_capacity() -> None:
     )
 
     total_qty = capacity_df[TOTAL_QUANTITY].sum()
-    st.caption(f"📊 Total quantity across all facilities: {total_qty:,}")
+    st.caption(t(Keys.CAPTION_TOTAL_QTY_FACILITIES).format(total=total_qty))
 
     _render_capacity_editor(capacity_df["Facility"].tolist(), facility_capacities)
 
@@ -398,8 +395,8 @@ def _calculate_utilization(total_qty: int, capacity: int) -> float:
 
 @st.fragment
 def _render_capacity_editor(facilities: list[str], current_capacities: dict[str, int]) -> None:
-    with st.expander("⚙️ Edit Monthly Capacity", expanded=False):
-        st.caption("Set monthly production capacity for each facility")
+    with st.expander(t(Keys.TITLE_EDIT_CAPACITY), expanded=False):
+        st.caption(t(Keys.HELP_CAPACITY_EDITOR))
 
         cols_per_row = 3
         edited_capacities = current_capacities.copy()
@@ -423,7 +420,7 @@ def _render_capacity_editor(facilities: list[str], current_capacities: dict[str,
                             edited_capacities[facility] = new_value
                             has_changes = True
 
-        if has_changes and st.button("💾 Save Capacity", type="primary"):
+        if has_changes and st.button(t(Keys.BTN_SAVE_CAPACITY), type="primary"):
             _save_facility_capacities(edited_capacities)
-            st.success(f"{Icons.SUCCESS} Capacity settings saved")
+            st.success(f"{Icons.SUCCESS} {t(Keys.MSG_CAPACITY_SAVED)}")
             st.rerun()

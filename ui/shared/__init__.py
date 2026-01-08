@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
 from ui.shared.data_loaders import (
     load_category_mappings,
     load_color_aliases,

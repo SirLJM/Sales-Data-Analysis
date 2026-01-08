@@ -8,6 +8,7 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from sales_data.analysis import apply_priority_scoring
 from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
+from ui.i18n import Keys, t
 from ui.shared.data_loaders import (
     load_color_aliases,
     load_model_metadata,
@@ -30,11 +31,11 @@ def render(context: dict) -> None:
         _render_content(context)
     except Exception as e:
         logger.exception("Error in Order Creation")
-        st.error(f"{Icons.ERROR} Error in Order Creation: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_ORDER_CREATION).format(error=str(e))}")
 
 
 def _render_content(context: dict) -> None:
-    st.title("📋 Order Creation")
+    st.title(t(Keys.TITLE_ORDER_CREATION))
 
     st.markdown("---")
     _render_manual_order_input(context)
@@ -44,15 +45,15 @@ def _render_content(context: dict) -> None:
 
 
 def _render_manual_order_input(context: dict) -> None:
-    st.subheader("📝 Manual Order Creation")
+    st.subheader(t(Keys.TITLE_MANUAL_ORDER_CREATION))
 
     with st.form("manual_order_creation_form"):
         manual_model = st.text_input(
-            "Enter Model Code",
-            placeholder="e.g., CH031",
-            help="Enter any model code (5 characters) to create an order.",
+            t(Keys.ENTER_MODEL_CODE),
+            placeholder=t(Keys.ENTER_MODEL_PLACEHOLDER),
+            help=t(Keys.ENTER_MODEL_CODE_HELP),
         )
-        create_clicked = st.form_submit_button("Create Order", type="primary")
+        create_clicked = st.form_submit_button(t(Keys.BTN_CREATE_ORDER), type="primary")
 
     if create_clicked:
         _process_manual_order(manual_model, context)
@@ -60,7 +61,7 @@ def _render_manual_order_input(context: dict) -> None:
 
 def _process_manual_order(manual_model: str, context: dict) -> None:
     if not manual_model:
-        st.warning(f"{Icons.WARNING} Please enter a model code")
+        st.warning(f"{Icons.WARNING} {t(Keys.MSG_ENTER_MODEL_CODE)}")
         return
 
     model_code = manual_model.upper().strip()
@@ -71,27 +72,27 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
     model_skus = df[df["sku"].astype(str).str[:5] == model_code]
 
     if model_skus.empty:
-        st.error(f"{Icons.ERROR} Model '{model_code}' not found in sales data.")
+        st.error(f"{Icons.ERROR} {t(Keys.MODEL_NOT_FOUND).format(model=model_code)}")
         return
 
     # noinspection PyTypeChecker
-    with st.spinner(f"Loading data for model {model_code}..."):
+    with st.spinner(t(Keys.LOADING_DATA_FOR_MODEL).format(model=model_code)):
         sku_summary = _prepare_sku_summary(analyzer, context, settings)
         sku_summary = _add_sku_components(sku_summary)
         model_data = sku_summary[sku_summary["MODEL"] == model_code].copy()
 
         if model_data.empty:
-            st.error(f"{Icons.ERROR} No data found for model '{model_code}'")
+            st.error(f"{Icons.ERROR} {t(Keys.NO_DATA_FOR_MODEL).format(model=model_code)}")
             return
 
         selected_items = _build_selected_items(model_data, model_code)
 
         if selected_items:
             _save_order_to_session(selected_items, model_data)
-            st.success(f"{Icons.SUCCESS} Created order for model {model_code} with {len(selected_items)} colors")
+            st.success(f"{Icons.SUCCESS} {t(Keys.CREATED_ORDER).format(model=model_code, count=len(selected_items))}")
             st.rerun()
         else:
-            st.warning(f"{Icons.WARNING} No items with positive forecast or deficit found for model '{model_code}'")
+            st.warning(f"{Icons.WARNING} {t(Keys.NO_FORECAST_DEFICIT).format(model=model_code)}")
 
 
 def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict) -> pd.DataFrame:
@@ -304,14 +305,14 @@ def _render_order_interface() -> None:
     selected_items = get_session_value(SessionKeys.SELECTED_ORDER_ITEMS)
 
     if not selected_items:
-        st.info(f"{Icons.INFO} No items selected. Use the manual input above or go to Order Recommendations tab.")
+        st.info(f"{Icons.INFO} {t(Keys.NO_ITEMS_SELECTED)}")
         return
 
     models = list({item["model"] for item in selected_items})
 
     if len(models) > 1:
-        st.info(f"Selected items span {len(models)} models. Please select one model to process.")
-        selected_model = st.selectbox("Select model to create order:", options=models)
+        st.info(t(Keys.SELECT_MODEL_TO_PROCESS).format(count=len(models)))
+        selected_model = st.selectbox(t(Keys.SELECT_MODEL_LABEL), options=models)
     else:
         selected_model = models[0]
 
@@ -321,15 +322,15 @@ def _render_order_interface() -> None:
 
 
 def _process_model_order(model: str, selected_items: list[dict]) -> None:
-    st.subheader(f"Order for Model: {model}")
+    st.subheader(t(Keys.ORDER_FOR_MODEL).format(model=model))
 
     pattern_set = _lookup_pattern_set(model)
     if pattern_set is None:
-        st.error(f"{Icons.ERROR} Pattern set '{model}' not found")
-        st.info("Please create a pattern set in the Pattern Optimizer tab with name matching the model code")
+        st.error(f"{Icons.ERROR} {t(Keys.PATTERN_SET_NOT_FOUND).format(model=model)}")
+        st.info(t(Keys.CREATE_PATTERN_SET_HINT))
         return
 
-    st.success(f"{Icons.SUCCESS} Found pattern set: {pattern_set.name}")
+    st.success(f"{Icons.SUCCESS} {t(Keys.FOUND_PATTERN_SET).format(name=pattern_set.name)}")
 
     metadata = _load_model_metadata_for_model(model)
     _display_model_metadata(metadata)
@@ -339,7 +340,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     all_colors = sorted(set(selected_colors + urgent_colors))
 
     if urgent_colors:
-        st.info(f"**Urgent colors:** {', '.join(urgent_colors)}")
+        st.info(t(Keys.URGENT_COLORS).format(colors=', '.join(urgent_colors)))
 
     monthly_agg = _load_monthly_aggregations_cached()
 
@@ -356,7 +357,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     )
 
     st.markdown("---")
-    st.subheader("Order Summary")
+    st.subheader(t(Keys.TITLE_ORDER_SUMMARY))
 
     from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
     render_dataframe_with_aggrid(order_table, height=400, pinned_columns=["Model", "Color"])
@@ -367,7 +368,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     _render_size_distribution_table(pattern_results, model, monthly_agg)
 
     st.markdown("---")
-    st.subheader("Size × Color Production Table")
+    st.subheader(t(Keys.TITLE_SIZE_COLOR_TABLE))
     stock_by_color_size = _get_stock_by_color_size(model)
     _render_size_color_table(pattern_results, pattern_set, stock_by_color_size)
 
@@ -375,20 +376,20 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
 def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results: dict, metadata: dict) -> None:
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("💾 Save to Database"):
+        if st.button(t(Keys.BTN_SAVE_TO_DB)):
             _save_order_to_database(model, order_table, pattern_results, metadata)
     with col2:
         csv = order_table.to_csv(index=False)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         st.download_button(
-            "📥 Download CSV",
+            t(Keys.BTN_DOWNLOAD_ORDER_CSV),
             csv,
             f"order_{model}_{timestamp}.csv",
             MimeTypes.TEXT_CSV,
             key=f"download_order_{model}",
         )
     with col3:
-        if st.button(f"{Icons.ERROR} Cancel"):
+        if st.button(f"{Icons.ERROR} {t(Keys.BTN_CANCEL)}"):
             st.session_state[SessionKeys.SELECTED_ORDER_ITEMS] = []
             st.rerun()
 
@@ -466,13 +467,13 @@ def _render_size_distribution_table(
 
     df = pd.DataFrame(data)
 
-    st.subheader("Size Distribution")
+    st.subheader(t(Keys.TITLE_SIZE_DISTRIBUTION))
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.caption("All colors combined + last 3 months sales history")
+        st.caption(t(Keys.CAPTION_SIZE_DISTRIBUTION))
         st.dataframe(df, hide_index=True)
     with col2:
-        st.metric("Total Qty", total_qty)
+        st.metric(t(Keys.LABEL_TOTAL_QTY), total_qty)
         check_color = "green" if abs(total_pct - 100.0) < 0.1 else "red"
         st.markdown(f"**Sum: <span style='color:{check_color}'>{total_pct:.1f}%</span>**", unsafe_allow_html=True)
 
@@ -537,7 +538,7 @@ def _build_styled_html_table(
 
 def _render_copy_button(tsv_data: str) -> None:
     from st_copy_to_clipboard import st_copy_to_clipboard
-    st_copy_to_clipboard(tsv_data, "📋 Copy table to clipboard")
+    st_copy_to_clipboard(tsv_data, t(Keys.BTN_COPY_TABLE))
 
 
 def _lookup_pattern_set(model: str) -> PatternSet | None:
@@ -575,7 +576,7 @@ def _optimize_color_pattern(
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
-        st.warning(f"No recommendations data available for {model}-{color}")
+        st.warning(t(Keys.NO_RECOMMENDATIONS_DATA).format(model=model, color=color))
         return _get_empty_optimization_result()
 
     priority_skus = recommendations_data["priority_skus"]
@@ -625,15 +626,16 @@ def _load_model_metadata_for_model(model: str) -> dict:
 
 
 def _display_model_metadata(metadata: dict) -> None:
+    na_value = t(Keys.NA)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Primary Facility", metadata.get("szwalnia_glowna", "N/A") or "N/A")
+        st.metric(t(Keys.LABEL_PRIMARY_FACILITY), metadata.get("szwalnia_glowna", na_value) or na_value)
     with col2:
-        st.metric("Secondary Facility", metadata.get("szwalnia_druga", "N/A") or "N/A")
+        st.metric(t(Keys.LABEL_SECONDARY_FACILITY), metadata.get("szwalnia_druga", na_value) or na_value)
     with col3:
-        st.metric("Material Type", metadata.get("rodzaj_materialu", "N/A") or "N/A")
+        st.metric(t(Keys.LABEL_MATERIAL_TYPE), metadata.get("rodzaj_materialu", na_value) or na_value)
     with col4:
-        st.metric("Material Weight", metadata.get("gramatura", "N/A") or "N/A")
+        st.metric(t(Keys.LABEL_MATERIAL_WEIGHT), metadata.get("gramatura", na_value) or na_value)
 
 
 def _load_last_4_months_sales(
@@ -646,7 +648,7 @@ def _load_last_4_months_sales(
             return pd.DataFrame()
         return SalesAnalyzer.get_last_n_months_sales_by_color(monthly_agg, model, colors, months=4)
     except Exception as e:
-        st.warning(f"Could not load sales history: {e}")
+        st.warning(t(Keys.MSG_COULD_NOT_LOAD_SALES).format(error=str(e)))
         return pd.DataFrame()
 
 
@@ -867,11 +869,11 @@ def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_resul
         success = save_order(order_data)
 
         if success:
-            st.success(f"{Icons.SUCCESS} Order {order_id} saved successfully!")
+            st.success(f"{Icons.SUCCESS} {t(Keys.MSG_ORDER_SAVED).format(order_id=order_id)}")
             st.session_state[SessionKeys.SELECTED_ORDER_ITEMS] = []
         else:
-            st.error(f"{Icons.ERROR} Failed to save order")
+            st.error(f"{Icons.ERROR} {t(Keys.MSG_ORDER_SAVE_FAILED)}")
 
     except Exception as e:
         logger.exception("Error saving order")
-        st.error(f"{Icons.ERROR} Error saving order: {e}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_SAVING_ORDER).format(error=str(e))}")

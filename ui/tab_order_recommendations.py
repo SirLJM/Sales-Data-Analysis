@@ -5,6 +5,7 @@ import streamlit as st
 
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
+from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_color_aliases, load_model_metadata
 from ui.shared.session_manager import get_session_value, get_settings, set_session_value
 from utils.logging_config import get_logger
@@ -17,14 +18,12 @@ def render(context: dict) -> None:
         _render_content(context)
     except Exception as e:
         logger.exception("Error in Order Recommendations")
-        st.error(f"{Icons.ERROR} Error in Order Recommendations: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.ERR_ORDER_RECOMMENDATIONS).format(error=str(e))}")
 
 
 def _render_content(context: dict) -> None:
-    st.title("🎯 Order Recommendations")
-    st.write(
-        "Automatically prioritize which models and colors to order based on stock levels, forecasts, and ROP thresholds."
-    )
+    st.title(t(Keys.TITLE_ORDER_RECOMMENDATIONS))
+    st.write(t(Keys.ORDER_RECOMMENDATIONS_DESC))
 
     _initialize_tab_session_state()
 
@@ -33,7 +32,7 @@ def _render_content(context: dict) -> None:
     forecast_df = context.get("forecast_df")
 
     if not stock_loaded or not use_forecast or forecast_df is None:
-        st.warning(f"{Icons.WARNING} Please load both stock and forecast data in Tab 1 to use this feature.")
+        st.warning(f"{Icons.WARNING} {t(Keys.LOAD_STOCK_AND_FORECAST)}")
         return
 
     _render_parameters_expander()
@@ -61,8 +60,8 @@ def _initialize_tab_session_state() -> None:
 def _render_parameters_expander() -> None:
     settings = get_settings()
 
-    with st.expander("⚙️ Recommendation Parameters", expanded=False):
-        st.caption("Adjust these parameters to tune the priority scoring algorithm")
+    with st.expander(t(Keys.TITLE_RECOMMENDATION_PARAMS), expanded=False):
+        st.caption(t(Keys.RECOMMENDATION_PARAMS_HELP))
 
         _render_priority_weights(settings)
         _render_type_multipliers(settings)
@@ -70,38 +69,38 @@ def _render_parameters_expander() -> None:
 
 
 def _render_priority_weights(settings: dict) -> None:
-    st.write("**Priority Weights** (contribution to final score)")
+    st.write(f"**{t(Keys.PRIORITY_WEIGHTS)}**")
     w_col1, w_col2, w_col3 = st.columns(3)
 
     with w_col1:
         weight_stockout = st.slider(
-            "Stockout Risk",
+            t(Keys.STOCKOUT_RISK),
             0.0, 1.0,
             settings["order_recommendations"]["priority_weights"]["stockout_risk"],
             0.05,
             key="weight_stockout",
-            help="Weight for stockout risk factor in priority calculation. Higher values prioritize items at risk of stockout.",
+            help=t(Keys.HELP_WEIGHT_STOCKOUT),
         )
     with w_col2:
         weight_revenue = st.slider(
-            "Revenue Impact",
+            t(Keys.REVENUE_IMPACT),
             0.0, 1.0,
             settings["order_recommendations"]["priority_weights"]["revenue_impact"],
             0.05,
             key="weight_revenue",
-            help="Weight for revenue impact in priority calculation. Higher values prioritize high-revenue items.",
+            help=t(Keys.HELP_WEIGHT_REVENUE),
         )
     with w_col3:
         weight_demand = st.slider(
-            "Demand Forecast",
+            t(Keys.DEMAND_FORECAST),
             0.0, 1.0,
             settings["order_recommendations"]["priority_weights"]["demand_forecast"],
             0.05,
             key="weight_demand",
-            help="Weight for demand forecast in priority calculation. Higher values prioritize items with high forecasted demand.",
+            help=t(Keys.HELP_WEIGHT_DEMAND),
         )
 
-    st.caption(f"Current weights sum: {weight_stockout + weight_revenue + weight_demand:.2f} (ideally 1.0)")
+    st.caption(t(Keys.CURRENT_WEIGHTS_SUM).format(sum=weight_stockout + weight_revenue + weight_demand))
 
     settings["order_recommendations"]["priority_weights"]["stockout_risk"] = weight_stockout
     settings["order_recommendations"]["priority_weights"]["revenue_impact"] = weight_revenue
@@ -109,36 +108,36 @@ def _render_priority_weights(settings: dict) -> None:
 
 
 def _render_type_multipliers(settings: dict) -> None:
-    st.write("**Type Multipliers** (priority boost by product type)")
+    st.write(f"**{t(Keys.TYPE_MULTIPLIERS)}**")
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 
     with m_col1:
         mult_new = st.slider(
-            "New Products", 0.5, 2.0,
+            t(Keys.NEW_PRODUCTS), 0.5, 2.0,
             settings["order_recommendations"]["type_multipliers"]["new"],
             0.1, key="mult_new",
-            help="Multiplier for new products (< 12 months). Values > 1.0 increase priority.",
+            help=t(Keys.HELP_MULT_NEW),
         )
     with m_col2:
         mult_seasonal = st.slider(
-            "Seasonal", 0.5, 2.0,
+            t(Keys.TYPE_SEASONAL), 0.5, 2.0,
             settings["order_recommendations"]["type_multipliers"]["seasonal"],
             0.1, key="mult_seasonal",
-            help="Multiplier for seasonal products (CV > 1.0).",
+            help=t(Keys.HELP_MULT_SEASONAL),
         )
     with m_col3:
         mult_regular = st.slider(
-            "Regular", 0.5, 2.0,
+            t(Keys.TYPE_REGULAR), 0.5, 2.0,
             settings["order_recommendations"]["type_multipliers"]["regular"],
             0.1, key="mult_regular",
-            help="Multiplier for regular products (0.6 < CV < 1.0).",
+            help=t(Keys.HELP_MULT_REGULAR),
         )
     with m_col4:
         mult_basic = st.slider(
-            "Basic", 0.5, 2.0,
+            t(Keys.TYPE_BASIC), 0.5, 2.0,
             settings["order_recommendations"]["type_multipliers"]["basic"],
             0.1, key="mult_basic",
-            help="Multiplier for basic products (CV < 0.6).",
+            help=t(Keys.HELP_MULT_BASIC),
         )
 
     settings["order_recommendations"]["type_multipliers"]["new"] = mult_new
@@ -148,29 +147,29 @@ def _render_type_multipliers(settings: dict) -> None:
 
 
 def _render_stockout_parameters(settings: dict) -> None:
-    st.write("**Stockout Risk & Other Parameters**")
+    st.write(f"**{t(Keys.STOCKOUT_RISK_PARAMS)}**")
     o_col1, o_col2, o_col3 = st.columns(3)
 
     with o_col1:
         zero_penalty = st.slider(
-            "Zero Stock Penalty", 50, 150,
+            t(Keys.ZERO_STOCK_PENALTY), 50, 150,
             settings["order_recommendations"]["stockout_risk"]["zero_stock_penalty"],
             5, key="zero_penalty",
-            help="Risk score for SKUs with zero stock AND forecasted demand.",
+            help=t(Keys.HELP_ZERO_PENALTY),
         )
     with o_col2:
         below_rop_penalty = st.slider(
-            "Below ROP Max Penalty", 40, 100,
+            t(Keys.BELOW_ROP_PENALTY), 40, 100,
             settings["order_recommendations"]["stockout_risk"]["below_rop_max_penalty"],
             5, key="below_rop_penalty",
-            help="Maximum risk score for items below Reorder Point (ROP).",
+            help=t(Keys.HELP_BELOW_ROP_PENALTY),
         )
     with o_col3:
         demand_cap = st.slider(
-            "Demand Cap", 50, 300,
+            t(Keys.DEMAND_CAP), 50, 300,
             settings["order_recommendations"]["demand_cap"],
             10, key="demand_cap",
-            help="Maximum forecast value used in priority calculation.",
+            help=t(Keys.HELP_DEMAND_CAP),
         )
 
     settings["order_recommendations"]["stockout_risk"]["zero_stock_penalty"] = zero_penalty
@@ -179,11 +178,11 @@ def _render_stockout_parameters(settings: dict) -> None:
 
 
 def _render_facility_filters() -> None:
-    st.write("**Filter by Production Facility**")
+    st.write(f"**{t(Keys.FILTER_BY_FACILITY)}**")
     model_metadata_df = load_model_metadata()
 
     if model_metadata_df is None or ColumnNames.SZWALNIA_G not in model_metadata_df.columns:
-        st.info("Model metadata not available. Showing all items.")
+        st.info(t(Keys.MODEL_METADATA_NOT_AVAILABLE))
         return
 
     unique_facilities = sorted(
@@ -193,18 +192,18 @@ def _render_facility_filters() -> None:
 
     with col_include:
         st.session_state[SessionKeys.SZWALNIA_INCLUDE_FILTER] = st.multiselect(
-            "Include Facilities:",
+            t(Keys.INCLUDE_FACILITIES),
             options=unique_facilities,
             default=st.session_state[SessionKeys.SZWALNIA_INCLUDE_FILTER],
-            help="Select facilities to INCLUDE. Empty = include all.",
+            help=t(Keys.HELP_INCLUDE_FACILITIES),
         )
 
     with col_exclude:
         st.session_state[SessionKeys.SZWALNIA_EXCLUDE_FILTER] = st.multiselect(
-            "Exclude Facilities:",
+            t(Keys.EXCLUDE_FACILITIES),
             options=unique_facilities,
             default=st.session_state[SessionKeys.SZWALNIA_EXCLUDE_FILTER],
-            help="Select facilities to EXCLUDE. Takes precedence over include.",
+            help=t(Keys.HELP_EXCLUDE_FACILITIES),
         )
 
 
@@ -218,16 +217,16 @@ def _render_controls_row() -> None:
             source_options.append(f"ML ({ml_models_count} models)")
 
         st.session_state["forecast_source"] = st.selectbox(
-            "Forecast Source:",
+            t(Keys.FORECAST_SOURCE),
             options=source_options,
             index=0,
             key="forecast_source_select",
-            help="External uses loaded forecast file. ML uses trained ML models from Tab 10.",
+            help=t(Keys.HELP_FORECAST_SOURCE),
         )
 
     with col_top_n:
         top_n = st.slider(
-            "Top priority items:",
+            t(Keys.TOP_PRIORITY_ITEMS),
             min_value=5, max_value=50,
             value=st.session_state[SessionKeys.RECOMMENDATIONS_TOP_N],
             step=5,
@@ -237,13 +236,13 @@ def _render_controls_row() -> None:
     with col_calc:
         st.write("")
         st.write("")
-        if st.button("Generate Recommendations", type="primary"):
+        if st.button(t(Keys.BTN_GENERATE_RECOMMENDATIONS), type="primary"):
             st.session_state["_generate_recommendations"] = True
 
     with col_clear:
         st.write("")
         st.write("")
-        if st.button("Clear", type="secondary"):
+        if st.button(t(Keys.BTN_CLEAR), type="secondary"):
             st.session_state[SessionKeys.RECOMMENDATIONS_DATA] = None
             st.rerun()
 
@@ -275,8 +274,8 @@ def _render_results(context: dict) -> None:
         .head(top_n)
     )
 
-    st.subheader("Top Priority Items to Order")
-    st.caption(f"Showing top {len(top_model_colors)} MODEL+COLOR combinations by priority")
+    st.subheader(t(Keys.TOP_PRIORITY_TO_ORDER))
+    st.caption(t(Keys.SHOWING_TOP_MODEL_COLOR).format(count=len(top_model_colors)))
 
     _render_order_selection_table(top_model_colors, recommendations, model_metadata_df)
     _render_selected_items_actions()
@@ -296,14 +295,14 @@ def _generate_recommendations(context: dict) -> None:
     use_ml = forecast_source.startswith("ML")
 
     # noinspection PyTypeChecker
-    with st.spinner("Calculating order priorities..."):
+    with st.spinner(t(Keys.CALCULATING_PRIORITIES)):
         try:
             sku_summary = _build_sku_summary(analyzer, seasonal_data, stock_df, settings)
 
             if use_ml:
                 forecast_df = _load_ml_forecast(settings)
                 if forecast_df is None or forecast_df.empty:
-                    st.error("No ML forecasts available. Train models first in Tab 10.")
+                    st.error(t(Keys.NO_ML_FORECASTS))
                     return
 
             forecast_time = settings["lead_time"]
@@ -321,11 +320,11 @@ def _generate_recommendations(context: dict) -> None:
             set_session_value(SessionKeys.RECOMMENDATIONS_DATA, recommendations)
             source_label = "ML" if use_ml else "External"
             st.success(
-                f"{Icons.SUCCESS} Analyzed {len(recommendations['priority_skus'])} SKUs using {source_label} forecast - scroll down to view results")
+                f"{Icons.SUCCESS} {t(Keys.ANALYZED_N_SKUS).format(count=len(recommendations['priority_skus']), source=source_label)}")
 
         except Exception as e:
             logger.exception("Error generating recommendations")
-            st.error(f"Error generating recommendations: {e}")
+            st.error(t(Keys.ERR_GENERATING_RECOMMENDATIONS).format(error=e))
 
 
 def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: pd.DataFrame | None,
@@ -531,7 +530,7 @@ def _render_order_selection_table(top_model_colors: pd.DataFrame, recommendation
         sizes_str = (
             ", ".join([f"{size}:{qty}" for size, qty in sorted(size_quantities.items())])
             if size_quantities
-            else "No data"
+            else t(Keys.NO_DATA)
         )
 
         color_name = color_aliases.get(color, color)
@@ -567,8 +566,8 @@ def _render_order_selection_table(top_model_colors: pd.DataFrame, recommendation
         disabled=disabled_cols,
         column_config={
             "Select": st.column_config.CheckboxColumn(
-                "Select",
-                help="Select items to create order",
+                t(Keys.SELECT),
+                help=t(Keys.HELP_SELECT_ITEMS),
                 default=False,
             )
         },
@@ -610,15 +609,15 @@ def _render_selected_items_actions() -> None:
     selected_items = get_session_value(SessionKeys.SELECTED_ORDER_ITEMS)
 
     if selected_items:
-        st.success(f"✓ {len(selected_items)} items selected")
-        if st.button("📋 Create Order", type="primary"):
-            st.info("Please navigate to the 'Order Creation' tab to complete the order")
+        st.success(f"✓ {t(Keys.ITEMS_SELECTED).format(count=len(selected_items))}")
+        if st.button(t(Keys.BTN_CREATE_ORDER), type="primary"):
+            st.info(t(Keys.NAVIGATE_ORDER_CREATION))
     else:
-        st.info("Select items above to create an order")
+        st.info(t(Keys.SELECT_ITEMS_TO_ORDER))
 
 
 def _render_full_summary(recommendations: dict, model_metadata_df: pd.DataFrame | None) -> None:
-    st.subheader("Full Model+Color Priority Summary")
+    st.subheader(t(Keys.FULL_MODEL_COLOR_SUMMARY))
 
     model_color_summary = recommendations["model_color_summary"].copy()
 
@@ -659,7 +658,7 @@ def _render_full_summary(recommendations: dict, model_metadata_df: pd.DataFrame 
     )
 
     st.download_button(
-        "📥 Download Full Priority Report (SKU level)",
+        t(Keys.DOWNLOAD_PRIORITY_REPORT),
         recommendations["priority_skus"].to_csv(index=False),
         "order_priority_report.csv",
         MimeTypes.TEXT_CSV,

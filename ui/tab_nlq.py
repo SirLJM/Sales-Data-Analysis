@@ -7,6 +7,7 @@ import streamlit as st
 
 from nlq import DuckDBExecutor, PostgresExecutor, QueryIntent, QueryParser
 from ui.constants import Config, Icons, MimeTypes
+from ui.i18n import Keys, t
 from ui.shared.data_loaders import load_data, load_forecast, load_stock
 from ui.shared.session_manager import get_data_source
 from utils.logging_config import get_logger
@@ -31,20 +32,20 @@ def render(context: dict) -> None:
         _render_content(context)
     except Exception as e:
         logger.exception("Error in NLQ tab")
-        st.error(f"{Icons.ERROR} Error in Natural Language Query: {str(e)}")
+        st.error(f"{Icons.ERROR} {t(Keys.NLQ_ERROR_IN_TAB).format(error=str(e))}")
 
 
 def _render_content(context: dict) -> None:
-    st.title("🔍 Natural Language Query")
-    st.caption("Query your data using natural language (English or Polish)")
+    st.title(t(Keys.NLQ_TITLE))
+    st.caption(t(Keys.NLQ_CAPTION))
 
     data_source = get_data_source()
     is_database_mode = data_source.get_data_source_type() == "database"
 
     if is_database_mode:
-        st.info("Database mode: queries executed via SQL on PostgreSQL")
+        st.info(t(Keys.NLQ_DATABASE_MODE))
     else:
-        st.info("File mode: queries executed via SQL on DuckDB")
+        st.info(t(Keys.NLQ_FILE_MODE))
 
     sales_df, stock_df, forecast_df, sku_summary_df = _load_data(context)
 
@@ -94,20 +95,20 @@ def _render_query_input(
         parser: QueryParser,
         executor: DuckDBExecutor | PostgresExecutor,
 ) -> None:
-    st.subheader("Enter your query")
+    st.subheader(t(Keys.NLQ_ENTER_QUERY))
 
     query = st.text_input(
-        "Query",
-        placeholder="e.g., sales of model CH086 last 2 years",
+        t(Keys.NLQ_QUERY),
+        placeholder=t(Keys.NLQ_PLACEHOLDER),
         label_visibility="collapsed",
         key="nlq_query_input",
     )
 
     col1, col2, _ = st.columns([1, 1, 4])
     with col1:
-        execute_clicked = st.button("Execute", type="primary", key="nlq_execute")
+        execute_clicked = st.button(t(Keys.NLQ_EXECUTE), type="primary", key="nlq_execute")
     with col2:
-        clear_clicked = st.button("Clear", key="nlq_clear")
+        clear_clicked = st.button(t(Keys.NLQ_CLEAR), key="nlq_clear")
 
     if clear_clicked:
         _clear_session_state()
@@ -130,13 +131,13 @@ def _execute_query(
         parser: QueryParser,
         executor: DuckDBExecutor | PostgresExecutor,
 ) -> None:
-    with st.spinner("Processing query..."):  # type: ignore[attr-defined]
+    with st.spinner(t(Keys.NLQ_PROCESSING)):  # type: ignore[attr-defined]
         intent = parser.parse(query)
         st.session_state["nlq_last_intent"] = intent
 
         if not intent.is_valid():
             _display_interpretation(intent, None)
-            st.warning(f"{Icons.WARNING} Could not understand the query. Please try rephrasing.")
+            st.warning(f"{Icons.WARNING} {t(Keys.NLQ_COULD_NOT_UNDERSTAND)}")
             return
 
         result_df, error, sql = executor.execute(intent)
@@ -165,45 +166,50 @@ def _display_cached_result() -> None:
 
 
 def _display_interpretation(intent: QueryIntent, sql: str | None) -> None:
-    with st.expander("Query interpretation & SQL", expanded=False):
+    with st.expander(t(Keys.NLQ_INTERPRETATION_SQL), expanded=False):
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown(f"**Confidence:** {intent.confidence:.0%}")
-            st.markdown(f"**Interpretation:** {intent.get_description()}")
+            st.markdown(f"**{t(Keys.NLQ_CONFIDENCE)}:** {intent.confidence:.0%}")
+            st.markdown(f"**{t(Keys.NLQ_INTERPRETATION)}:** {intent.get_description()}")
             if intent.confidence < 0.5:
-                st.warning(f"{Icons.WARNING} Low confidence - results may not match your intent")
+                st.warning(f"{Icons.WARNING} {t(Keys.NLQ_LOW_CONFIDENCE)}")
         with col2:
             if sql:
-                st.markdown("**Generated SQL:**")
+                st.markdown(f"**{t(Keys.NLQ_GENERATED_SQL)}:**")
                 st.code(sql, language="sql")
 
 
 def _display_result(result_df: pd.DataFrame | None, intent: QueryIntent | None) -> None:
     if result_df is None or result_df.empty:
-        st.info(f"{Icons.INFO} No results found")
+        st.info(f"{Icons.INFO} {t(Keys.NLQ_NO_RESULTS)}")
         return
 
-    st.subheader("Results")
+    st.subheader(t(Keys.NLQ_RESULTS))
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Rows", len(result_df))
+        st.metric(t(Keys.NLQ_ROWS), len(result_df))
     with col2:
-        st.metric("Columns", len(result_df.columns))
+        st.metric(t(Keys.NLQ_COLUMNS), len(result_df.columns))
 
     row_height = 35
     header_height = 38
     max_height = Config.DATAFRAME_HEIGHT
     calculated_height = min(header_height + len(result_df) * row_height, max_height)
 
-    st.dataframe(result_df, hide_index=True, height=calculated_height, width='stretch')
+    display_df = result_df.copy()
+    for col in display_df.columns:
+        if display_df[col].dtype == object:
+            display_df[col] = display_df[col].astype(str)
+
+    st.dataframe(display_df, hide_index=True, height=calculated_height, width='stretch')
 
     csv = result_df.to_csv(index=False)
     entity = intent.entity_type if intent else "query"
     filename = f"nlq_{entity}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 
     st.download_button(
-        "📥 Download Results (CSV)",
+        t(Keys.NLQ_DOWNLOAD_RESULTS),
         csv,
         filename,
         MimeTypes.TEXT_CSV,
@@ -213,8 +219,8 @@ def _display_result(result_df: pd.DataFrame | None, intent: QueryIntent | None) 
 
 def _render_examples() -> None:
     st.markdown("---")
-    with st.expander("📚 Example queries", expanded=True):
-        st.markdown("Click on any example to copy it to your clipboard:")
+    with st.expander(t(Keys.NLQ_EXAMPLE_QUERIES), expanded=True):
+        st.markdown(t(Keys.NLQ_CLICK_EXAMPLE))
         st.markdown("")
 
         for query, description in EXAMPLE_QUERIES:
