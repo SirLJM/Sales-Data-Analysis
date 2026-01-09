@@ -582,36 +582,42 @@ def _get_stock_by_color_size(model: str) -> dict[tuple[str, str], int]:
     return result
 
 
+def _get_cell_style(
+        col: str, size: str, cell_value: str,
+        color_name_to_code: dict, stock_by_color_size: dict[tuple[str, str], int]
+) -> str:
+    if col == "Size" or not size or str(cell_value) == "":
+        return ""
+    color_code = color_name_to_code.get(col, col)
+    stock = stock_by_color_size.get((color_code, size), -1)
+    if stock == 0:
+        return ' style="background-color: #ffcccc;"'
+    return ""
+
+
 def _build_styled_html_table(
         df: pd.DataFrame, stock_by_color_size: dict[tuple[str, str], int]
 ) -> str:
     color_aliases = load_color_aliases()
     color_name_to_code = {v: k for k, v in color_aliases.items()} if color_aliases else {}
 
+    header_cells = [
+        f'<th>{col}</th>' if i == 0 else f'<th><span>{col}</span></th>'
+        for i, col in enumerate(df.columns)
+    ]
     html = '<table class="rotated-table" border="0">'
-    html += '<thead><tr>'
-    for col in df.columns:
-        html += f'<th>{col}</th>'
-    html += '</tr></thead>'
+    html += f'<thead><tr>{"".join(header_cells)}</tr></thead>'
 
-    html += '<tbody>'
+    rows = []
     for _, row in df.iterrows():
-        html += '<tr>'
         size = row.get("Size", "")
-        for col in df.columns:
-            cell_value = row[col]
-            cell_style = ""
+        cells = [
+            f'<td{_get_cell_style(col, size, row[col], color_name_to_code, stock_by_color_size)}>{row[col]}</td>'
+            for col in df.columns
+        ]
+        rows.append(f'<tr>{"".join(cells)}</tr>')
 
-            if col != "Size" and size and str(cell_value) != "":
-                color_code = color_name_to_code.get(col, col)
-                stock = stock_by_color_size.get((color_code, size), -1)
-                if stock == 0:
-                    cell_style = ' style="background-color: #ffcccc;"'
-
-            html += f'<td{cell_style}>{cell_value}</td>'
-        html += '</tr>'
-    html += '</tbody></table>'
-
+    html += f'<tbody>{"".join(rows)}</tbody></table>'
     return html
 
 

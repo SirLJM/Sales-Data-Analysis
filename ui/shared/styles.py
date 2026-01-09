@@ -98,17 +98,46 @@ PATTERN_SECTION_STYLE: Final[str] = """
 ROTATED_TABLE_STYLE: Final[str] = """
 <style>
 .rotated-table { overflow-x: auto; }
-.rotated-table table { border-collapse: collapse; font-size: 12px; }
+.rotated-table table { border-collapse: collapse; font-size: 11px; table-layout: fixed; }
 .rotated-table th, .rotated-table td {
     border: 1px solid var(--border-color, #ddd);
-    padding: 8px;
+    padding: 2px;
     text-align: center;
+    line-height: 1.2;
+    overflow: hidden;
+}
+.rotated-table td {
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
+}
+.rotated-table th:first-child, .rotated-table td:first-child {
+    width: 60px;
+    min-width: 60px;
+    max-width: 60px;
 }
 .rotated-table th:not(:first-child) {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
+    width: 22px;
+    min-width: 22px;
+    max-width: 22px;
+    height: 150px;
+    vertical-align: bottom;
+    padding: 0;
+    position: relative;
+    overflow: visible;
+}
+.rotated-table th:not(:first-child) span {
+    display: block;
+    width: 100px;
+    text-align: left;
+    position: absolute;
+    left: 10%;
+    bottom: 0;
+    transform: rotate(-90deg) translateX(-15%);
+    transform-origin: left top;
     white-space: nowrap;
-    min-height: 150px;
+    font-size: 10px;
+    padding: 2px;
 }
 </style>
 """
