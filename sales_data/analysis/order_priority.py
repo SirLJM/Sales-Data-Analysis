@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 
 from .inventory_metrics import calculate_forecast_date_range
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_order_priority(
@@ -11,6 +15,7 @@ def calculate_order_priority(
     forecast_time_months: float = 5,
     settings: dict | None = None,
 ) -> pd.DataFrame:
+    logger.info("Calculating order priority for %d items", len(summary_df))
     if settings is None:
         from utils.settings_manager import load_settings
         settings = load_settings()
@@ -50,6 +55,7 @@ def _validate_required_columns(df: pd.DataFrame) -> None:
     required_cols = ["SKU", "STOCK", "ROP", "TYPE"]
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
+        logger.error("Missing required columns: %s", missing_cols)
         raise ValueError(f"Missing required columns: {missing_cols}")
 
 
@@ -72,6 +78,7 @@ def _add_forecast_leadtime(
 
     forecast_sum = forecast_window.groupby("sku", observed=True)["forecast"].sum().reset_index()
     forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
+
     df = df.merge(forecast_sum, on="SKU", how="left")
     df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
     return df
@@ -94,6 +101,7 @@ def _calculate_stockout_risk(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     df.loc[below_rop_mask, "STOCKOUT_RISK"] = (
         (df["ROP"] - df["STOCK"]) / df["ROP"] * config["below_rop_max"]
     )
+
     return df
 
 
@@ -122,6 +130,7 @@ def _calculate_priority_score(df: pd.DataFrame, config: dict) -> pd.DataFrame:
         + (df["REVENUE_IMPACT"] * config["weight_revenue"])
         + (df["FORECAST_LEADTIME"].clip(upper=config["demand_cap"]) * config["weight_demand"])
     ) * df["TYPE_MULTIPLIER"]
+
     return df
 
 
@@ -224,6 +233,8 @@ def generate_order_recommendations(
                 "size_quantities": size_breakdown,
             }
         )
+
+    logger.info("Generated %d order recommendations", len(top_recommendations))
 
     return {
         "priority_skus": priority_df,

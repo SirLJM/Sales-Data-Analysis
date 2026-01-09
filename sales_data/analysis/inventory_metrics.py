@@ -82,7 +82,8 @@ def calculate_safety_stock_and_rop(
         df["ROP_OUT"] = df["ROP_OUT"].round(2)
 
     base_cols = ["MONTHS", "QUANTITY", AVERAGE_SALES, "SD", "CV", "TYPE", "SS", "ROP"]
-    return df[[id_column] + base_cols]
+    result = df[[id_column] + base_cols]
+    return result
 
 
 def calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Timestamp, pd.Timestamp]:

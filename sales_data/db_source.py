@@ -43,6 +43,7 @@ class DatabaseSource(DataSource):
     def load_sales_data(
             self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
+        logger.info("Loading sales data from database")
 
         query = """
                 SELECT order_id,
@@ -77,9 +78,11 @@ class DatabaseSource(DataSource):
         if not df.empty and "data" in df.columns:
             df["data"] = pd.to_datetime(df["data"])
 
+        logger.info("Loaded %d sales rows from database", len(df))
         return df
 
     def load_stock_data(self, snapshot_date: datetime | None = None) -> pd.DataFrame:
+        logger.info("Loading stock data from database")
 
         if snapshot_date is not None:
             query = """
@@ -122,6 +125,7 @@ class DatabaseSource(DataSource):
             with self.engine.connect() as conn:
                 df = pd.read_sql_query(text(query), conn, params=params)
 
+            logger.info("Loaded %d stock rows from database", len(df))
             return df
         except Exception as e:
             logger.error("Failed to load stock data: %s", e)
@@ -130,6 +134,7 @@ class DatabaseSource(DataSource):
     def load_stock_history(
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
+        logger.info("Loading stock history from database")
         query = """
                 SELECT sku,
                        product_name    as nazwa,
@@ -166,12 +171,14 @@ class DatabaseSource(DataSource):
             if not df.empty and "snapshot_date" in df.columns:
                 df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
 
+            logger.info("Loaded %d stock history rows from database", len(df))
             return df
         except Exception as e:
             logger.error("Failed to load stock history: %s", e)
             return pd.DataFrame()
 
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
+        logger.info("Loading forecast data from database")
 
         if generated_date is not None:
             query = """
@@ -211,6 +218,7 @@ class DatabaseSource(DataSource):
             if not df.empty and "data" in df.columns:
                 df["data"] = pd.to_datetime(df["data"])
 
+            logger.info("Loaded %d forecast rows from database", len(df))
             return df
         except Exception as e:
             logger.error("Failed to load forecast data: %s", e)
@@ -219,6 +227,7 @@ class DatabaseSource(DataSource):
     def get_sku_statistics(
             self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
+        logger.info("Loading SKU statistics from database")
 
         if force_recompute:
             return self._compute_sku_statistics(entity_type)
@@ -258,14 +267,16 @@ class DatabaseSource(DataSource):
         if "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
-                logger.info("Settings changed, recomputing statistics...")
+                logger.info("Settings changed, recomputing statistics")
                 return self._compute_sku_statistics(entity_type)
 
+        logger.info("Loaded %d SKU statistics rows from database", len(df))
         return df
 
     def get_order_priorities(
             self, top_n: int | None = None, force_recompute: bool = False
     ) -> pd.DataFrame:
+        logger.info("Loading order priorities from database")
 
         if force_recompute:
             return self._compute_order_priorities(top_n)
@@ -306,14 +317,16 @@ class DatabaseSource(DataSource):
         if "configuration_hash" in df.columns:
             cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
             if cached_hash != current_hash:
-                logger.info("Settings changed, recomputing priorities...")
+                logger.info("Settings changed, recomputing priorities")
                 return self._compute_order_priorities(top_n)
 
+        logger.info("Loaded %d order priority rows from database", len(df))
         return df
 
     def get_monthly_aggregations(
             self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
+        logger.info("Loading monthly aggregations from database")
 
         query = """
                 SELECT entity_type,
@@ -334,12 +347,10 @@ class DatabaseSource(DataSource):
             df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
         if df.empty and not force_recompute:
-            logger.warning(
-                "Materialized view mv_valid_monthly_aggs is empty for %s, falling back to file computation",
-                entity_type)
+            logger.warning("Materialized view mv_valid_monthly_aggs is empty, falling back to file computation")
             return self._compute_monthly_aggregations(entity_type)
 
-        logger.debug("Using database monthly aggregations for %s: %d rows", entity_type, len(df))
+        logger.info("Loaded %d monthly aggregation rows from database", len(df))
         return df
 
     @staticmethod
@@ -388,6 +399,7 @@ class DatabaseSource(DataSource):
         return file_source.get_monthly_aggregations(entity_type, force_recompute=True)
 
     def load_model_metadata(self) -> pd.DataFrame | None:
+        logger.info("Loading model metadata from database")
         query = """
                 SELECT model,
                        primary_production,
@@ -414,8 +426,7 @@ class DatabaseSource(DataSource):
                 "GRAMATURA",
             ]
 
-            logger.debug("Loaded %d models with metadata from database", len(df))
-
+            logger.info("Loaded %d model metadata rows from database", len(df))
             return df
 
         except Exception as e:
@@ -423,6 +434,7 @@ class DatabaseSource(DataSource):
             return None
 
     def load_size_aliases(self) -> dict[str, str]:
+        logger.info("Loading size aliases from database")
         query = """
                 SELECT size_code, size_alias
                 FROM size_aliases
@@ -437,13 +449,16 @@ class DatabaseSource(DataSource):
                 logger.warning("No size aliases found in database")
                 return {}
 
-            return dict(zip(df["size_code"], df["size_alias"]))
+            result = dict(zip(df["size_code"], df["size_alias"]))
+            logger.info("Loaded %d size aliases from database", len(result))
+            return result
 
         except Exception as e:
             logger.error("Failed to load size aliases from database: %s", e)
             return {}
 
     def load_color_aliases(self) -> dict[str, str]:
+        logger.info("Loading color aliases from database")
         query = """
                 SELECT color_code, color_name
                 FROM color_aliases
@@ -458,13 +473,16 @@ class DatabaseSource(DataSource):
                 logger.warning("No color aliases found in database")
                 return {}
 
-            return dict(zip(df["color_code"], df["color_name"]))
+            result = dict(zip(df["color_code"], df["color_name"]))
+            logger.info("Loaded %d color aliases from database", len(result))
+            return result
 
         except Exception as e:
             logger.error("Failed to load color aliases from database: %s", e)
             return {}
 
     def load_category_mappings(self) -> pd.DataFrame:
+        logger.info("Loading category mappings from database")
         query = """
             SELECT
                 model,
@@ -485,6 +503,7 @@ class DatabaseSource(DataSource):
                 return pd.DataFrame()
 
             df.columns = ["Model", "Grupa", "Podgrupa", "Kategoria", "Nazwa"]
+            logger.info("Loaded %d category mappings from database", len(df))
             return df
 
         except Exception as e:

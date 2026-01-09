@@ -13,6 +13,7 @@ def generate_weekly_new_products_analysis(
         lookback_days: int = 60,
         reference_date: datetime | None = None,
 ) -> pd.DataFrame:
+
     def get_week_start_wednesday(date: datetime) -> datetime:
         days_since_wed = (date.weekday() - 2) % 7
         return date - timedelta(days=days_since_wed)

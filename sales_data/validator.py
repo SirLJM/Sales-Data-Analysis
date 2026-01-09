@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 DFRAME_EMPTY = "DataFrame is empty"
 
@@ -37,7 +40,6 @@ class DataValidator:
 
     @staticmethod
     def validate_sales_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
-
         errors = []
 
         missing_columns = DataValidator.SALES_COLUMNS - set(df.columns)
@@ -61,7 +63,6 @@ class DataValidator:
 
     @staticmethod
     def validate_stock_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
-
         errors = []
 
         missing_columns = DataValidator.STOCK_COLUMNS - set(df.columns)
@@ -87,7 +88,6 @@ class DataValidator:
 
     @staticmethod
     def validate_forecast_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
-
         errors = []
 
         missing_columns = DataValidator.FORECAST_COLUMNS - set(df.columns)
@@ -105,7 +105,6 @@ class DataValidator:
 
     @staticmethod
     def validate_model_metadata(df: pd.DataFrame) -> tuple[bool, list[str]]:
-
         errors = []
 
         missing_columns = DataValidator.MODEL_METADATA_COLUMNS - set(df.columns)
@@ -224,7 +223,8 @@ class DataValidator:
                     return sheet_name
 
             wb.close()
-            return wb.sheetnames[0] if wb.sheetnames else "Sheet1"
+            default = wb.sheetnames[0] if wb.sheetnames else "Sheet1"
+            return default
         except FileNotFoundError:
             raise FileNotFoundError(f"File not found: {file_path}")
         except PermissionError:
@@ -234,7 +234,6 @@ class DataValidator:
 
     @staticmethod
     def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> dict[str, Any]:
-
         summary: dict[str, Any] = {
             "rows": len(df),
             "columns": len(df.columns),

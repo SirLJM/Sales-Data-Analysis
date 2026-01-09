@@ -41,7 +41,8 @@ def calculate_size_priorities(
         return {}
 
     normalized = size_sales / size_sales.max()
-    return normalized.to_dict()
+    result = normalized.to_dict()
+    return result
 
 
 def calculate_size_sales_history(
@@ -86,7 +87,8 @@ def calculate_size_sales_history(
             aliased[alias] = aliased.get(alias, 0) + int(sales)
         return aliased
 
-    return {str(k): int(v) for k, v in size_sales.items()}
+    result = {str(k): int(v) for k, v in size_sales.items()}
+    return result
 
 
 def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:

@@ -32,6 +32,8 @@ def _render_content(context: dict) -> None:
     forecast_df = context.get("forecast_df")
 
     if not stock_loaded or not use_forecast or forecast_df is None:
+        logger.warning("Required data not loaded: stock_loaded=%s, use_forecast=%s, forecast_df=%s",
+                       stock_loaded, use_forecast, forecast_df is not None)
         st.warning(f"{Icons.WARNING} {t(Keys.LOAD_STOCK_AND_FORECAST)}")
         return
 
@@ -237,12 +239,14 @@ def _render_controls_row() -> None:
         st.write("")
         st.write("")
         if st.button(t(Keys.BTN_GENERATE_RECOMMENDATIONS), type="primary"):
+            logger.info("Generate Recommendations button clicked, top_n=%d", top_n)
             st.session_state["_generate_recommendations"] = True
 
     with col_clear:
         st.write("")
         st.write("")
         if st.button(t(Keys.BTN_CLEAR), type="secondary"):
+            logger.info("Clear recommendations button clicked")
             st.session_state[SessionKeys.RECOMMENDATIONS_DATA] = None
             st.rerun()
 
@@ -285,6 +289,7 @@ def _render_results(context: dict) -> None:
 
 
 def _generate_recommendations(context: dict) -> None:
+    logger.info("Starting recommendation generation")
     analyzer = context["analyzer"]
     seasonal_data = context["seasonal_data"]
     stock_df = context.get("stock_df")
@@ -300,10 +305,13 @@ def _generate_recommendations(context: dict) -> None:
             sku_summary = _build_sku_summary(analyzer, seasonal_data, stock_df, settings)
 
             if use_ml:
+                logger.info("Loading ML forecast data")
                 forecast_df = _load_ml_forecast(settings)
                 if forecast_df is None or forecast_df.empty:
+                    logger.warning("No ML forecasts available")
                     st.error(t(Keys.NO_ML_FORECASTS))
                     return
+                logger.info("ML forecast loaded: %d rows", len(forecast_df))
 
             forecast_time = settings["lead_time"]
             recommendations = SalesAnalyzer.generate_order_recommendations(
@@ -313,12 +321,16 @@ def _generate_recommendations(context: dict) -> None:
                 top_n=st.session_state[SessionKeys.RECOMMENDATIONS_TOP_N],
                 settings=settings,
             )
+            logger.info("Recommendations generated: %d priority SKUs, %d model-color combinations",
+                        len(recommendations['priority_skus']), len(recommendations['model_color_summary']))
 
             recommendations = _filter_active_orders(recommendations)
             recommendations = _apply_facility_filters(recommendations)
 
             set_session_value(SessionKeys.RECOMMENDATIONS_DATA, recommendations)
             source_label = "ML" if use_ml else "External"
+            logger.info("Recommendations finalized: %d SKUs from %s source",
+                        len(recommendations['priority_skus']), source_label)
             st.success(
                 f"{Icons.SUCCESS} {t(Keys.ANALYZED_N_SKUS).format(count=len(recommendations['priority_skus']), source=source_label)}")
 

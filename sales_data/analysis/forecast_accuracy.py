@@ -142,7 +142,8 @@ def _calculate_mape(df: pd.DataFrame) -> float:
     if valid.empty:
         return np.nan
     ape = np.abs(valid["actual"] - valid["forecast"]) / valid["actual"]
-    return round(ape.mean() * 100, 2)
+    result = round(ape.mean() * 100, 2)
+    return result
 
 
 def _calculate_bias(df: pd.DataFrame) -> float:
@@ -152,7 +153,8 @@ def _calculate_bias(df: pd.DataFrame) -> float:
     if valid.empty:
         return np.nan
     pe = (valid["forecast"] - valid["actual"]) / valid["actual"]
-    return round(pe.mean() * 100, 2)
+    result = round(pe.mean() * 100, 2)
+    return result
 
 
 def _calculate_mae(df: pd.DataFrame) -> float:
@@ -185,7 +187,8 @@ def calculate_forecast_accuracy(
         return pd.DataFrame()
 
     entity_col = "model" if entity_type == "model" else "sku"
-    return calculate_accuracy_metrics(comparison, entity_col)
+    result = calculate_accuracy_metrics(comparison, entity_col)
+    return result
 
 
 def aggregate_accuracy_by_product_type(
@@ -282,7 +285,8 @@ def find_historical_forecast(
     if not matching:
         return None
 
-    return min(matching, key=lambda x: abs((x[1] - target_generated_date).days))
+    result = min(matching, key=lambda x: abs((x[1] - target_generated_date).days))
+    return result
 
 
 def get_overall_metrics(accuracy_df: pd.DataFrame) -> dict:
@@ -302,7 +306,7 @@ def get_overall_metrics(accuracy_df: pd.DataFrame) -> dict:
     valid_mape = accuracy_df[accuracy_df["MAPE"].notna()]["MAPE"]
     valid_bias = accuracy_df[accuracy_df["BIAS"].notna()]["BIAS"]
 
-    return {
+    result = {
         "mape": round(valid_mape.mean(), 2) if not valid_mape.empty else None,
         "bias": round(valid_bias.mean(), 2) if not valid_bias.empty else None,
         "mae": round(accuracy_df["MAE"].mean(), 2),
@@ -313,3 +317,5 @@ def get_overall_metrics(accuracy_df: pd.DataFrame) -> dict:
         "total_days_analyzed": int(accuracy_df["DAYS_ANALYZED"].sum()),
         "total_days_stockout": int(accuracy_df["DAYS_STOCKOUT"].sum()),
     }
+
+    return result

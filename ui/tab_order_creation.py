@@ -22,6 +22,7 @@ from utils.logging_config import get_logger
 from utils.pattern_optimizer import PatternSet, get_min_order_per_pattern, load_pattern_sets
 
 TOTAL_PATTERNS = "Total Patterns"
+_MSG_NO_RECOMMENDATIONS = "No recommendations data in session"
 
 logger = get_logger("tab_order_creation")
 
@@ -72,6 +73,7 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
     model_skus = df[df["sku"].astype(str).str[:5] == model_code]
 
     if model_skus.empty:
+        logger.warning("No SKUs found for model '%s'", model_code)
         st.error(f"{Icons.ERROR} {t(Keys.MODEL_NOT_FOUND).format(model=model_code)}")
         return
 
@@ -82,16 +84,19 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
         model_data = sku_summary[sku_summary["MODEL"] == model_code].copy()
 
         if model_data.empty:
+            logger.warning("No data found for model '%s' after filtering", model_code)
             st.error(f"{Icons.ERROR} {t(Keys.NO_DATA_FOR_MODEL).format(model=model_code)}")
             return
 
         selected_items = _build_selected_items(model_data, model_code)
 
         if selected_items:
+            logger.info("Order created for model '%s' with %d items", model_code, len(selected_items))
             _save_order_to_session(selected_items, model_data)
             st.success(f"{Icons.SUCCESS} {t(Keys.CREATED_ORDER).format(model=model_code, count=len(selected_items))}")
             st.rerun()
         else:
+            logger.warning("No items with forecast/deficit found for model '%s'", model_code)
             st.warning(f"{Icons.WARNING} {t(Keys.NO_FORECAST_DEFICIT).format(model=model_code)}")
 
 
@@ -107,11 +112,13 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         forecast_df = _load_forecast_data()
 
     sku_summary = analyzer.aggregate_by_sku()
+
     sku_summary = analyzer.classify_sku_type(
         sku_summary,
         cv_basic=settings["cv_thresholds"]["basic"],
         cv_seasonal=settings["cv_thresholds"]["seasonal"],
     )
+
     sku_summary = analyzer.calculate_safety_stock_and_rop(
         sku_summary,
         seasonal_data,
@@ -137,6 +144,7 @@ def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) 
 
     stock_df_sku_level = _prepare_stock_df(stock_df)
     if stock_df_sku_level is None or ColumnNames.STOCK not in stock_df_sku_level.columns:
+        logger.warning("Prepared stock data missing STOCK column, adding defaults")
         _add_default_stock_columns(sku_summary)
         return sku_summary
 
@@ -273,7 +281,8 @@ def _build_selected_items(model_data: pd.DataFrame, model_code: str) -> list[dic
         color_data: pd.DataFrame = model_data[model_data["COLOR"] == color]
         size_quantities = _build_size_quantities(color_data)
         if size_quantities:
-            selected_items.append(_create_color_item(color_data, model_code, color, size_quantities))
+            item = _create_color_item(color_data, model_code, color, size_quantities)
+            selected_items.append(item)
     return selected_items
 
 
@@ -326,6 +335,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
 
     pattern_set = _lookup_pattern_set(model)
     if pattern_set is None:
+        logger.warning("Pattern set not found for model '%s'", model)
         st.error(f"{Icons.ERROR} {t(Keys.PATTERN_SET_NOT_FOUND).format(model=model)}")
         st.info(t(Keys.CREATE_PATTERN_SET_HINT))
         return
@@ -333,7 +343,12 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     st.success(f"{Icons.SUCCESS} {t(Keys.FOUND_PATTERN_SET).format(name=pattern_set.name)}")
 
     metadata = _load_model_metadata_for_model(model)
-    _display_model_metadata(metadata)
+
+    col_meta, col_img = st.columns([3, 1])
+    with col_meta:
+        _display_model_metadata(metadata)
+    with col_img:
+        _display_model_image(model)
 
     urgent_colors = _find_urgent_colors_for_model(model)
     selected_colors = [item["color"] for item in selected_items]
@@ -350,6 +365,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         pattern_results[color] = result
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
+
     forecast_data = _load_forecast_data_for_colors(model, all_colors)
 
     order_table = _create_order_summary_table(
@@ -661,6 +677,7 @@ def _optimize_color_pattern(
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
+        logger.warning("No recommendations data found for model='%s', color='%s'", model, color)
         st.warning(t(Keys.NO_RECOMMENDATIONS_DATA).format(model=model, color=color))
         return _get_empty_optimization_result()
 
@@ -733,6 +750,7 @@ def _load_last_4_months_sales(
             return pd.DataFrame()
         return SalesAnalyzer.get_last_n_months_sales_by_color(monthly_agg, model, colors, months=4)
     except Exception as e:
+        logger.warning("Error loading sales history: %s", e)
         st.warning(t(Keys.MSG_COULD_NOT_LOAD_SALES).format(error=str(e)))
         return pd.DataFrame()
 
@@ -970,11 +988,34 @@ def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_resul
         success = save_order(order_data)
 
         if success:
+            logger.info("Order saved: order_id='%s', model='%s'", order_id, model)
             st.success(f"{Icons.SUCCESS} {t(Keys.MSG_ORDER_SAVED).format(order_id=order_id)}")
             st.session_state[SessionKeys.SELECTED_ORDER_ITEMS] = []
         else:
+            logger.error("Failed to save order: order_id='%s', model='%s'", order_id, model)
             st.error(f"{Icons.ERROR} {t(Keys.MSG_ORDER_SAVE_FAILED)}")
 
     except Exception as e:
         logger.exception("Error saving order")
         st.error(f"{Icons.ERROR} {t(Keys.ERR_SAVING_ORDER).format(error=str(e))}")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_product_image_data(model: str) -> tuple[str | None, str | None]:
+    from utils.product_image_fetcher import get_product_image_and_url
+
+    return get_product_image_and_url(model)
+
+
+def _display_model_image(model: str) -> None:
+    image_url, product_url = _fetch_product_image_data(model)
+
+    if image_url and product_url:
+        st.markdown(
+            f'<a href="{product_url}" target="_blank">'
+            f'<img src="{image_url}" width="220" style="border-radius: 8px; cursor: pointer;">'
+            f"</a>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("Brak obrazka")

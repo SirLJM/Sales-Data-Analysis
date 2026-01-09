@@ -7,12 +7,18 @@ import streamlit as st
 
 from ui.constants import Config
 from ui.shared.session_manager import get_data_source
+from utils.logging_config import get_logger
+
+logger = get_logger("data_loaders")
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
 def load_data() -> pd.DataFrame:
+    logger.info("Loading sales data")
     data_source = get_data_source()
-    return data_source.load_sales_data()
+    df = data_source.load_sales_data()
+    logger.info("Sales data loaded: %d rows", len(df) if df is not None else 0)
+    return df
 
 
 def _get_stock_cache_key() -> str:
@@ -33,16 +39,20 @@ def load_stock() -> tuple[pd.DataFrame | None, str | None]:
 
 @st.cache_data(ttl=Config.CACHE_TTL)
 def _load_stock_cached(_cache_key: str) -> tuple[pd.DataFrame | None, str | None]:
+    logger.info("Loading stock data (cache_key=%s)", _cache_key)
     data_source = get_data_source()
     stock_dataframe = data_source.load_stock_data()
     if stock_dataframe is not None and not stock_dataframe.empty:
         source = "database" if data_source.get_data_source_type() == "database" else "file"
+        logger.info("Stock data loaded: %d rows from %s", len(stock_dataframe), source)
         return stock_dataframe, source
+    logger.warning("No stock data available")
     return None, None
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
 def load_forecast() -> tuple[pd.DataFrame | None, pd.Timestamp | None, str | None]:
+    logger.info("Loading forecast data")
     data_source = get_data_source()
     forecast_dataframe = data_source.load_forecast_data()
     if forecast_dataframe is not None and not forecast_dataframe.empty:
@@ -54,7 +64,10 @@ def load_forecast() -> tuple[pd.DataFrame | None, pd.Timestamp | None, str | Non
             else:
                 loaded_forecast_date = loaded_date
         source = "database" if data_source.get_data_source_type() == "database" else "file"
+        logger.info("Forecast data loaded: %d rows from %s, generated_date=%s",
+                    len(forecast_dataframe), source, loaded_forecast_date)
         return forecast_dataframe, loaded_forecast_date, source
+    logger.warning("No forecast data available")
     return None, None, None
 
 

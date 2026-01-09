@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 
 from utils.settings_manager import load_settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -122,7 +125,8 @@ def calculate_size_priorities(size_sales_history: dict[str, int] | None) -> dict
     if total_sales == 0:
         return None
 
-    return {size: sales / total_sales for size, sales in size_sales_history.items()}
+    priorities = {size: sales / total_sales for size, sales in size_sales_history.items()}
+    return priorities
 
 
 def _get_empty_result(quantities: dict[str, int]) -> dict:
@@ -155,6 +159,7 @@ def _find_best_solution(
 
         if solution:
             total_excess_calculated = calculate_total_excess(quantities, solution, patterns)
+
             if total_excess_calculated < best_excess:
                 best_excess = total_excess_calculated
                 best_solution = solution
@@ -174,8 +179,10 @@ def _calculate_production(
     produced = dict.fromkeys(quantities, 0)
     for pattern in patterns:
         count = allocation.get(pattern.id, 0)
-        for size, size_count in pattern.sizes.items():
-            produced[size] = produced.get(size, 0) + (count * size_count)
+        if count > 0:
+            for size, size_count in pattern.sizes.items():
+                old_produced = produced.get(size, 0)
+                produced[size] = old_produced + (count * size_count)
     return produced
 
 
@@ -186,6 +193,8 @@ def _find_violations(
     for pattern in patterns:
         count = allocation.get(pattern.id, 0)
         if 0 < count < min_per_pattern:
+            logger.warning("Min order violation: pattern '%s' has count=%d < min=%d",
+                          pattern.name, count, min_per_pattern)
             violations.append((pattern.name, count))
     return violations
 
@@ -198,12 +207,16 @@ def optimize_patterns(
     size_priorities: dict[str, float] | None = None,
     size_sales_history: dict[str, int] | None = None,
 ) -> dict:
+    logger.info("Optimizing patterns: %d sizes, %d patterns, min_order=%d", len(quantities), len(patterns), min_per_pattern)
+
     if not patterns or not any(quantities.values()):
+        logger.warning("Early exit: no patterns (%d) or all quantities are zero", len(patterns))
         return _get_empty_result(quantities)
 
     filtered_quantities, excluded_sizes = filter_low_sales_sizes(quantities, size_sales_history)
 
     if not any(filtered_quantities.values()):
+        logger.warning("All quantities filtered out, returning empty result")
         result = _get_empty_result(quantities)
         result["excluded_sizes"] = excluded_sizes
         return result
@@ -212,7 +225,9 @@ def optimize_patterns(
         size_priorities = calculate_size_priorities(size_sales_history)
 
     best_solution = _find_best_solution(filtered_quantities, patterns, min_per_pattern, size_priorities)
+
     if not best_solution:
+        logger.warning("No solution found via search, falling back to greedy algorithm: %s", algorithm_mode)
         if algorithm_mode == "greedy_classic":
             best_solution = greedy_classic(filtered_quantities, patterns, min_per_pattern, size_priorities)
         else:
@@ -226,7 +241,7 @@ def optimize_patterns(
         produced[size] = 0
         excess[size] = 0
 
-    return {
+    result = {
         "allocation": best_solution,
         "produced": produced,
         "excess": excess,
@@ -238,21 +253,29 @@ def optimize_patterns(
         "excluded_sizes": excluded_sizes,
     }
 
+    logger.info("Optimization result: total_patterns=%d, total_excess=%d, all_covered=%s", result["total_patterns"], result["total_excess"], result["all_covered"])
+
+    return result
+
 
 def _calculate_pattern_score(
     pattern: Pattern, remaining: dict[str, int], size_priorities: dict[str, float] | None = None
 ) -> int:
     score = 0
+
     for size, count in pattern.sizes.items():
         if remaining.get(size, 0) > 0:
             base_score = min(count, remaining[size]) * 10
             if size_priorities and size in size_priorities:
                 priority_bonus = size_priorities[size] * count * 5
-                score += base_score + priority_bonus
+                size_score = base_score + priority_bonus
             else:
-                score += base_score
+                size_score = base_score
+            score += size_score
         else:
-            score -= count
+            penalty = count
+            score -= penalty
+
     return score
 
 
@@ -260,16 +283,20 @@ def _calculate_greedy_score(
     pattern: Pattern, remaining: dict[str, int], size_priorities: dict[str, float] | None = None
 ) -> float:
     score = 0.0
+
     for size, count in pattern.sizes.items():
         if remaining.get(size, 0) > 0:
             base_score = min(count, remaining[size]) * 100 + remaining[size] * 10
             if size_priorities and size in size_priorities:
                 priority_bonus = size_priorities[size] * count * 50
-                score += base_score + priority_bonus
+                size_score = base_score + priority_bonus
             else:
-                score += base_score
+                size_score = base_score
+            score += size_score
         else:
-            score -= count * 1
+            penalty = count * 1
+            score -= penalty
+
     return score
 
 
@@ -288,6 +315,9 @@ def _find_best_pattern_by_score(
             best_score = score
             best_pattern = pattern
 
+    if not best_pattern:
+        logger.warning("No best pattern found!")
+
     return best_pattern
 
 
@@ -305,7 +335,8 @@ def _can_allocate_pattern(
 
 def _update_remaining(remaining: dict[str, int], pattern: Pattern, quantity: int) -> None:
     for size, count in pattern.sizes.items():
-        remaining[size] = remaining.get(size, 0) - (count * quantity)
+        old_val = remaining.get(size, 0)
+        remaining[size] = old_val - (count * quantity)
 
 
 def find_allocation_for_total(
@@ -341,9 +372,12 @@ def find_allocation_for_total(
 
         allocation[best_pattern.id] += to_allocate
         patterns_used += to_allocate
+
         _update_remaining(remaining, best_pattern, to_allocate)
 
-    if all(remaining.get(size, 0) <= 0 for size in quantities):
+    all_covered = all(remaining.get(size, 0) <= 0 for size in quantities)
+
+    if all_covered:
         return allocation
 
     return None
@@ -380,12 +414,18 @@ def greedy_classic(
             patterns, remaining, _calculate_pattern_score, size_priorities
         )
         if not best_pattern:
+            logger.warning("greedy_classic: no best pattern found at iteration %d, breaking", iteration)
             break
 
         to_add = _determine_allocation_quantity(allocation, best_pattern.id, min_per_pattern)
         allocation[best_pattern.id] += to_add
+
         _update_remaining(remaining, best_pattern, to_add)
 
+    if iteration >= max_iterations:
+        logger.warning("greedy_classic: hit max_iterations=%d limit", max_iterations)
+
+    logger.info("Greedy classic complete: %d iterations", iteration)
     return allocation
 
 
@@ -408,12 +448,18 @@ def greedy_overshoot(
             patterns, remaining, _calculate_greedy_score, size_priorities
         )
         if not best_pattern:
+            logger.warning("greedy_overshoot: no best pattern found at iteration %d, breaking", iteration)
             break
 
         to_add = _determine_allocation_quantity(allocation, best_pattern.id, min_per_pattern)
         allocation[best_pattern.id] += to_add
+
         _update_remaining(remaining, best_pattern, to_add)
 
+    if iteration >= max_iterations:
+        logger.warning("greedy_overshoot: hit max_iterations=%d limit", max_iterations)
+
+    logger.info("Greedy overshoot complete: %d iterations", iteration)
     return allocation
 
 
@@ -424,7 +470,13 @@ def calculate_total_excess(
 
     for pattern in patterns:
         count = allocation[pattern.id]
-        for size, size_count in pattern.sizes.items():
-            produced[size] = produced.get(size, 0) + (count * size_count)
+        if count > 0:
+            for size, size_count in pattern.sizes.items():
+                produced[size] = produced.get(size, 0) + (count * size_count)
 
-    return sum(max(0, produced[size] - quantities[size]) for size in quantities)
+    total_excess = 0
+    for size in quantities:
+        size_excess = max(0, produced[size] - quantities[size])
+        total_excess += size_excess
+
+    return total_excess

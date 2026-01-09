@@ -5,7 +5,10 @@ import streamlit as st
 from ui.constants import SessionKeys
 from ui.i18n import t, Keys, set_language, get_language
 from ui.shared.session_manager import get_settings, set_session_value
+from utils.logging_config import get_logger
 from utils.settings_manager import reset_settings, save_settings
+
+logger = get_logger("sidebar")
 
 
 def render_sidebar() -> dict:
@@ -46,6 +49,7 @@ def _render_language_selector() -> None:
     )
 
     if selected != st.session_state["app_language"]:
+        logger.info("Language changed from %s to %s", st.session_state["app_language"], selected)
         st.session_state["app_language"] = selected
         set_language(selected)
         st.rerun()
@@ -55,12 +59,16 @@ def _render_save_reset_buttons(settings: dict) -> None:
     col_save, col_reset = st.sidebar.columns(2)
     with col_save:
         if st.button(t(Keys.BTN_SAVE), key="save_settings", help="Save current parameters to settings.json"):
+            logger.info("Save settings button clicked")
             if save_settings(settings):
+                logger.info("Settings saved successfully")
                 st.success(f"✅ {t(Keys.MSG_SAVED)}")
             else:
+                logger.error("Failed to save settings")
                 st.error(f"❌ {t(Keys.MSG_SAVE_FAILED)}")
     with col_reset:
         if st.button(t(Keys.BTN_RESET), key="reset_settings", help="Reset to default values"):
+            logger.info("Reset settings button clicked")
             set_session_value(SessionKeys.SETTINGS, reset_settings())
             st.rerun()
 
@@ -68,6 +76,7 @@ def _render_save_reset_buttons(settings: dict) -> None:
 def _render_lead_time_section(settings: dict) -> None:
     st.sidebar.subheader(t(Keys.SIDEBAR_LEAD_TIME_FORECAST))
 
+    old_lead_time = settings["lead_time"]
     lead_time = st.sidebar.number_input(
         t(Keys.LEAD_TIME_MONTHS),
         min_value=0.0,
@@ -78,6 +87,8 @@ def _render_lead_time_section(settings: dict) -> None:
         key="lead_time_input",
         help=t(Keys.LEAD_TIME_HELP),
     )
+    if lead_time != old_lead_time:
+        logger.info("Lead time changed from %.2f to %.2f months", old_lead_time, lead_time)
     settings["lead_time"] = lead_time
 
     sync_forecast = st.sidebar.checkbox(

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-from utils.logging_config import setup_logging
+from utils.logging_config import setup_logging, get_logger
 
 setup_logging()
+logger = get_logger("app")
+
+logger.info("Application startup initiated")
 
 from ui import sidebar
 from ui import tab_forecast_accuracy
@@ -22,6 +25,8 @@ from ui.i18n import t, Keys, get_tab_names
 from ui.shared.session_manager import initialize_session_state
 from ui.shared.styles import INPUT_FIELD_STYLE, RESPONSIVE_TABS_STYLE
 
+logger.info("Configuring Streamlit page")
+
 st.set_page_config(page_title=t(Keys.PAGE_TITLE), page_icon="📊", layout="wide")
 
 st.markdown(RESPONSIVE_TABS_STYLE + INPUT_FIELD_STYLE, unsafe_allow_html=True)
@@ -29,6 +34,7 @@ st.markdown(RESPONSIVE_TABS_STYLE + INPUT_FIELD_STYLE, unsafe_allow_html=True)
 initialize_session_state()
 
 TAB_NAMES = get_tab_names()
+logger.info("Application configured with %d tabs: %s", len(TAB_NAMES), TAB_NAMES)
 
 
 NAV_INJECT_JS = """
@@ -87,6 +93,7 @@ components.html(NAV_INJECT_JS, height=0)
 
 tabs = st.tabs(TAB_NAMES)
 
+logger.info("Rendering sidebar")
 sidebar_options = sidebar.render_sidebar()
 
 context = {
@@ -127,3 +134,5 @@ with tabs[9]:
 
 with tabs[10]:
     tab_nlq.render(context)
+
+logger.info("Application render cycle completed")

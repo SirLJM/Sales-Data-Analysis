@@ -37,6 +37,7 @@ def _render_content(context: dict) -> None:
     use_forecast = context.get("use_forecast", True)
 
     df = load_data()
+    logger.info("Sales data loaded: %d rows, group_by_model=%s", len(df) if df is not None else 0, group_by_model)
     analyzer = SalesAnalyzer(df)
 
     summary, id_column = _build_summary(analyzer, group_by_model, settings)

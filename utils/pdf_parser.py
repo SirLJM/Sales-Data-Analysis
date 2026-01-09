@@ -25,8 +25,6 @@ def set_lookup_data(facilities: list[str], categories: list[str]) -> None:
     global _facilities, _categories
     _facilities = facilities
     _categories = categories
-    logger.debug("Loaded %d facilities: %s", len(facilities), facilities[:5])
-    logger.debug("Loaded %d categories: %s", len(categories), categories[:5])
 
 
 def parse_order_pdf(pdf_file: BytesIO | str) -> dict | None:

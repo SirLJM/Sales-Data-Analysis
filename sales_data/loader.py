@@ -16,8 +16,6 @@ from .dtype_optimizer import (
 )
 from .validator import DataValidator
 
-USING_SHEET_S = "Using sheet: %s"
-
 logger = get_logger("loader")
 
 PATH_TO = "/path/to"
@@ -203,7 +201,6 @@ class SalesDataLoader:
         self._add_latest_current_file(files_info, seen_dates)
 
         files_info.sort(key=lambda x: x[1])
-
         return files_info
 
     def find_stock_files(self) -> list[tuple[Path, datetime]]:
@@ -226,7 +223,6 @@ class SalesDataLoader:
                     seen_dates.add(file_date)
 
         files_info.sort(key=lambda x: x[1])
-
         return files_info
 
     @staticmethod
@@ -275,16 +271,12 @@ class SalesDataLoader:
 
         files_info = [(path, date) for date, path in seen_dates.items()]
         files_info.sort(key=lambda x: x[1])
-
         return files_info
 
     def get_latest_stock_file(self) -> Path | None:
-
         stock_files = self.find_stock_files()
-
         if not stock_files:
             return None
-
         return stock_files[-1][0]
 
     def get_latest_current_year_file(self) -> Path | None:
@@ -313,10 +305,8 @@ class SalesDataLoader:
 
     def get_latest_forecast_file(self) -> tuple[Path, datetime] | None:
         forecast_files = self.find_forecast_files()
-
         if not forecast_files:
             return None
-
         return forecast_files[-1]
 
     @staticmethod
@@ -330,23 +320,24 @@ class SalesDataLoader:
             return pd.read_csv(file_path, usecols=usecols, dtype=dtype)
         elif file_path.suffix == XLSX:
             sheet_name = find_sheet_method(file_path) if find_sheet_method else None
-            result = pd.read_excel(
+            return pd.read_excel(
                 file_path,
                 sheet_name=sheet_name or "Sheet1",
                 usecols=usecols,
                 dtype=dtype,
             )
-            return result
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
     def _validate_and_clean_sales_data(self, df: pd.DataFrame) -> pd.DataFrame:
         is_valid, errors = self.validator.validate_sales_data(df)
         if not is_valid:
+            logger.error("Sales data validation failed: %s", errors)
             raise ValueError(f"Invalid sales data: {errors}")
 
         df["data"] = pd.to_datetime(df["data"])
-        return df.dropna(how="all")
+        df = df.dropna(how="all")
+        return df
 
     def _add_sales_metadata(self, df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
         date_range = self._parse_sales_filename(file_path.name)
@@ -374,6 +365,7 @@ class SalesDataLoader:
     def _validate_and_filter_stock_data(self, df: pd.DataFrame) -> pd.DataFrame:
         is_valid, errors = self.validator.validate_stock_data(df)
         if not is_valid:
+            logger.error("Stock data validation failed: %s", errors)
             raise ValueError(f"Invalid stock data: {errors}")
 
         df = df[df["aktywny"] == 1]
@@ -382,25 +374,17 @@ class SalesDataLoader:
     def load_stock_file(self, file_path: Path) -> pd.DataFrame:
         logger.info("Loading stock file: %s", file_path.name)
 
-        sheet_name = (
-            self.validator.find_stock_sheet(file_path) if file_path.suffix == XLSX else None
-        )
-        if sheet_name:
-            logger.debug(USING_SHEET_S, sheet_name)
-        elif file_path.suffix == XLSX:
-            logger.debug("Using default sheet: Sheet1")
-
         df = self._read_file(file_path, self.validator.find_stock_sheet)
         df = self._validate_and_filter_stock_data(df)
         df = optimize_dtypes(df)
 
         logger.info("Loaded %d active SKUs", len(df))
-
         return df
 
     def _validate_and_prepare_forecast_data(self, df: pd.DataFrame) -> pd.DataFrame:
         is_valid, errors = self.validator.validate_forecast_data(df)
         if not is_valid:
+            logger.error("Forecast data validation failed: %s", errors)
             raise ValueError(f"Invalid forecast data: {errors}")
 
         required_cols = ["data", "sku", "forecast"]
@@ -417,27 +401,16 @@ class SalesDataLoader:
     def load_forecast_file(self, file_path: Path) -> pd.DataFrame:
         logger.info("Loading forecast file: %s", file_path.name)
 
-        sheet_name = (
-            self.validator.find_forecast_sheet(file_path) if file_path.suffix == XLSX else None
-        )
-        if sheet_name:
-            logger.debug(USING_SHEET_S, sheet_name)
-        elif file_path.suffix == XLSX:
-            logger.debug("Using default sheet: Sheet1")
-
         df = self._read_file(file_path, self.validator.find_forecast_sheet)
         df = self._validate_and_prepare_forecast_data(df)
         df = optimize_dtypes(df)
 
         logger.info("Loaded %d forecast records for %d SKUs", len(df), df['sku'].nunique())
-
         return df
 
     def _load_single_sales_file(self, file_info: tuple[Path, datetime, datetime]) -> pd.DataFrame:
         file_path, _, _ = file_info
-        df = self.load_sales_file(file_path)
-        logger.debug("Loaded: %s (%d rows)", file_path.name, len(df))
-        return df
+        return self.load_sales_file(file_path)
 
     def consolidate_all_files(self) -> pd.DataFrame:
         files_info = self.find_data_files()
@@ -448,9 +421,6 @@ class SalesDataLoader:
             )
 
         logger.info("Found %d data file(s)", len(files_info))
-        for file_path, start_date, end_date in files_info:
-            logger.debug("  - %s: %s to %s", file_path.name, start_date.date(), end_date.date())
-
         logger.info("Loading files in parallel...")
         all_dataframes = parallel_load(
             files_info, self._load_single_sales_file, desc="Loading sales files"
@@ -479,7 +449,6 @@ class SalesDataLoader:
         if data_dir.exists():
             for file_path in data_dir.glob(ANY_XLSX):
                 if "MODELE" in file_path.name.upper() and "KOLORY" in file_path.name.upper():
-                    logger.debug("Using fallback: found in data/ folder")
                     return file_path
 
         return None
@@ -490,7 +459,6 @@ class SalesDataLoader:
         elif file_path.suffix == XLSX:
             sheet_name = self.validator.find_model_metadata_sheet(file_path)
             if sheet_name:
-                logger.debug(USING_SHEET_S, sheet_name)
                 return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
             else:
                 logger.warning("Could not find valid sheet with metadata columns")
@@ -512,7 +480,6 @@ class SalesDataLoader:
         ]
         df = df[required_cols].copy()
         df = df.dropna(subset=["Model"])
-
         return df
 
     def load_model_metadata(self) -> pd.DataFrame | None:
