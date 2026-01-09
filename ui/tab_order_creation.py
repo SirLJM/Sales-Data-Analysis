@@ -370,7 +370,60 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     st.markdown("---")
     st.subheader(t(Keys.TITLE_SIZE_COLOR_TABLE))
     stock_by_color_size = _get_stock_by_color_size(model)
-    _render_size_color_table(pattern_results, pattern_set, stock_by_color_size)
+    _render_size_color_table(pattern_results, pattern_set, stock_by_color_size, all_colors)
+
+    _render_zero_stock_production_table(pattern_results, stock_by_color_size)
+
+
+def _render_zero_stock_production_table(
+    pattern_results: dict, stock_by_color_size: dict[tuple[str, str], int]
+) -> None:
+    color_aliases = load_color_aliases()
+    size_alias_to_code = load_size_aliases_reverse()
+
+    zero_stock_items: list[dict] = []
+
+    for color, result in pattern_results.items():
+        produced = result.get("produced", {})
+        color_name = color_aliases.get(color, color)
+
+        for size_alias, qty in produced.items():
+            if qty > 0:
+                stock = stock_by_color_size.get((color, size_alias), -1)
+                if stock == 0:
+                    zero_stock_items.append({
+                        "color": color,
+                        "color_name": color_name,
+                        "size": size_alias,
+                        "produced": qty,
+                    })
+
+    if not zero_stock_items:
+        return
+
+    def get_size_sort_key(item: dict) -> int:
+        size_code = size_alias_to_code.get(item["size"], item["size"])
+        try:
+            return int(size_code)
+        except (ValueError, TypeError):
+            return 999
+
+    zero_stock_items.sort(key=lambda x: (x["color"], get_size_sort_key(x)))
+
+    st.markdown("---")
+    st.subheader(t(Keys.TITLE_ZERO_STOCK_PRODUCTION))
+
+    df = pd.DataFrame(zero_stock_items)
+    df = df.rename(columns={
+        "color": "Color Code",
+        "color_name": "Color",
+        "size": "Size",
+        "produced": "Produced Qty",
+    })
+
+    col1, _ = st.columns([1, 2])
+    with col1:
+        st.dataframe(df[["Color Code", "Color", "Size", "Produced Qty"]], hide_index=True)
 
 
 def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results: dict, metadata: dict) -> None:
@@ -395,16 +448,42 @@ def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results
 
 
 def _render_size_color_table(
-        pattern_results: dict, pattern_set: PatternSet, stock_by_color_size: dict[tuple[str, str], int]
+        pattern_results: dict, pattern_set: PatternSet, stock_by_color_size: dict[tuple[str, str], int],
+        model_colors: list[str]
 ) -> None:
-    size_color_table = _build_color_size_table(pattern_results, pattern_set)
+    col1, _, col3 = st.columns([2, 1, 1])
+    with col1:
+        filter_options = {
+            "all": t(Keys.COLOR_FILTER_ALL),
+            "model": t(Keys.COLOR_FILTER_MODEL),
+            "active": t(Keys.COLOR_FILTER_ACTIVE),
+        }
+        color_filter = st.radio(
+            "Colors",
+            options=list(filter_options.keys()),
+            format_func=lambda x: filter_options[x],
+            horizontal=True,
+            key="color_filter_radio"
+        )
+    with col3:
+        scale = st.slider("Scale %", min_value=50, max_value=100, value=100, step=10, key="size_color_scale")
+
+    active_colors = list(pattern_results.keys())
+    size_color_table = _build_color_size_table(pattern_results, pattern_set, color_filter, model_colors, active_colors)
 
     tsv_data = size_color_table.to_csv(sep="\t", index=False)
     _render_copy_button(tsv_data)
 
+    scale_style = f"""
+    <style>
+    .scaled-table {{ transform: scale({scale / 100}); transform-origin: top left; }}
+    .scaled-table-container {{ overflow: auto; }}
+    </style>
+    """
+    st.markdown(scale_style, unsafe_allow_html=True)
     st.markdown(ROTATED_TABLE_STYLE, unsafe_allow_html=True)
     html_table = _build_styled_html_table(size_color_table, stock_by_color_size)
-    st.markdown(f'<div class="rotated-table">{html_table}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="scaled-table-container"><div class="rotated-table scaled-table">{html_table}</div></div>', unsafe_allow_html=True)
 
 
 def _render_size_distribution_table(
@@ -769,7 +848,13 @@ def _format_month_label(year_month_str: str) -> str:
     return year_month_str
 
 
-def _build_color_size_table(pattern_results: dict, pattern_set: PatternSet) -> pd.DataFrame:
+def _build_color_size_table(
+    pattern_results: dict,
+    pattern_set: PatternSet,
+    color_filter: str,
+    model_colors: list[str],
+    active_colors: list[str]
+) -> pd.DataFrame:
     color_aliases = load_color_aliases()
     size_alias_to_code = load_size_aliases_reverse()
 
@@ -780,24 +865,35 @@ def _build_color_size_table(pattern_results: dict, pattern_set: PatternSet) -> p
         except (ValueError, TypeError):
             return 999
 
-    all_model_colors = _get_all_model_colors(pattern_results)
+    colors_to_show = _get_filtered_colors(color_filter, model_colors, active_colors)
     data = []
 
     for pattern in pattern_set.patterns:
         pattern_sizes = sorted(pattern.sizes.keys(), key=get_size_sort_key)
 
         for size in pattern_sizes:
-            # noinspection PyTypeChecker
-            row = _create_pattern_row(size, all_model_colors, color_aliases, pattern_results, pattern.id)
+            row = _create_pattern_row(size, colors_to_show, color_aliases, pattern_results, pattern.id)
             data.append(row)
 
-        empty_row = _create_empty_row(all_model_colors, color_aliases)
+        empty_row = _create_empty_row(colors_to_show, color_aliases)
         data.append(empty_row)
 
     if data and data[-1]["Size"] == "":
         data.pop()
 
     return pd.DataFrame(data)
+
+
+def _get_filtered_colors(color_filter: str, model_colors: list[str], active_colors: list[str]) -> list[str]:
+    color_aliases = load_color_aliases()
+    all_colors = sorted(color_aliases.keys()) if color_aliases else []
+
+    if color_filter == "active":
+        return sorted(active_colors)
+    elif color_filter == "model":
+        return sorted(model_colors)
+    else:
+        return all_colors
 
 
 def _get_all_model_colors(pattern_results: dict) -> list[str]:
@@ -808,17 +904,16 @@ def _get_all_model_colors(pattern_results: dict) -> list[str]:
 
 
 def _create_pattern_row(size: str, all_model_colors: list[str], color_aliases: dict, pattern_results: dict,
-                        pattern_id: str) -> dict:
-    row = {"Size": size}
+                        pattern_id: int) -> dict[str, str | int]:
+    row: dict[str, str | int] = {"Size": size}
     for color in all_model_colors:
         color_name = color_aliases.get(color, color)
         pattern_count = _get_pattern_count_for_color(pattern_results, color, pattern_id)
-        # noinspection PyTypeChecker
         row[color_name] = pattern_count
     return row
 
 
-def _get_pattern_count_for_color(pattern_results: dict, color: str, pattern_id: str) -> int:
+def _get_pattern_count_for_color(pattern_results: dict, color: str, pattern_id: int) -> int:
     if color not in pattern_results:
         return 0
     allocation = pattern_results[color].get("allocation", {})

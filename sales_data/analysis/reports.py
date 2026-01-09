@@ -348,17 +348,19 @@ def filter_and_pivot_sales(
     df["model"] = df["SKU"].astype(str).str[:5]
     df["color"] = df["SKU"].astype(str).str[5:7]
 
-    filtered = df[(df["model"] == model) & (df["color"].isin(colors))]
+    all_months = sorted(df["YEAR_MONTH"].unique())
+    last_n_months = all_months[-months:] if len(all_months) >= months else all_months
+
+    filtered = df[
+        (df["model"] == model) &
+        (df["color"].isin(colors)) &
+        (df["YEAR_MONTH"].isin(last_n_months))
+    ]
 
     if filtered.empty:
         return pd.DataFrame()
 
-    filtered = filtered.sort_values("YEAR_MONTH")
-    unique_months = filtered["YEAR_MONTH"].unique()
-    last_n_months = sorted(unique_months)[-months:] if len(unique_months) >= months else sorted(unique_months)
-    filtered_last_n = filtered[filtered["YEAR_MONTH"].isin(last_n_months)]
-
-    pivot_df = filtered_last_n.pivot_table(
+    pivot_df = filtered.pivot_table(
         index="color",
         columns="YEAR_MONTH",
         values="TOTAL_QUANTITY",

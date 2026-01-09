@@ -27,8 +27,10 @@ CSV = ".csv"
 XLSX = ".xlsx"
 
 ANY_XLSX = "*.xlsx"
+ANY_XLSX_RECURSIVE = "**/*.xlsx"
 
 ANY_CSV = "*.csv"
+ANY_CSV_RECURSIVE = "**/*.csv"
 
 
 def load_size_aliases_from_excel(sizes_file_path: Path) -> dict[str, str]:
@@ -148,7 +150,15 @@ class SalesDataLoader:
             self, directory: Path
     ) -> list[tuple[Path, datetime, datetime]]:
         collected_files = []
-        for file_path in list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)):
+        all_files = (
+            list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)) +
+            list(directory.glob(ANY_CSV_RECURSIVE)) + list(directory.glob(ANY_XLSX_RECURSIVE))
+        )
+        seen_paths = set()
+        for file_path in all_files:
+            if file_path in seen_paths:
+                continue
+            seen_paths.add(file_path)
             date_range = self._parse_sales_filename(file_path.name)
             if date_range is not None:
                 collected_files.append((file_path, date_range[0], date_range[1]))
@@ -201,9 +211,15 @@ class SalesDataLoader:
         seen_dates = set()
 
         if self.stock_dir.exists():
-            for file_path in list(self.stock_dir.glob(ANY_CSV)) + list(
-                    self.stock_dir.glob(ANY_XLSX)
-            ):
+            all_files = (
+                list(self.stock_dir.glob(ANY_CSV)) + list(self.stock_dir.glob(ANY_XLSX)) +
+                list(self.stock_dir.glob(ANY_CSV_RECURSIVE)) + list(self.stock_dir.glob(ANY_XLSX_RECURSIVE))
+            )
+            seen_paths = set()
+            for file_path in all_files:
+                if file_path in seen_paths:
+                    continue
+                seen_paths.add(file_path)
                 file_date = self._parse_stock_filename(file_path.name)
                 if file_date is not None and file_date not in seen_dates:
                     files_info.append((file_path, file_date))
@@ -276,9 +292,15 @@ class SalesDataLoader:
         current_year_files = []
 
         if self.current_sales_dir.exists():
-            for file_path in list(self.current_sales_dir.glob(ANY_CSV)) + list(
-                    self.current_sales_dir.glob(ANY_XLSX)
-            ):
+            all_files = (
+                list(self.current_sales_dir.glob(ANY_CSV)) + list(self.current_sales_dir.glob(ANY_XLSX)) +
+                list(self.current_sales_dir.glob(ANY_CSV_RECURSIVE)) + list(self.current_sales_dir.glob(ANY_XLSX_RECURSIVE))
+            )
+            seen_paths = set()
+            for file_path in all_files:
+                if file_path in seen_paths:
+                    continue
+                seen_paths.add(file_path)
                 date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:
                     current_year_files.append((file_path, date_range[1]))

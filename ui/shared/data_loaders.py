@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
@@ -13,8 +15,24 @@ def load_data() -> pd.DataFrame:
     return data_source.load_sales_data()
 
 
-@st.cache_data(ttl=Config.CACHE_TTL)
+def _get_stock_cache_key() -> str:
+    data_source = get_data_source()
+    if data_source.get_data_source_type() == "file":
+        from sales_data.loader import SalesDataLoader
+        loader = SalesDataLoader()
+        latest_file = loader.get_latest_stock_file()
+        if latest_file:
+            return f"file_{latest_file.name}_{latest_file.stat().st_mtime}"
+    return f"db_{date.today().isoformat()}"
+
+
 def load_stock() -> tuple[pd.DataFrame | None, str | None]:
+    cache_key = _get_stock_cache_key()
+    return _load_stock_cached(cache_key)
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def _load_stock_cached(_cache_key: str) -> tuple[pd.DataFrame | None, str | None]:
     data_source = get_data_source()
     stock_dataframe = data_source.load_stock_data()
     if stock_dataframe is not None and not stock_dataframe.empty:

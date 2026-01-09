@@ -45,8 +45,9 @@ def align_forecasts(
         how="left",
     )
 
-    comparison["external_forecast"] = comparison["external_forecast"].fillna(0)
-    comparison["actual"] = comparison["actual"].fillna(0)
+    with pd.option_context("future.no_silent_downcasting", True):
+        comparison["external_forecast"] = comparison["external_forecast"].fillna(0).infer_objects(copy=False)
+        comparison["actual"] = comparison["actual"].fillna(0).infer_objects(copy=False)
 
     return comparison
 

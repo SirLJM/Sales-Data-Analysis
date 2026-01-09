@@ -465,6 +465,10 @@ class Keys:
     TITLE_MANUAL_ORDER_CREATION: Final[str] = "title_manual_order_creation"
     TITLE_SIZE_DISTRIBUTION: Final[str] = "title_size_distribution"
     TITLE_SIZE_COLOR_TABLE: Final[str] = "title_size_color_table"
+    TITLE_ZERO_STOCK_PRODUCTION: Final[str] = "title_zero_stock_production"
+    COLOR_FILTER_ALL: Final[str] = "color_filter_all"
+    COLOR_FILTER_MODEL: Final[str] = "color_filter_model"
+    COLOR_FILTER_ACTIVE: Final[str] = "color_filter_active"
     TITLE_FACILITY_CAPACITY: Final[str] = "title_facility_capacity"
     TITLE_EDIT_CAPACITY: Final[str] = "title_edit_capacity"
 
@@ -1244,6 +1248,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_MANUAL_ORDER_CREATION: "📝 Manual Order Creation",
         Keys.TITLE_SIZE_DISTRIBUTION: "Size Distribution",
         Keys.TITLE_SIZE_COLOR_TABLE: "Size x Color Production Table",
+        Keys.TITLE_ZERO_STOCK_PRODUCTION: "Zero Stock Production (Color x Size)",
+        Keys.COLOR_FILTER_ALL: "All colors",
+        Keys.COLOR_FILTER_MODEL: "Model colors",
+        Keys.COLOR_FILTER_ACTIVE: "Active only",
         Keys.TITLE_FACILITY_CAPACITY: "🏭 Facility Capacity",
         Keys.TITLE_EDIT_CAPACITY: "⚙️ Edit Monthly Capacity",
 
@@ -2020,6 +2028,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_MANUAL_ORDER_CREATION: "📝 Ręczne Tworzenie Zamówienia",
         Keys.TITLE_SIZE_DISTRIBUTION: "Rozkład Rozmiarów",
         Keys.TITLE_SIZE_COLOR_TABLE: "Tabela Rozmiar x Kolor Produkcji",
+        Keys.TITLE_ZERO_STOCK_PRODUCTION: "Produkcja przy Zerowym Stanie (Kolor x Rozmiar)",
+        Keys.COLOR_FILTER_ALL: "Wszystkie kolory",
+        Keys.COLOR_FILTER_MODEL: "Kolory modelu",
+        Keys.COLOR_FILTER_ACTIVE: "Tylko aktywne",
         Keys.TITLE_FACILITY_CAPACITY: "🏭 Pojemność Zakładów",
         Keys.TITLE_EDIT_CAPACITY: "⚙️ Edycja Miesięcznej Pojemności",
 
