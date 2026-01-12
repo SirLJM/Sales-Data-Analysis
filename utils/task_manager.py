@@ -162,13 +162,11 @@ def reorder_tasks_from_kanban(
         in_progress_ids: list[str],
         done_ids: list[str],
 ) -> list[Task]:
-    id_to_status = {}
-    for tid in todo_ids:
-        id_to_status[tid] = STATUS_TODO
-    for tid in in_progress_ids:
-        id_to_status[tid] = STATUS_IN_PROGRESS
-    for tid in done_ids:
-        id_to_status[tid] = STATUS_DONE
+    id_to_status = {
+        **dict.fromkeys(todo_ids, STATUS_TODO),
+        **dict.fromkeys(in_progress_ids, STATUS_IN_PROGRESS),
+        **dict.fromkeys(done_ids, STATUS_DONE),
+    }
 
     for task in tasks:
         if task.id in id_to_status:

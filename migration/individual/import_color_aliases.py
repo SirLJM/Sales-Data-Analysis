@@ -42,15 +42,16 @@ def import_color_aliases(connection_string: str) -> None:
     batch_data = df.to_dict("records")
 
     with engine.connect() as conn:
-        for record in batch_data:
-            conn.execute(
-                text("""
-                     INSERT INTO color_aliases (color_code, color_name)
-                     VALUES (:color_code, :color_name)
-                     ON CONFLICT (color_code) DO UPDATE SET color_name = EXCLUDED.color_name, updated_at = CURRENT_TIMESTAMP
-                     """),
-                record,
-            )
+        # noinspection PyTypeChecker
+        conn.execute(
+            text("""
+                 INSERT INTO color_aliases (color_code, color_name)
+                 VALUES (:color_code, :color_name)
+                 ON CONFLICT (color_code) DO UPDATE SET color_name = EXCLUDED.color_name,
+                                                        updated_at = CURRENT_TIMESTAMP
+                 """),
+            batch_data,
+        )
         conn.commit()
 
     with engine.connect() as conn:

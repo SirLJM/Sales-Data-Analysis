@@ -281,21 +281,23 @@ def _render_new_row(settings: dict) -> tuple[int, float]:
 def _render_optimizer_section(settings: dict) -> None:
     st.sidebar.subheader(t(Keys.SIDEBAR_PATTERN_OPTIMIZER))
 
+    current_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
+    mode_index = 0 if current_mode == "greedy_overshoot" else 1
+
+    algorithm_labels = {
+        "greedy_overshoot": t(Keys.ALG_GREEDY_OVERSHOOT),
+        "greedy_classic": t(Keys.ALG_CLASSIC_GREEDY),
+    }
+
     algorithm_mode = st.sidebar.radio(
         t(Keys.COL_ALGORITHM),
-        options=["greedy_overshoot", "greedy_classic"],
-        format_func=lambda x: (
-            t(Keys.ALG_GREEDY_OVERSHOOT) if x == "greedy_overshoot" else t(Keys.ALG_CLASSIC_GREEDY)
-        ),
-        index=(
-            0
-            if settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
-               == "greedy_overshoot"
-            else 1
-        ),
+        options=list(algorithm_labels.keys()),
+        format_func=lambda x: algorithm_labels[x],
+        index=mode_index,
         key="sidebar_algorithm_mode",
         help=t(Keys.ALG_HELP),
     )
+
     if "optimizer" not in settings:
         settings["optimizer"] = {}
     settings["optimizer"]["algorithm_mode"] = algorithm_mode

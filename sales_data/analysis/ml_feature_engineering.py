@@ -72,19 +72,10 @@ def create_product_features(
         product_type: str | None = None,
         cv: float | None = None,
 ) -> dict[str, float]:
-    features = {}
-
-    if product_type is not None:
-        features["product_type_encoded"] = PRODUCT_TYPE_ENCODING.get(product_type, 1)
-    else:
-        features["product_type_encoded"] = 1
-
-    if cv is not None:
-        features["cv"] = cv
-    else:
-        features["cv"] = 0.5
-
-    return features
+    return {
+        "product_type_encoded": PRODUCT_TYPE_ENCODING.get(product_type, 1) if product_type else 1,
+        "cv": cv if cv is not None else 0.5,
+    }
 
 
 def prepare_ml_features(

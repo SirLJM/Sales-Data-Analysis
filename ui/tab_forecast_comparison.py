@@ -672,10 +672,7 @@ def _display_entity_chart(data: dict) -> None:
 
 
 def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None
+    return next((col for col in candidates if col in df.columns), None)
 
 
 def _render_save_section() -> None:

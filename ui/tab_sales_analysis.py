@@ -413,6 +413,27 @@ def _render_download_button(display_data: pd.DataFrame, group_by_model: bool) ->
     )
 
 
+def _get_available_ids_for_projection(
+    summary: pd.DataFrame,
+    forecast_df: pd.DataFrame,
+    id_column: str,
+    group_by_model: bool,
+) -> list:
+    if group_by_model:
+        forecast_df_copy = forecast_df.copy()
+        forecast_df_copy["model"] = extract_model(forecast_df_copy["sku"])
+        forecast_ids = forecast_df_copy["model"].unique()
+    else:
+        forecast_ids = forecast_df["sku"].unique()
+
+    valid_summary = summary[
+        (summary[ColumnNames.STOCK].notna())
+        & (summary["ROP"].notna())
+        & (summary[id_column].isin(forecast_ids))
+    ]
+    return sorted(valid_summary[id_column].unique())
+
+
 def _render_stock_projection(
         summary: pd.DataFrame,
         forecast_df: pd.DataFrame,
@@ -423,27 +444,10 @@ def _render_stock_projection(
     st.markdown("---")
     st.subheader(t(Keys.TITLE_STOCK_PROJECTION))
 
-    if group_by_model:
-        forecast_df_copy = forecast_df.copy()
-        forecast_df_copy["model"] = extract_model(forecast_df_copy["sku"])
-        available_ids = sorted(
-            summary[
-                (summary[ColumnNames.STOCK].notna())
-                & (summary["ROP"].notna())
-                & (summary[id_column].isin(forecast_df_copy["model"].unique()))
-                ][id_column].unique()
-        )
-    else:
-        available_ids = sorted(
-            summary[
-                (summary[ColumnNames.STOCK].notna())
-                & (summary["ROP"].notna())
-                & (summary[id_column].isin(forecast_df["sku"].unique()))
-                ][id_column].unique()
-        )
+    available_ids = _get_available_ids_for_projection(summary, forecast_df, id_column, group_by_model)
+    entity_type = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
 
-    if len(available_ids) == 0:
-        entity_type = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
+    if not available_ids:
         st.info(t(Keys.MSG_LOAD_BOTH_DATASETS).format(entity_type=entity_type))
         return
 
@@ -457,14 +461,12 @@ def _render_stock_projection(
     with col_months:
         projection_months = st.slider(t(Keys.PROJECTION_MONTHS), min_value=1, max_value=12, value=6, step=1)
 
-    entity_type = t(Keys.MODELS) if group_by_model else t(Keys.SKUS)
     st.caption(t(Keys.ITEMS_AVAILABLE).format(count=len(available_ids), entity_type=entity_type))
 
     if not selected_id:
         return
 
     if selected_id not in available_ids:
-        t(Keys.GROUP_MODEL) if group_by_model else "SKU"
         st.warning(f"{Icons.WARNING} {t(Keys.MSG_NOT_FOUND).format(id=selected_id)}")
         return
 
@@ -732,6 +734,25 @@ def _render_yearly_summary_table(
         )
 
 
+def _get_year_column(pivot: pd.DataFrame, year: int) -> pd.Series:
+    if year in pivot.columns:
+        return pivot[year].astype(int)
+    return pd.Series([0] * len(pivot), index=pivot.index)
+
+
+def _add_forecast_column(summary: pd.DataFrame, yearly_forecast: pd.DataFrame | None, id_col: str) -> pd.DataFrame:
+    if yearly_forecast is None or yearly_forecast.empty:
+        summary["Forecast"] = 0
+        return summary
+
+    forecast_agg = yearly_forecast.groupby(id_col, observed=True)["QUANTITY"].sum().reset_index()
+    forecast_agg.columns = [id_col, "Forecast"]
+    forecast_agg["Forecast"] = forecast_agg["Forecast"].astype(int)
+    summary = summary.merge(forecast_agg, on=id_col, how="left", validate="many_to_many")
+    summary["Forecast"] = summary["Forecast"].fillna(0).astype(int)
+    return summary
+
+
 def _build_yearly_summary_data(
         yearly_sales: pd.DataFrame,
         yearly_forecast: pd.DataFrame | None,
@@ -748,60 +769,42 @@ def _build_yearly_summary_data(
         fill_value=0
     ).reset_index()
 
-    summary = pd.DataFrame({id_col: pivot[id_col]})
-
-    if prev_prev_year in pivot.columns:
-        summary[str(prev_prev_year)] = pivot[prev_prev_year].astype(int)
-    else:
-        summary[str(prev_prev_year)] = 0
-
-    if prev_year in pivot.columns:
-        summary[str(prev_year)] = pivot[prev_year].astype(int)
-    else:
-        summary[str(prev_year)] = 0
-
-    if current_year in pivot.columns:
-        summary[f"{current_year} YTD"] = pivot[current_year].astype(int)
-    else:
-        summary[f"{current_year} YTD"] = 0
+    summary = pd.DataFrame({
+        id_col: pivot[id_col],
+        str(prev_prev_year): _get_year_column(pivot, prev_prev_year),
+        str(prev_year): _get_year_column(pivot, prev_year),
+        f"{current_year} YTD": _get_year_column(pivot, current_year),
+    })
 
     summary[YO_Y_] = summary.apply(
         lambda row: _calc_yoy_change(row[str(prev_prev_year)], row[str(prev_year)]),
         axis=1
     )
 
-    if yearly_forecast is not None and not yearly_forecast.empty:
-        forecast_agg = yearly_forecast.groupby(id_col, observed=True)["QUANTITY"].sum().reset_index()
-        forecast_agg.columns = [id_col, "Forecast"]
-        forecast_agg["Forecast"] = forecast_agg["Forecast"].astype(int)
-        summary = summary.merge(forecast_agg, on=id_col, how="left", validate="many_to_many")
-        summary["Forecast"] = summary["Forecast"].fillna(0).astype(int)
-    else:
-        summary["Forecast"] = 0
-
-    return summary
+    return _add_forecast_column(summary, yearly_forecast, id_col)
 
 
 def _calc_yoy_change(prev_val: float, curr_val: float) -> float:
     if prev_val > 0:
         return round(((curr_val - prev_val) / prev_val) * 100, 1)
-    if curr_val > 0:
-        return 100.0
-    return 0.0
+    return 100.0 if curr_val > 0 else 0.0
 
 
 def _sort_yearly_summary(data: pd.DataFrame, sort_by: str, prev_year: int) -> pd.DataFrame:
     prev_year_col = str(prev_year)
-    if "Sales (desc)" in sort_by:
-        return data.sort_values(prev_year_col, ascending=False)
-    if "Sales (asc)" in sort_by:
-        return data.sort_values(prev_year_col, ascending=True)
-    if "YoY Change % (desc)" in sort_by:
-        return data.sort_values(YO_Y_, ascending=False)
-    if "YoY Change % (asc)" in sort_by:
-        return data.sort_values(YO_Y_, ascending=True)
-    if "Forecast (desc)" in sort_by:
-        return data.sort_values("Forecast", ascending=False)
+
+    sort_configs = {
+        "Sales (desc)": (prev_year_col, False),
+        "Sales (asc)": (prev_year_col, True),
+        "YoY Change % (desc)": (YO_Y_, False),
+        "YoY Change % (asc)": (YO_Y_, True),
+        "Forecast (desc)": ("Forecast", False),
+    }
+
+    for pattern, (col, ascending) in sort_configs.items():
+        if pattern in sort_by:
+            return data.sort_values(col, ascending=ascending)
+
     return data
 
 

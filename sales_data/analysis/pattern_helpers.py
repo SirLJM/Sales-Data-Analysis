@@ -6,9 +6,9 @@ from .order_priority import get_size_quantities_for_model_color
 
 
 def calculate_size_priorities(
-    sales_df: pd.DataFrame,
-    model: str | None = None,
-    size_aliases: dict[str, str] | None = None
+        sales_df: pd.DataFrame,
+        model: str | None = None,
+        size_aliases: dict[str, str] | None = None
 ) -> dict[str, float]:
     if sales_df is None or sales_df.empty:
         return {}
@@ -46,11 +46,11 @@ def calculate_size_priorities(
 
 
 def calculate_size_sales_history(
-    monthly_agg: pd.DataFrame,
-    model: str,
-    color: str,
-    size_aliases: dict[str, str] | None = None,
-    months: int = 4,
+        monthly_agg: pd.DataFrame,
+        model: str,
+        color: str,
+        size_aliases: dict[str, str] | None = None,
+        months: int = 4,
 ) -> dict[str, int]:
     if monthly_agg is None or monthly_agg.empty:
         return {}
@@ -79,30 +79,29 @@ def calculate_size_sales_history(
     recent = filtered[filtered[month_col].isin(sorted_months)]
 
     size_sales = recent.groupby("_size", observed=True)[qty_col].sum().to_dict()
-
-    if size_aliases:
-        aliased = {}
-        for size_code, sales in size_sales.items():
-            alias = size_aliases.get(str(size_code), str(size_code))
-            aliased[alias] = aliased.get(alias, 0) + int(sales)
-        return aliased
-
-    result = {str(k): int(v) for k, v in size_sales.items()}
-    return result
+    return _apply_size_aliases(size_sales, size_aliases)
 
 
 def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None
+    return next((col for col in candidates if col in df.columns), None)
+
+
+def _apply_size_aliases(size_sales: dict, size_aliases: dict[str, str] | None) -> dict[str, int]:
+    if not size_aliases:
+        return {str(k): int(v) for k, v in size_sales.items()}
+
+    aliased = {}
+    for size_code, sales in size_sales.items():
+        alias = size_aliases.get(str(size_code), str(size_code))
+        aliased[alias] = aliased.get(alias, 0) + int(sales)
+    return aliased
 
 
 def get_size_sales_by_month_for_model(
-    monthly_agg: pd.DataFrame,
-    model: str,
-    size_aliases: dict[str, str] | None = None,
-    months: int = 3,
+        monthly_agg: pd.DataFrame,
+        model: str,
+        size_aliases: dict[str, str] | None = None,
+        months: int = 3,
 ) -> dict[str, dict[str, int]]:
     if monthly_agg is None or monthly_agg.empty:
         return {}
@@ -131,29 +130,21 @@ def get_size_sales_by_month_for_model(
     result = {}
     for month in sorted_months:
         month_data = filtered[filtered[month_col] == month]
-        size_sales: dict = month_data.groupby("_size", observed=True)[qty_col].sum().to_dict()  # type: ignore[assignment]
-
-        if size_aliases:
-            aliased = {}
-            for size_code, sales in size_sales.items():
-                alias = size_aliases.get(str(size_code), str(size_code))
-                aliased[alias] = aliased.get(alias, 0) + int(sales)
-            result[str(month)] = aliased
-        else:
-            result[str(month)] = {str(k): int(v) for k, v in size_sales.items()}
+        size_sales = month_data.groupby("_size", observed=True)[qty_col].sum().to_dict()  # type: ignore
+        result[str(month)] = _apply_size_aliases(size_sales, size_aliases)
 
     return result
 
 
 def optimize_pattern_with_aliases(
-    priority_skus: pd.DataFrame,
-    model: str,
-    color: str,
-    pattern_set,
-    size_aliases: dict[str, str],
-    min_per_pattern: int,
-    algorithm_mode: str = "greedy_overshoot",
-    size_sales_history: dict[str, int] | None = None,
+        priority_skus: pd.DataFrame,
+        model: str,
+        color: str,
+        pattern_set,
+        size_aliases: dict[str, str],
+        min_per_pattern: int,
+        algorithm_mode: str = "greedy_overshoot",
+        size_sales_history: dict[str, int] | None = None,
 ) -> dict:
     from utils.pattern_optimizer import optimize_patterns
 

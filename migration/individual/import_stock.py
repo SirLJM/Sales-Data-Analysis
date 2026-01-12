@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
@@ -14,6 +13,7 @@ from sqlalchemy.engine import Engine
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sales_data.loader import SalesDataLoader
+from utils.import_utils import build_stock_record
 from utils.parallel_loader import parallel_load
 
 load_dotenv(find_dotenv(filename=".env"))
@@ -23,14 +23,16 @@ BATCH_SIZE = 1000
 
 def _load_stock_file(
         loader: SalesDataLoader, file_info: tuple[Path, datetime]
-) -> tuple[Path, datetime, pd.DataFrame] | None:
+) -> tuple[Path, datetime, list[dict]] | None:
     file_path, snapshot_date = file_info
     try:
         df = loader.load_stock_file(file_path)
         if df.empty:
             return None
         print(f"  Loaded: {file_path.name} ({len(df):,} rows)")
-        return file_path, snapshot_date, df
+        batch_id = str(uuid.uuid4())
+        records = [build_stock_record(row, snapshot_date, file_path, batch_id) for _, row in df.iterrows()]
+        return file_path, snapshot_date, records
     except (ValueError, OSError, IOError) as e:
         print(f"  ERROR loading {file_path.name}: {e}")
         return None
@@ -91,23 +93,7 @@ def import_stock_data(connection_string: str):
     )
 
     print(f"\nInserting {len(loaded_data)} file(s) to database...")
-    for file_path, snapshot_date, df in loaded_data:
-        batch_id = str(uuid.uuid4())
-
-        batch_data = [
-            {
-                "snapshot_date": snapshot_date,
-                "sku": row.sku,
-                "product_name": getattr(row, "nazwa", ""),
-                "net_price": getattr(row, "cena_netto", 0),
-                "available_stock": getattr(row, "available_stock", 0),
-                "model": row.sku[:5] if len(row.sku) >= 5 else None,
-                "source_file": file_path.name,
-                "import_batch_id": batch_id,
-            }
-            for row in df.itertuples(index=False)
-        ]
-
+    for file_path, snapshot_date, records in loaded_data:
         with engine.connect() as conn:
             conn.execute(
                 text(
@@ -118,11 +104,11 @@ def import_stock_data(connection_string: str):
                             :available_stock, :model, :source_file, :import_batch_id)
                     """
                 ),
-                batch_data,
+                records,
             )
             conn.commit()
 
-        print(f"  OK Imported {len(batch_data)} stock records from {file_path.name}")
+        print(f"  OK Imported {len(records)} stock records from {file_path.name}")
 
     print("=" * 60)
     print("Stock import complete")

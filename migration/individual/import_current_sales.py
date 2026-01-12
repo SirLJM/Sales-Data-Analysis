@@ -27,32 +27,29 @@ load_dotenv(find_dotenv(filename=".env"))
 BATCH_SIZE = 1000
 
 
-def _collect_files_to_import(engine, loader):
-    if not loader.current_sales_dir.exists():
-        print(f"Current sales directory not found: {loader.current_sales_dir}")
+def _collect_current_files_to_import(engine, loader) -> list[tuple]:
+    if not loader.sales_dir.exists():
+        print(f"Sales directory not found: {loader.sales_dir}")
         return []
 
-    current_files = loader.collect_files_from_directory(loader.current_sales_dir)
-
+    current_files = loader.collect_files_from_directory(loader.sales_dir)
     if not current_files:
-        print("No current sales files found")
+        print("No sales files found")
         return []
 
     current_files.sort(key=lambda x: x[2], reverse=True)
 
-    files_to_import = []
-    for file_path, start_date, end_date in current_files:
-        file_hash = compute_file_hash(file_path)
-        if not is_file_imported(engine, file_hash, "sales_current"):
-            files_to_import.append((file_path, start_date, end_date, file_hash))
-
-    return files_to_import
+    return [
+        (file_path, start_date, end_date, compute_file_hash(file_path))
+        for file_path, start_date, end_date in current_files
+        if not is_file_imported(engine, compute_file_hash(file_path), "sales_current")
+    ]
 
 
-def _load_single_file(
-        loader: SalesDataLoader, file_info: tuple
+def _load_sales_file(
+    loader: SalesDataLoader, file_info: tuple
 ) -> tuple[tuple, pd.DataFrame] | None:
-    file_path, _, _, _ = file_info
+    file_path = file_info[0]
     try:
         df = loader.load_sales_file(file_path)
         if df.empty:
@@ -65,48 +62,42 @@ def _load_single_file(
         return None
 
 
-def _insert_single_file(engine, file_info: tuple, df: pd.DataFrame) -> int:
+def _insert_sales_file(
+    engine, file_info: tuple, df: pd.DataFrame, data_source: str, file_type: str, trigger: str
+) -> int:
     file_path, start_date, end_date, file_hash = file_info
     batch_id = str(uuid.uuid4())
     file_start_time = datetime.now()
 
     records_imported = process_sales_file_in_batches(
-        df, engine, file_path, start_date, end_date, batch_id, "current", BATCH_SIZE
+        df, engine, file_path, start_date, end_date, batch_id, data_source, BATCH_SIZE
     )
 
     processing_time_ms = int((datetime.now() - file_start_time).total_seconds() * 1000)
 
     log_file_import(
-        engine,
-        file_path,
-        file_hash,
-        start_date,
-        end_date,
-        batch_id,
-        records_imported,
-        processing_time_ms,
-        "sales_current",
-        "import_current_sales",
+        engine, file_path, file_hash, start_date, end_date,
+        batch_id, records_imported, processing_time_ms, file_type, trigger,
     )
 
     print(f"  OK {file_path.name}: {records_imported} records ({processing_time_ms}ms)")
     return records_imported
 
 
-def _print_import_summary(files_to_import):
+def _print_import_summary(files_to_import: list[tuple]) -> None:
     print(f"Found {len(files_to_import)} file(s) to import:")
     for file_path, start_date, end_date, _ in files_to_import:
         print(f"  - {file_path.name}: {start_date.date()} to {end_date.date()}")
 
 
-def import_current_sales(connection_string: str):
+def import_current_sales(connection_string: str) -> None:
     print("Starting current year sales data import...")
     print("=" * 60)
 
     engine = create_engine(connection_string)
     loader = SalesDataLoader()
 
-    files_to_import = _collect_files_to_import(engine, loader)
+    files_to_import = _collect_current_files_to_import(engine, loader)
 
     if not files_to_import:
         print("No new current sales files to import")
@@ -117,7 +108,7 @@ def import_current_sales(connection_string: str):
     print(f"\nLoading {len(files_to_import)} file(s) in parallel...")
     loaded_data = parallel_load(
         files_to_import,
-        lambda info: _load_single_file(loader, info),
+        lambda info: _load_sales_file(loader, info),
         desc="Loading sales files",
     )
 
@@ -130,7 +121,9 @@ def import_current_sales(connection_string: str):
     total_records = 0
     for file_info, df in tqdm(loaded_data, desc="Inserting files"):
         try:
-            total_records += _insert_single_file(engine, file_info, df)
+            total_records += _insert_sales_file(
+                engine, file_info, df, "current", "sales_current", "import_current_sales"
+            )
         except (ValueError, OSError, IOError) as exc:
             file_path = file_info[0]
             print(f"ERROR inserting {file_path.name}: {exc}")

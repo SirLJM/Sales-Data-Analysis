@@ -27,12 +27,9 @@ from sales_data.analysis import (
     find_urgent_colors,
     generate_order_recommendations,
     generate_weekly_new_products_analysis,
-    get_completed_last_week_range,
     get_last_n_months_sales_by_color,
-    get_last_week_range,
     get_size_quantities_for_model_color,
     get_size_sales_by_month_for_model,
-    get_week_start_monday,
     optimize_pattern_with_aliases,
     parse_sku_components,
 )
@@ -48,18 +45,6 @@ class SalesAnalyzer:
 
         if "model" not in self.data.columns:
             self.data["model"] = self.data["sku"].astype(str).str[:5]
-
-    @staticmethod
-    def _get_week_start_monday(date: datetime) -> datetime:
-        return get_week_start_monday(date)
-
-    @staticmethod
-    def _get_completed_last_week_range(reference_date: datetime) -> tuple[datetime, datetime]:
-        return get_completed_last_week_range(reference_date)
-
-    @staticmethod
-    def _get_last_week_range(reference_date: datetime) -> tuple[datetime, datetime]:
-        return get_last_week_range(reference_date)
 
     def aggregate_by_sku(self) -> pd.DataFrame:
         return aggregate_by_sku(self.data)
@@ -258,7 +243,7 @@ class SalesAnalyzer:
         return calculate_monthly_yoy_by_category(sales_df, category_df, reference_date)
 
     def aggregate_yearly_sales(self, include_color: bool = False) -> pd.DataFrame:
-        return aggregate_yearly_sales(self.data, by_model=True, include_color=include_color)
+        return aggregate_yearly_sales(self.data, _by_model=True, include_color=include_color)
 
     @staticmethod
     def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = False) -> pd.DataFrame:

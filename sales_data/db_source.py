@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -13,6 +14,10 @@ from utils.logging_config import get_logger
 from .data_source import DataSource
 
 logger = get_logger("db_source")
+
+
+def _to_date(value: datetime | Any) -> Any:
+    return value.date() if isinstance(value, datetime) else value
 
 
 class DatabaseSource(DataSource):
@@ -84,42 +89,27 @@ class DatabaseSource(DataSource):
     def load_stock_data(self, snapshot_date: datetime | None = None) -> pd.DataFrame:
         logger.info("Loading stock data from database")
 
-        if snapshot_date is not None:
-            query = """
-                    SELECT sku,
-                           product_name as nazwa,
-                           net_price    as cena_netto,
-                           gross_price  as cena_brutto,
-                           total_stock  as stock,
-                           available_stock,
-                           1            as aktywny,
-                           snapshot_date
-                    FROM stock_snapshots
-                    WHERE snapshot_date = :snapshot_date
-                      AND is_active = TRUE
-                    ORDER BY sku \
-                    """
-            params = {
-                "snapshot_date": (
-                    snapshot_date.date() if isinstance(snapshot_date, datetime) else snapshot_date
-                )
-            }
-        else:
-            query = """
-                    SELECT sku,
-                           product_name as nazwa,
-                           net_price    as cena_netto,
-                           gross_price  as cena_brutto,
-                           total_stock  as stock,
-                           available_stock,
-                           1            as aktywny,
-                           snapshot_date
-                    FROM stock_snapshots
-                    WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM stock_snapshots)
-                      AND is_active = TRUE
-                    ORDER BY sku \
-                    """
-            params = {}
+        date_condition = (
+            "snapshot_date = :snapshot_date"
+            if snapshot_date
+            else "snapshot_date = (SELECT MAX(snapshot_date) FROM stock_snapshots)"
+        )
+        params = {"snapshot_date": _to_date(snapshot_date)} if snapshot_date else {}
+
+        query = f"""
+            SELECT sku,
+                   product_name as nazwa,
+                   net_price    as cena_netto,
+                   gross_price  as cena_brutto,
+                   total_stock  as stock,
+                   available_stock,
+                   1            as aktywny,
+                   snapshot_date
+            FROM stock_snapshots
+            WHERE {date_condition}
+              AND is_active = TRUE
+            ORDER BY sku
+        """
 
         try:
             with self.engine.connect() as conn:
@@ -135,34 +125,31 @@ class DatabaseSource(DataSource):
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
         logger.info("Loading stock history from database")
-        query = """
-                SELECT sku,
-                       product_name    as nazwa,
-                       net_price       as cena_netto,
-                       gross_price     as cena_brutto,
-                       total_stock     as stock,
-                       available_stock,
-                       1               as aktywny,
-                       snapshot_date
-                FROM stock_snapshots
-                WHERE is_active = TRUE
-                """
 
-        params = {}
+        conditions = ["is_active = TRUE"]
+        params: dict[str, Any] = {}
 
         if start_date is not None:
-            query += " AND snapshot_date >= :start_date"
-            params["start_date"] = (
-                start_date.date() if isinstance(start_date, datetime) else start_date
-            )
+            conditions.append("snapshot_date >= :start_date")
+            params["start_date"] = _to_date(start_date)
 
         if end_date is not None:
-            query += " AND snapshot_date <= :end_date"
-            params["end_date"] = (
-                end_date.date() if isinstance(end_date, datetime) else end_date
-            )
+            conditions.append("snapshot_date <= :end_date")
+            params["end_date"] = _to_date(end_date)
 
-        query += " ORDER BY snapshot_date, sku"
+        query = f"""
+            SELECT sku,
+                   product_name    as nazwa,
+                   net_price       as cena_netto,
+                   gross_price     as cena_brutto,
+                   total_stock     as stock,
+                   available_stock,
+                   1               as aktywny,
+                   snapshot_date
+            FROM stock_snapshots
+            WHERE {' AND '.join(conditions)}
+            ORDER BY snapshot_date, sku
+        """
 
         try:
             with self.engine.connect() as conn:
@@ -180,36 +167,23 @@ class DatabaseSource(DataSource):
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
         logger.info("Loading forecast data from database")
 
-        if generated_date is not None:
-            query = """
-                    SELECT forecast_date     as data,
-                           sku,
-                           model,
-                           forecast_quantity as forecast,
-                           generated_date
-                    FROM forecast_data
-                    WHERE generated_date = :generated_date
-                    ORDER BY forecast_date, sku \
-                    """
-            params = {
-                "generated_date": (
-                    generated_date.date()
-                    if isinstance(generated_date, datetime)
-                    else generated_date
-                )
-            }
-        else:
-            query = """
-                    SELECT forecast_date     as data,
-                           sku,
-                           model,
-                           forecast_quantity as forecast,
-                           generated_date
-                    FROM forecast_data
-                    WHERE generated_date = (SELECT MAX(generated_date) FROM forecast_data)
-                    ORDER BY forecast_date, sku \
-                    """
-            params = {}
+        date_condition = (
+            "generated_date = :generated_date"
+            if generated_date
+            else "generated_date = (SELECT MAX(generated_date) FROM forecast_data)"
+        )
+        params = {"generated_date": _to_date(generated_date)} if generated_date else {}
+
+        query = f"""
+            SELECT forecast_date     as data,
+                   sku,
+                   model,
+                   forecast_quantity as forecast,
+                   generated_date
+            FROM forecast_data
+            WHERE {date_condition}
+            ORDER BY forecast_date, sku
+        """
 
         try:
             with self.engine.connect() as conn:
@@ -224,6 +198,13 @@ class DatabaseSource(DataSource):
             logger.error("Failed to load forecast data: %s", e)
             return pd.DataFrame()
 
+    def _is_cache_valid(self, df: pd.DataFrame) -> bool:
+        if "configuration_hash" not in df.columns or df.empty:
+            return True
+
+        cached_hash = df["configuration_hash"].iloc[0]
+        return cached_hash == self._get_current_settings_hash()
+
     def get_sku_statistics(
             self, entity_type: str = "sku", force_recompute: bool = False
     ) -> pd.DataFrame:
@@ -233,42 +214,35 @@ class DatabaseSource(DataSource):
             return self._compute_sku_statistics(entity_type)
 
         query = """
-                SELECT entity_id                as "SKU",
-                       months_with_sales        as "MONTHS",
-                       total_quantity           as "QUANTITY",
-                       average_monthly_sales    as "AVERAGE SALES",
-                       standard_deviation       as "SD",
-                       coefficient_of_variation as "CV",
-                       product_type             as "TYPE",
-                       safety_stock             as "SS",
-                       reorder_point            as "ROP",
-                       first_sale_date,
-                       last_2y_avg_monthly      as "LAST_2_YEARS_AVG",
-                       is_seasonal,
-                       seasonal_ss_in,
-                       seasonal_ss_out,
-                       seasonal_rop_in,
-                       seasonal_rop_out,
-                       computed_at,
-                       configuration_hash
-                FROM mv_valid_sku_stats
-                WHERE entity_type = :entity_type
-                ORDER BY total_quantity DESC \
-                """
+            SELECT entity_id                as "SKU",
+                   months_with_sales        as "MONTHS",
+                   total_quantity           as "QUANTITY",
+                   average_monthly_sales    as "AVERAGE SALES",
+                   standard_deviation       as "SD",
+                   coefficient_of_variation as "CV",
+                   product_type             as "TYPE",
+                   safety_stock             as "SS",
+                   reorder_point            as "ROP",
+                   first_sale_date,
+                   last_2y_avg_monthly      as "LAST_2_YEARS_AVG",
+                   is_seasonal,
+                   seasonal_ss_in,
+                   seasonal_ss_out,
+                   seasonal_rop_in,
+                   seasonal_rop_out,
+                   computed_at,
+                   configuration_hash
+            FROM mv_valid_sku_stats
+            WHERE entity_type = :entity_type
+            ORDER BY total_quantity DESC
+        """
 
         with self.engine.connect() as conn:
             df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
-        if df.empty:
+        if df.empty or not self._is_cache_valid(df):
+            logger.info("Cache invalid or empty, recomputing statistics")
             return self._compute_sku_statistics(entity_type)
-
-        current_hash = self._get_current_settings_hash()
-
-        if "configuration_hash" in df.columns:
-            cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
-            if cached_hash != current_hash:
-                logger.info("Settings changed, recomputing statistics")
-                return self._compute_sku_statistics(entity_type)
 
         logger.info("Loaded %d SKU statistics rows from database", len(df))
         return df
@@ -282,26 +256,26 @@ class DatabaseSource(DataSource):
             return self._compute_order_priorities(top_n)
 
         query = """
-                SELECT sku               as "SKU",
-                       model             as "MODEL",
-                       color             as "COLOR",
-                       size              as "SIZE",
-                       priority_score    as "PRIORITY_SCORE",
-                       stockout_risk     as "STOCKOUT_RISK",
-                       revenue_impact    as "REVENUE_IMPACT",
-                       revenue_at_risk   as "REVENUE_AT_RISK",
-                       current_stock     as "STOCK",
-                       reorder_point     as "ROP",
-                       deficit           as "DEFICIT",
-                       forecast_leadtime as "FORECAST_LEADTIME",
-                       coverage_gap      as "COVERAGE_GAP",
-                       product_type      as "TYPE",
-                       type_multiplier   as "TYPE_MULTIPLIER",
-                       is_urgent         as "URGENT",
-                       computed_at
-                FROM mv_valid_order_priorities
-                ORDER BY priority_score DESC \
-                """
+            SELECT sku               as "SKU",
+                   model             as "MODEL",
+                   color             as "COLOR",
+                   size              as "SIZE",
+                   priority_score    as "PRIORITY_SCORE",
+                   stockout_risk     as "STOCKOUT_RISK",
+                   revenue_impact    as "REVENUE_IMPACT",
+                   revenue_at_risk   as "REVENUE_AT_RISK",
+                   current_stock     as "STOCK",
+                   reorder_point     as "ROP",
+                   deficit           as "DEFICIT",
+                   forecast_leadtime as "FORECAST_LEADTIME",
+                   coverage_gap      as "COVERAGE_GAP",
+                   product_type      as "TYPE",
+                   type_multiplier   as "TYPE_MULTIPLIER",
+                   is_urgent         as "URGENT",
+                   computed_at
+            FROM mv_valid_order_priorities
+            ORDER BY priority_score DESC
+        """
 
         if top_n is not None:
             query += f" LIMIT {top_n}"
@@ -309,16 +283,9 @@ class DatabaseSource(DataSource):
         with self.engine.connect() as conn:
             df = pd.read_sql_query(text(query), conn)
 
-        if df.empty:
+        if df.empty or not self._is_cache_valid(df):
+            logger.info("Cache invalid or empty, recomputing priorities")
             return self._compute_order_priorities(top_n)
-
-        current_hash = self._get_current_settings_hash()
-
-        if "configuration_hash" in df.columns:
-            cached_hash = df["configuration_hash"].iloc[0] if len(df) > 0 else None
-            if cached_hash != current_hash:
-                logger.info("Settings changed, recomputing priorities")
-                return self._compute_order_priorities(top_n)
 
         logger.info("Loaded %d order priority rows from database", len(df))
         return df
@@ -378,25 +345,21 @@ class DatabaseSource(DataSource):
         return current_hash
 
     @staticmethod
-    def _compute_sku_statistics(entity_type: str) -> pd.DataFrame:
+    def _get_file_source():
         from .file_source import FileSource
+        return FileSource()
 
-        file_source = FileSource()
-        return file_source.get_sku_statistics(entity_type, force_recompute=True)
+    @staticmethod
+    def _compute_sku_statistics(entity_type: str) -> pd.DataFrame:
+        return DatabaseSource._get_file_source().get_sku_statistics(entity_type, force_recompute=True)
 
     @staticmethod
     def _compute_order_priorities(top_n: int | None = None) -> pd.DataFrame:
-        from .file_source import FileSource
-
-        file_source = FileSource()
-        return file_source.get_order_priorities(top_n, force_recompute=True)
+        return DatabaseSource._get_file_source().get_order_priorities(top_n, force_recompute=True)
 
     @staticmethod
     def _compute_monthly_aggregations(entity_type: str) -> pd.DataFrame:
-        from .file_source import FileSource
-
-        file_source = FileSource()
-        return file_source.get_monthly_aggregations(entity_type, force_recompute=True)
+        return DatabaseSource._get_file_source().get_monthly_aggregations(entity_type, force_recompute=True)
 
     def load_model_metadata(self) -> pd.DataFrame | None:
         logger.info("Loading model metadata from database")
@@ -433,53 +396,33 @@ class DatabaseSource(DataSource):
             logger.error("Failed to load model metadata from database: %s", e)
             return None
 
-    def load_size_aliases(self) -> dict[str, str]:
-        logger.info("Loading size aliases from database")
-        query = """
-                SELECT size_code, size_alias
-                FROM size_aliases
-                ORDER BY size_code
-                """
+    def _load_alias_table(
+        self, table: str, key_col: str, value_col: str, alias_type: str
+    ) -> dict[str, str]:
+        logger.info("Loading %s aliases from database", alias_type)
+        query = f"SELECT {key_col}, {value_col} FROM {table} ORDER BY {key_col}"
 
         try:
             with self.engine.connect() as conn:
                 df = pd.read_sql_query(text(query), conn)
 
             if df.empty:
-                logger.warning("No size aliases found in database")
+                logger.warning("No %s aliases found in database", alias_type)
                 return {}
 
-            result = dict(zip(df["size_code"], df["size_alias"]))
-            logger.info("Loaded %d size aliases from database", len(result))
+            result = dict(zip(df[key_col], df[value_col]))
+            logger.info("Loaded %d %s aliases from database", len(result), alias_type)
             return result
 
         except Exception as e:
-            logger.error("Failed to load size aliases from database: %s", e)
+            logger.error("Failed to load %s aliases from database: %s", alias_type, e)
             return {}
+
+    def load_size_aliases(self) -> dict[str, str]:
+        return self._load_alias_table("size_aliases", "size_code", "size_alias", "size")
 
     def load_color_aliases(self) -> dict[str, str]:
-        logger.info("Loading color aliases from database")
-        query = """
-                SELECT color_code, color_name
-                FROM color_aliases
-                ORDER BY color_code
-                """
-
-        try:
-            with self.engine.connect() as conn:
-                df = pd.read_sql_query(text(query), conn)
-
-            if df.empty:
-                logger.warning("No color aliases found in database")
-                return {}
-
-            result = dict(zip(df["color_code"], df["color_name"]))
-            logger.info("Loaded %d color aliases from database", len(result))
-            return result
-
-        except Exception as e:
-            logger.error("Failed to load color aliases from database: %s", e)
-            return {}
+        return self._load_alias_table("color_aliases", "color_code", "color_name", "color")
 
     def load_category_mappings(self) -> pd.DataFrame:
         logger.info("Loading category mappings from database")

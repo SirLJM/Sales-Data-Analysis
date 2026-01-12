@@ -44,8 +44,7 @@ class FileSource(DataSource):
             logger.warning("No stock file found")
             return pd.DataFrame()
 
-        df = self.loader.load_stock_file(stock_file)
-        return df
+        return self.loader.load_stock_file(stock_file)
 
     def _load_stock_with_date(
         self, file_info: tuple[Path, datetime]
@@ -135,11 +134,8 @@ class FileSource(DataSource):
             self._analyzer = SalesAnalyzer(sales_data)
 
         if entity_type == "model":
-            result = self._analyzer.aggregate_by_model()
-        else:
-            result = self._analyzer.aggregate_by_sku()
-
-        return result
+            return self._analyzer.aggregate_by_model()
+        return self._analyzer.aggregate_by_sku()
 
     def get_order_priorities(
             self, top_n: int | None = None, force_recompute: bool = False
@@ -177,10 +173,7 @@ class FileSource(DataSource):
         monthly_data = self._analyzer.data.copy()
         monthly_data["year_month"] = monthly_data["data"].dt.to_period("M")
 
-        if entity_type == "model":
-            group_col = "model"
-        else:
-            group_col = "sku"
+        group_col = "model" if entity_type == "model" else "sku"
 
         monthly_agg = (
             monthly_data.groupby([group_col, "year_month"], as_index=False, observed=True)
@@ -201,28 +194,25 @@ class FileSource(DataSource):
         return optimize_dtypes(monthly_agg)
 
     def load_model_metadata(self) -> pd.DataFrame | None:
-        result = self.loader.load_model_metadata()
-        return result
+        return self.loader.load_model_metadata()
 
     def load_size_aliases(self) -> dict[str, str]:
-        try:
-            sizes_file = Path(__file__).parent.parent / "data" / "sizes.xlsx"
-            if sizes_file.exists():
-                aliases = load_size_aliases_from_excel(sizes_file)
-                return aliases
+        sizes_file = Path(__file__).parent.parent / "data" / "sizes.xlsx"
+        if not sizes_file.exists():
             logger.warning("Size aliases file not found: %s", sizes_file)
             return {}
+
+        try:
+            return load_size_aliases_from_excel(sizes_file)
         except Exception as e:
             logger.error("Failed to load size aliases from file: %s", e)
             return {}
 
     def load_color_aliases(self) -> dict[str, str]:
-        result = self.loader.load_color_aliases()
-        return result
+        return self.loader.load_color_aliases()
 
     def load_category_mappings(self) -> pd.DataFrame:
-        result = self.loader.load_category_data()
-        return result
+        return self.loader.load_category_data()
 
     def is_available(self) -> bool:
         return True

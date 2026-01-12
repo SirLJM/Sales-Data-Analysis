@@ -317,6 +317,32 @@ def generate_forecast_auto_arima(
         return generate_forecast_sarima(series, horizon)
 
 
+FORECAST_GENERATORS: dict[str, Callable] = {
+    "moving_avg": generate_forecast_moving_avg,
+    "exp_smoothing": generate_forecast_exp_smoothing,
+    "holt_winters": generate_forecast_holt_winters,
+    "sarima": generate_forecast_sarima,
+    "auto_arima": generate_forecast_auto_arima,
+}
+
+
+def _create_forecast_result(
+    entity_id: str,
+    entity_type: str,
+    method: str | None = None,
+    forecast_df: pd.DataFrame | None = None,
+    error: str | None = None,
+) -> dict:
+    return {
+        "entity_id": entity_id,
+        "entity_type": entity_type,
+        "method_used": method,
+        "forecast_df": forecast_df,
+        "success": forecast_df is not None,
+        "error": error,
+    }
+
+
 def generate_internal_forecast(
         monthly_agg: pd.DataFrame,
         entity_id: str,
@@ -326,53 +352,25 @@ def generate_internal_forecast(
         horizon_months: int,
         method_override: str | None = None,
 ) -> dict:
-    result = {
-        "entity_id": entity_id,
-        "entity_type": entity_type,
-        "method_used": None,
-        "forecast_df": None,
-        "success": False,
-        "error": None,
-    }
-
     series = prepare_monthly_series(monthly_agg, entity_id, entity_type)
 
     if series is None or len(series) < MIN_MONTHS_FOR_FORECAST:
-        result["error"] = f"Insufficient data (need {MIN_MONTHS_FOR_FORECAST} months)"
-        return result
+        return _create_forecast_result(
+            entity_id, entity_type,
+            error=f"Insufficient data (need {MIN_MONTHS_FOR_FORECAST} months)"
+        )
 
-    if method_override:
-        method = method_override
-    else:
-        method = select_forecast_method(series, product_type, cv)
-    result["method_used"] = method
+    method = method_override or select_forecast_method(series, product_type, cv)
+    generator = FORECAST_GENERATORS.get(method, generate_forecast_moving_avg)
 
     try:
-        if method == "moving_avg":
-            forecast_df = generate_forecast_moving_avg(series, horizon_months)
-        elif method == "exp_smoothing":
-            forecast_df = generate_forecast_exp_smoothing(series, horizon_months)
-        elif method == "holt_winters":
-            forecast_df = generate_forecast_holt_winters(series, horizon_months)
-        elif method == "sarima":
-            forecast_df = generate_forecast_sarima(series, horizon_months)
-        elif method == "auto_arima":
-            forecast_df = generate_forecast_auto_arima(series, horizon_months)
-        else:
-            forecast_df = generate_forecast_moving_avg(series, horizon_months)
-
+        forecast_df = generator(series, horizon_months)
         forecast_df["forecast"] = forecast_df["forecast"].clip(lower=0)
         forecast_df["lower_ci"] = forecast_df["lower_ci"].clip(lower=0)
-
-        # noinspection PyTypeChecker
-        result["forecast_df"] = forecast_df
-        result["success"] = True
-
+        return _create_forecast_result(entity_id, entity_type, method, forecast_df)
     except Exception as e:
-        result["error"] = str(e)
         logger.exception("Forecast generation failed for %s: %s", entity_id, e)
-
-    return result
+        return _create_forecast_result(entity_id, entity_type, method, error=str(e))
 
 
 def batch_generate_forecasts(

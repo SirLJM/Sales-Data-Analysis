@@ -50,25 +50,30 @@ def _load_stock_cached(_cache_key: str) -> tuple[pd.DataFrame | None, str | None
     return None, None
 
 
+def _parse_forecast_date(forecast_df: pd.DataFrame) -> pd.Timestamp | None:
+    if "generated_date" not in forecast_df.columns:
+        return None
+    loaded_date = forecast_df["generated_date"].iloc[0]
+    if loaded_date is None:
+        return None
+    return loaded_date if isinstance(loaded_date, pd.Timestamp) else pd.Timestamp(loaded_date)
+
+
 @st.cache_data(ttl=Config.CACHE_TTL)
 def load_forecast() -> tuple[pd.DataFrame | None, pd.Timestamp | None, str | None]:
     logger.info("Loading forecast data")
     data_source = get_data_source()
     forecast_dataframe = data_source.load_forecast_data()
-    if forecast_dataframe is not None and not forecast_dataframe.empty:
-        loaded_forecast_date = None
-        if "generated_date" in forecast_dataframe.columns:
-            loaded_date = forecast_dataframe["generated_date"].iloc[0]
-            if loaded_date is not None and not isinstance(loaded_date, pd.Timestamp):
-                loaded_forecast_date = pd.Timestamp(loaded_date)
-            else:
-                loaded_forecast_date = loaded_date
-        source = "database" if data_source.get_data_source_type() == "database" else "file"
-        logger.info("Forecast data loaded: %d rows from %s, generated_date=%s",
-                    len(forecast_dataframe), source, loaded_forecast_date)
-        return forecast_dataframe, loaded_forecast_date, source
-    logger.warning("No forecast data available")
-    return None, None, None
+
+    if forecast_dataframe is None or forecast_dataframe.empty:
+        logger.warning("No forecast data available")
+        return None, None, None
+
+    loaded_forecast_date = _parse_forecast_date(forecast_dataframe)
+    source = "database" if data_source.get_data_source_type() == "database" else "file"
+    logger.info("Forecast data loaded: %d rows from %s, generated_date=%s",
+                len(forecast_dataframe), source, loaded_forecast_date)
+    return forecast_dataframe, loaded_forecast_date, source
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -129,7 +134,7 @@ def load_unique_categories() -> list[str]:
 def load_yearly_sales(include_color: bool = False) -> pd.DataFrame:
     from sales_data.analysis import aggregate_yearly_sales
     sales_df = load_data()
-    return aggregate_yearly_sales(sales_df, by_model=True, include_color=include_color)
+    return aggregate_yearly_sales(sales_df, _by_model=True, include_color=include_color)
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -139,3 +144,51 @@ def load_yearly_forecast(include_color: bool = False) -> pd.DataFrame | None:
     if forecast_df is None:
         return None
     return aggregate_forecast_yearly(forecast_df, include_color=include_color)
+
+
+def _add_default_stock_columns(df: pd.DataFrame, stock_column: str) -> pd.DataFrame:
+    if stock_column not in df.columns:
+        df[stock_column] = 0
+    if "PRICE" not in df.columns:
+        df["PRICE"] = 0
+    return df
+
+
+def _normalize_stock_df(stock_df: pd.DataFrame, stock_column: str) -> pd.DataFrame:
+    df = stock_df.copy()
+    if "sku" in df.columns:
+        df = df.rename(columns={"sku": "SKU"})
+    if stock_column not in df.columns:
+        source_col = "available_stock" if "available_stock" in df.columns else "stock"
+        if source_col in df.columns:
+            df[stock_column] = df[source_col]
+    if "cena_netto" in df.columns:
+        df["PRICE"] = df["cena_netto"]
+    return df
+
+
+def merge_stock_into_summary(
+    sku_summary: pd.DataFrame,
+    stock_df: pd.DataFrame | None,
+    stock_column: str = "STOCK",
+) -> pd.DataFrame:
+    if stock_df is None or stock_df.empty:
+        return _add_default_stock_columns(sku_summary, stock_column)
+
+    stock_df_copy = _normalize_stock_df(stock_df, stock_column)
+
+    if stock_column not in stock_df_copy.columns:
+        logger.warning("Stock column '%s' not found in stock data, adding defaults", stock_column)
+        return _add_default_stock_columns(sku_summary, stock_column)
+
+    stock_cols = ["SKU", stock_column]
+    if "PRICE" in stock_df_copy.columns:
+        stock_cols.append("PRICE")
+
+    sku_stock = stock_df_copy[stock_cols].copy()
+    sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
+    sku_summary[stock_column] = sku_summary[stock_column].astype(float).fillna(0)
+    if "PRICE" in stock_cols:
+        sku_summary["PRICE"] = sku_summary["PRICE"].astype(float).fillna(0)
+
+    return sku_summary

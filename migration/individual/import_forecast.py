@@ -22,27 +22,24 @@ load_dotenv(find_dotenv(filename=".env"))
 BATCH_SIZE = 1000
 
 
-def _check_existing_dates(engine: Engine, forecast_files: list) -> set[datetime]:
+def _check_existing_dates(engine: Engine, forecast_files: list[tuple[Path, datetime]]) -> set[datetime]:
     dates = [d for _, d in forecast_files]
     with engine.connect() as conn:
         result = conn.execute(
-            text(
-                """
+            text("""
                 SELECT DISTINCT generated_date
                 FROM forecast_data
                 WHERE generated_date = ANY (:dates)
-                """
-            ),
+            """),
             {"dates": dates},
         )
         return {row[0] for row in result.fetchall()}
 
 
-def _insert_forecast_batch(engine, batch_data):
+def _insert_forecast_batch(engine: Engine, batch_data: list[dict]) -> None:
     with engine.connect() as conn:
         conn.execute(
-            text(
-                """
+            text("""
                 INSERT INTO forecast_data (forecast_date, sku, forecast_quantity,
                                            model, generated_date,
                                            source_file, import_batch_id)
@@ -50,15 +47,14 @@ def _insert_forecast_batch(engine, batch_data):
                         :model, :generated_date,
                         :source_file, :import_batch_id)
                 ON CONFLICT (sku, forecast_date, generated_date) DO NOTHING
-                """
-            ),
+            """),
             batch_data,
         )
         conn.commit()
 
 
 def _load_forecast_file(
-        loader: SalesDataLoader, file_info: tuple[Path, datetime]
+    loader: SalesDataLoader, file_info: tuple[Path, datetime]
 ) -> tuple[Path, datetime, pd.DataFrame] | None:
     file_path, generation_date = file_info
     try:
@@ -73,30 +69,28 @@ def _load_forecast_file(
         return None
 
 
-def _insert_forecast_file(engine, file_path: Path, generation_date: datetime, df: pd.DataFrame):
+def _insert_forecast_file(
+    engine: Engine, file_path: Path, generation_date: datetime, df: pd.DataFrame
+) -> None:
     batch_id = str(uuid.uuid4())
+    batch_data = [
+        build_forecast_record(row, generation_date, file_path, batch_id)
+        for _, row in df.iterrows()
+    ]
 
-    batch_data = []
-    for _, row in df.iterrows():
-        batch_data.append(build_forecast_record(row, generation_date, file_path, batch_id))
-
-        if len(batch_data) >= BATCH_SIZE:
-            _insert_forecast_batch(engine, batch_data)
-            batch_data = []
-
-    if batch_data:
-        _insert_forecast_batch(engine, batch_data)
+    for i in range(0, len(batch_data), BATCH_SIZE):
+        _insert_forecast_batch(engine, batch_data[i:i + BATCH_SIZE])
 
     print(f"  OK Imported forecast records for {df['sku'].nunique()} SKUs from {file_path.name}")
 
 
-def _print_forecast_files_summary(forecast_files):
+def _print_forecast_files_summary(forecast_files: list[tuple[Path, datetime]]) -> None:
     print(f"Found {len(forecast_files)} forecast file(s):")
     for file_path, generation_date in forecast_files:
         print(f"  - {file_path.name}: generated {generation_date.date()}")
 
 
-def import_forecast_data(connection_string: str):
+def import_forecast_data(connection_string: str) -> None:
     print("Starting forecast data import...")
     print("=" * 60)
 

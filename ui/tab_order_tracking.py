@@ -9,6 +9,8 @@ from ui.constants import ColumnNames, Config, Icons, SessionKeys
 from ui.i18n import Keys, t
 from utils.logging_config import get_logger
 
+ORDER_COUNT = "Order Count"
+
 MONTHLY_CAPACITY = "Monthly Capacity"
 
 TOTAL_QUANTITY = "Total Quantity"
@@ -267,9 +269,9 @@ def _build_order_list(active_orders: list[dict]) -> list[dict]:
 def _parse_order_date(order_date) -> datetime:
     if isinstance(order_date, str):
         return datetime.fromisoformat(order_date.replace("Z", "+00:00"))
-    elif not isinstance(order_date, datetime):
-        return datetime.combine(order_date, datetime.min.time())
-    return order_date
+    if isinstance(order_date, datetime):
+        return order_date
+    return datetime.combine(order_date, datetime.min.time())
 
 
 def _handle_aggrid_archive_selection(selected_rows) -> None:
@@ -326,7 +328,7 @@ def _render_facility_capacity() -> None:
         hide_index=True,
         column_config={
             "Facility": st.column_config.TextColumn(t(Keys.FACILITY), width="medium"),
-            "Order Count": st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
+            ORDER_COUNT: st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
             TOTAL_QUANTITY: st.column_config.NumberColumn(t(Keys.LABEL_TOTAL_QTY), format="%d"),
             MONTHLY_CAPACITY: st.column_config.NumberColumn(t(Keys.LABEL_CAPACITY), format="%d"),
             "Utilization %": st.column_config.ProgressColumn(
@@ -352,19 +354,12 @@ def _calculate_facility_capacity(active_orders: list[dict]) -> list[dict]:
         quantity = order.get("total_quantity") or 0
 
         if facility not in facility_totals:
-            facility_totals[facility] = {"order_count": 0, "total_quantity": 0}
+            facility_totals[facility] = {ORDER_COUNT: 0, TOTAL_QUANTITY: 0}
 
-        facility_totals[facility]["order_count"] += 1
-        facility_totals[facility]["total_quantity"] += quantity
+        facility_totals[facility][ORDER_COUNT] += 1
+        facility_totals[facility][TOTAL_QUANTITY] += quantity
 
-    return [
-        {
-            "Facility": facility,
-            "Order Count": data["order_count"],
-            "Total Quantity": data["total_quantity"],
-        }
-        for facility, data in facility_totals.items()
-    ]
+    return [{"Facility": facility, **data} for facility, data in facility_totals.items()]
 
 
 def _get_facility_capacities() -> dict[str, int]:
@@ -388,9 +383,7 @@ def _save_facility_capacities(capacities: dict[str, int]) -> None:
 
 
 def _calculate_utilization(total_qty: int, capacity: int) -> float:
-    if capacity <= 0:
-        return 0.0
-    return min((total_qty / capacity) * 100, 100.0)
+    return min((total_qty / capacity) * 100, 100.0) if capacity > 0 else 0.0
 
 
 @st.fragment

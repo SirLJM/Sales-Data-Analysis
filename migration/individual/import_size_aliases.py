@@ -45,15 +45,15 @@ def import_size_aliases(connection_string: str) -> None:
         batch_data = df.to_dict("records")
 
         with engine.connect() as conn:
-            for record in batch_data:
-                conn.execute(
-                    text("""
-                         INSERT INTO size_aliases (size_code, size_alias)
-                         VALUES (:size_code, :size_alias)
-                         ON CONFLICT (size_code) DO UPDATE SET size_alias = EXCLUDED.size_alias
-                         """),
-                    record,
-                )
+            # noinspection PyTypeChecker
+            conn.execute(
+                text("""
+                     INSERT INTO size_aliases (size_code, size_alias)
+                     VALUES (:size_code, :size_alias)
+                     ON CONFLICT (size_code) DO UPDATE SET size_alias = EXCLUDED.size_alias
+                     """),
+                batch_data,
+            )
             conn.commit()
 
         with engine.connect() as conn:

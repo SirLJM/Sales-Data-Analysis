@@ -6,7 +6,7 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import t, Keys
-from ui.shared.data_loaders import load_color_aliases, load_model_metadata
+from ui.shared.data_loaders import load_color_aliases, load_model_metadata, merge_stock_into_summary
 from ui.shared.session_manager import get_session_value, get_settings, set_session_value
 from utils.logging_config import get_logger
 
@@ -363,39 +363,7 @@ def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: p
     sku_summary = sku_summary.merge(sku_last_two_years, on="SKU", how="left")
     sku_summary["LAST_2_YEARS_AVG"] = sku_summary["LAST_2_YEARS_AVG"].fillna(0)
 
-    sku_summary = _merge_stock_data(sku_summary, stock_df)
-    return sku_summary
-
-
-def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) -> pd.DataFrame:
-    if stock_df is None or stock_df.empty:
-        if ColumnNames.STOCK not in sku_summary.columns:
-            sku_summary[ColumnNames.STOCK] = 0
-        if "PRICE" not in sku_summary.columns:
-            sku_summary["PRICE"] = 0
-        return sku_summary
-
-    stock_df_copy = stock_df.copy()
-    if "sku" in stock_df_copy.columns:
-        stock_df_copy = stock_df_copy.rename(columns={"sku": "SKU"})
-    if "available_stock" in stock_df_copy.columns:
-        stock_df_copy[ColumnNames.STOCK] = stock_df_copy["available_stock"]
-    elif "stock" in stock_df_copy.columns:
-        stock_df_copy[ColumnNames.STOCK] = stock_df_copy["stock"]
-    if "cena_netto" in stock_df_copy.columns:
-        stock_df_copy["PRICE"] = stock_df_copy["cena_netto"]
-
-    stock_cols = ["SKU", ColumnNames.STOCK]
-    if "PRICE" in stock_df_copy.columns:
-        stock_cols.append("PRICE")
-
-    sku_stock = stock_df_copy[stock_cols].copy()
-    sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-    sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].astype(float).fillna(0)
-    if "PRICE" in stock_cols:
-        sku_summary["PRICE"] = sku_summary["PRICE"].astype(float).fillna(0)
-
-    return sku_summary
+    return merge_stock_into_summary(sku_summary, stock_df, ColumnNames.STOCK)
 
 
 def _period_to_timestamp(p) -> pd.Timestamp:
@@ -524,46 +492,56 @@ def _apply_facility_filters(recommendations: dict) -> dict:
     return recommendations
 
 
-def _render_order_selection_table(top_model_colors: pd.DataFrame, recommendations: dict,
-                                  model_metadata_df: pd.DataFrame | None) -> None:
-    order_list = []
+def _build_order_item(
+    idx: int,
+    row: pd.Series,
+    recommendations: dict,
+    color_aliases: dict,
+    model_metadata_df: pd.DataFrame | None,
+) -> dict:
+    model = row["MODEL"]
+    color = row["COLOR"]
+
+    size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(
+        recommendations["priority_skus"], model, color
+    )
+
+    sizes_str = (
+        ", ".join([f"{size}:{qty}" for size, qty in sorted(size_quantities.items())])
+        if size_quantities
+        else t(Keys.NO_DATA)
+    )
+
+    order_item = {
+        "#": idx,
+        "Model": model,
+        "Color": color,
+        "Color Name": color_aliases.get(color, color),
+        "Priority": f"{row['PRIORITY_SCORE']:.1f}",
+        "Deficit": int(row["DEFICIT"]),
+        "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
+        ColumnNames.SIZE_QTY: sizes_str,
+    }
+
+    if model_metadata_df is not None:
+        metadata_row = model_metadata_df[model_metadata_df["Model"] == model]
+        if not metadata_row.empty:
+            order_item[ColumnNames.SZWALNIA_G] = metadata_row.iloc[0][ColumnNames.SZWALNIA_G]
+
+    return order_item
+
+
+def _render_order_selection_table(
+    top_model_colors: pd.DataFrame,
+    recommendations: dict,
+    model_metadata_df: pd.DataFrame | None,
+) -> None:
     color_aliases = load_color_aliases()
 
-    for idx, (_, row) in enumerate(top_model_colors.iterrows(), 1):
-        model = row["MODEL"]
-        color = row["COLOR"]
-
-        size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(
-            recommendations["priority_skus"],
-            model,
-            color,
-        )
-
-        sizes_str = (
-            ", ".join([f"{size}:{qty}" for size, qty in sorted(size_quantities.items())])
-            if size_quantities
-            else t(Keys.NO_DATA)
-        )
-
-        color_name = color_aliases.get(color, color)
-
-        order_item = {
-            "#": idx,
-            "Model": model,
-            "Color": color,
-            "Color Name": color_name,
-            "Priority": f"{row['PRIORITY_SCORE']:.1f}",
-            "Deficit": int(row["DEFICIT"]),
-            "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
-            ColumnNames.SIZE_QTY: sizes_str,
-        }
-
-        if model_metadata_df is not None:
-            metadata_row = model_metadata_df[model_metadata_df["Model"] == model]
-            if not metadata_row.empty:
-                order_item[ColumnNames.SZWALNIA_G] = metadata_row.iloc[0][ColumnNames.SZWALNIA_G]
-
-        order_list.append(order_item)
+    order_list = [
+        _build_order_item(idx, row, recommendations, color_aliases, model_metadata_df)
+        for idx, (_, row) in enumerate(top_model_colors.iterrows(), 1)
+    ]
 
     order_df = pd.DataFrame(order_list)
     order_df.insert(0, "Select", False)
@@ -589,30 +567,34 @@ def _render_order_selection_table(top_model_colors: pd.DataFrame, recommendation
     _process_selections(edited_df)
 
 
+def _parse_size_quantities(sizes_str: str) -> dict[str, int]:
+    if not sizes_str or sizes_str == "No data":
+        return {}
+    result = {}
+    for pair in sizes_str.split(", "):
+        if ":" in pair:
+            size, qty = pair.split(":")
+            result[size] = int(qty)
+    return result
+
+
 def _process_selections(edited_df: pd.DataFrame) -> None:
     selected_rows = edited_df[edited_df["Select"] == True]
 
     if selected_rows.empty:
         return
 
-    selected_items = []
-    for _, row in selected_rows.iterrows():
-        sizes_str = row[ColumnNames.SIZE_QTY]
-        size_quantities = {}
-        if sizes_str and sizes_str != "No data":
-            for pair in sizes_str.split(", "):
-                if ":" in pair:
-                    size, qty = pair.split(":")
-                    size_quantities[size] = int(qty)
-
-        selected_items.append({
+    selected_items = [
+        {
             "model": row["Model"],
             "color": row["Color"],
             "priority_score": float(row["Priority"]),
             "deficit": int(row["Deficit"]),
             "forecast": int(row["Forecast"]),
-            "sizes": size_quantities,
-        })
+            "sizes": _parse_size_quantities(row[ColumnNames.SIZE_QTY]),
+        }
+        for _, row in selected_rows.iterrows()
+    ]
 
     set_session_value(SessionKeys.SELECTED_ORDER_ITEMS, selected_items)
 

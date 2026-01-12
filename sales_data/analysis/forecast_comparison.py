@@ -52,92 +52,121 @@ def align_forecasts(
     return comparison
 
 
+def _aggregate_to_monthly(
+        df: pd.DataFrame,
+        date_candidates: list[str],
+        sku_candidates: list[str],
+        value_candidates: list[str],
+        output_col: str,
+        use_model: bool = False,
+) -> pd.DataFrame:
+    empty_result = pd.DataFrame(columns=["entity_id", "year_month", output_col])
+
+    if df is None or df.empty:
+        return empty_result
+
+    df = df.copy()
+    date_col = _find_column(df, date_candidates)
+    sku_col = _find_column(df, sku_candidates)
+    value_col = _find_column(df, value_candidates)
+
+    if date_col is None or sku_col is None or value_col is None:
+        return empty_result
+
+    df["entity_id"] = df[sku_col].astype(str).str[:5] if use_model else df[sku_col].astype(str)
+    df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore
+
+    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[value_col]].sum()
+    return monthly.rename(columns={value_col: output_col})
+
+
 def _aggregate_external_to_model_monthly(forecast_df: pd.DataFrame) -> pd.DataFrame:
-    if forecast_df is None or forecast_df.empty:
-        return pd.DataFrame(columns=["entity_id", "year_month", "external_forecast"])
-
-    df = forecast_df.copy()
-
-    date_col = _find_column(df, ["data", "forecast_date", "date"])
-    sku_col = _find_column(df, ["sku", "SKU"])
-    forecast_col = _find_column(df, ["forecast", "forecast_quantity", "FORECAST"])
-
-    if date_col is None or sku_col is None or forecast_col is None:
-        return pd.DataFrame(columns=["entity_id", "year_month", "external_forecast"])
-
-    df["entity_id"] = df[sku_col].astype(str).str[:5]
-    df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
-
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[forecast_col]].sum()
-    monthly = monthly.rename(columns={forecast_col: "external_forecast"})
-
-    return monthly
+    return _aggregate_to_monthly(
+        forecast_df,
+        ["data", "forecast_date", "date"],
+        ["sku", "SKU"],
+        ["forecast", "forecast_quantity", "FORECAST"],
+        "external_forecast",
+        use_model=True,
+    )
 
 
 def _aggregate_external_to_sku_monthly(forecast_df: pd.DataFrame) -> pd.DataFrame:
-    if forecast_df is None or forecast_df.empty:
-        return pd.DataFrame(columns=["entity_id", "year_month", "external_forecast"])
-
-    df = forecast_df.copy()
-
-    date_col = _find_column(df, ["data", "forecast_date", "date"])
-    sku_col = _find_column(df, ["sku", "SKU"])
-    forecast_col = _find_column(df, ["forecast", "forecast_quantity", "FORECAST"])
-
-    if date_col is None or sku_col is None or forecast_col is None:
-        return pd.DataFrame(columns=["entity_id", "year_month", "external_forecast"])
-
-    df["entity_id"] = df[sku_col].astype(str)
-    df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
-
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[forecast_col]].sum()
-    monthly = monthly.rename(columns={forecast_col: "external_forecast"})
-
-    return monthly
+    return _aggregate_to_monthly(
+        forecast_df,
+        ["data", "forecast_date", "date"],
+        ["sku", "SKU"],
+        ["forecast", "forecast_quantity", "FORECAST"],
+        "external_forecast",
+        use_model=False,
+    )
 
 
 def _aggregate_actual_to_model_monthly(sales_df: pd.DataFrame) -> pd.DataFrame:
-    if sales_df is None or sales_df.empty:
-        return pd.DataFrame(columns=["entity_id", "year_month", "actual"])
-
-    df = sales_df.copy()
-
-    date_col = _find_column(df, ["data", "sale_date", "date"])
-    sku_col = _find_column(df, ["sku", "SKU"])
-    qty_col = _find_column(df, ["ilosc", "quantity", "total_quantity"])
-
-    if date_col is None or sku_col is None or qty_col is None:
-        return pd.DataFrame(columns=["entity_id", "year_month", "actual"])
-
-    df["entity_id"] = df[sku_col].astype(str).str[:5]
-    df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
-
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[qty_col]].sum()
-    monthly = monthly.rename(columns={qty_col: "actual"})
-
-    return monthly
+    return _aggregate_to_monthly(
+        sales_df,
+        ["data", "sale_date", "date"],
+        ["sku", "SKU"],
+        ["ilosc", "quantity", "total_quantity"],
+        "actual",
+        use_model=True,
+    )
 
 
 def _aggregate_actual_to_sku_monthly(sales_df: pd.DataFrame) -> pd.DataFrame:
-    if sales_df is None or sales_df.empty:
-        return pd.DataFrame(columns=["entity_id", "year_month", "actual"])
+    return _aggregate_to_monthly(
+        sales_df,
+        ["data", "sale_date", "date"],
+        ["sku", "SKU"],
+        ["ilosc", "quantity", "total_quantity"],
+        "actual",
+        use_model=False,
+    )
 
-    df = sales_df.copy()
 
-    date_col = _find_column(df, ["data", "sale_date", "date"])
-    sku_col = _find_column(df, ["sku", "SKU"])
-    qty_col = _find_column(df, ["ilosc", "quantity", "total_quantity"])
+def _calculate_forecast_metrics(forecast: pd.Series, actual: pd.Series) -> dict:
+    errors = np.abs(forecast - actual)
+    return {
+        "mape": (errors / actual).mean() * 100,
+        "bias": ((forecast - actual) / actual).mean() * 100,
+        "mae": errors.mean(),
+        "rmse": np.sqrt(((forecast - actual) ** 2).mean()),
+    }
 
-    if date_col is None or sku_col is None or qty_col is None:
-        return pd.DataFrame(columns=["entity_id", "year_month", "actual"])
 
-    df["entity_id"] = df[sku_col].astype(str)
-    df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore[attr-defined]
+def _determine_winner(internal_mape: float, external_mape: float) -> tuple[str, float]:
+    if internal_mape < external_mape:
+        return "internal", external_mape - internal_mape
+    if external_mape < internal_mape:
+        return "external", internal_mape - external_mape
+    return "tie", 0
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[qty_col]].sum()
-    monthly = monthly.rename(columns={qty_col: "actual"})
 
-    return monthly
+def _compute_entity_metrics(entity_id: str, group: pd.DataFrame) -> dict | None:
+    valid = group[group["actual"] > 0]
+    if valid.empty:
+        return None
+
+    internal = _calculate_forecast_metrics(valid["internal_forecast"], valid["actual"])
+    external = _calculate_forecast_metrics(valid["external_forecast"], valid["actual"])
+    winner, improvement = _determine_winner(internal["mape"], external["mape"])
+
+    return {
+        "entity_id": entity_id,
+        "method": group["method"].iloc[0] if "method" in group.columns else "unknown",
+        "months_compared": len(valid),
+        "total_actual": valid["actual"].sum(),
+        "internal_mape": internal["mape"],
+        "external_mape": external["mape"],
+        "internal_bias": internal["bias"],
+        "external_bias": external["bias"],
+        "internal_mae": internal["mae"],
+        "external_mae": external["mae"],
+        "internal_rmse": internal["rmse"],
+        "external_rmse": external["rmse"],
+        "winner": winner,
+        "improvement_pct": improvement,
+    }
 
 
 def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
@@ -145,54 +174,10 @@ def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     results = []
-
     for entity_id, group in comparison_df.groupby("entity_id", observed=True):
-        valid = group[group["actual"] > 0]
-
-        if valid.empty:
-            continue
-
-        internal_errors = np.abs(valid["internal_forecast"] - valid["actual"])
-        external_errors = np.abs(valid["external_forecast"] - valid["actual"])
-
-        internal_mape = (internal_errors / valid["actual"]).mean() * 100
-        external_mape = (external_errors / valid["actual"]).mean() * 100
-
-        internal_bias = ((valid["internal_forecast"] - valid["actual"]) / valid["actual"]).mean() * 100
-        external_bias = ((valid["external_forecast"] - valid["actual"]) / valid["actual"]).mean() * 100
-
-        internal_mae = internal_errors.mean()
-        external_mae = external_errors.mean()
-
-        internal_rmse = np.sqrt(((valid["internal_forecast"] - valid["actual"]) ** 2).mean())
-        external_rmse = np.sqrt(((valid["external_forecast"] - valid["actual"]) ** 2).mean())
-
-        if internal_mape < external_mape:
-            winner = "internal"
-            improvement = external_mape - internal_mape
-        elif external_mape < internal_mape:
-            winner = "external"
-            improvement = internal_mape - external_mape
-        else:
-            winner = "tie"
-            improvement = 0
-
-        results.append({
-            "entity_id": entity_id,
-            "method": group["method"].iloc[0] if "method" in group.columns else "unknown",
-            "months_compared": len(valid),
-            "total_actual": valid["actual"].sum(),
-            "internal_mape": internal_mape,
-            "external_mape": external_mape,
-            "internal_bias": internal_bias,
-            "external_bias": external_bias,
-            "internal_mae": internal_mae,
-            "external_mae": external_mae,
-            "internal_rmse": internal_rmse,
-            "external_rmse": external_rmse,
-            "winner": winner,
-            "improvement_pct": improvement,
-        })
+        metrics = _compute_entity_metrics(entity_id, group)
+        if metrics:
+            results.append(metrics)
 
     return pd.DataFrame(results)
 

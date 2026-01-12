@@ -180,22 +180,24 @@ def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
+def _safe_get_numeric(row: pd.Series, key: str) -> float:
+    value = row.get(key, 0)
+    return 0 if pd.isna(value) else float(value)
+
+
 def get_size_quantities_for_model_color(
     priority_df: pd.DataFrame, model: str, color: str
 ) -> dict[str, int]:
     filtered = priority_df[(priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)]
 
     size_quantities = {}
-
     for _, row in filtered.iterrows():
         size = row["SIZE"]
-        deficit = row.get("DEFICIT", 0)
-        forecast = row.get("FORECAST_LEADTIME", 0)
-        deficit = 0 if pd.isna(deficit) else deficit
-        forecast = 0 if pd.isna(forecast) else forecast
-        qty_needed = max(deficit, forecast)
-        if size:
-            size_quantities[size] = int(qty_needed)
+        if not size:
+            continue
+        deficit = _safe_get_numeric(row, "DEFICIT")
+        forecast = _safe_get_numeric(row, "FORECAST_LEADTIME")
+        size_quantities[size] = int(max(deficit, forecast))
 
     return size_quantities
 
@@ -244,8 +246,7 @@ def generate_order_recommendations(
 
 
 def find_urgent_colors(model_color_summary: pd.DataFrame, model: str) -> list[str]:
-    urgent = model_color_summary[
-        (model_color_summary["MODEL"] == model) &
-        (model_color_summary.get("URGENT", pd.Series([False] * len(model_color_summary))) == True)
-    ]
-    return urgent["COLOR"].tolist()
+    df = model_color_summary[model_color_summary["MODEL"] == model]
+    if "URGENT" not in df.columns:
+        return []
+    return df.loc[df["URGENT"], "COLOR"].tolist()

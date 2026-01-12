@@ -103,40 +103,23 @@ context = {
     "use_forecast": sidebar_options.get("use_forecast", True),
 }
 
-with tabs[0]:
-    tab_task_planner.render()
+TAB_RENDERERS = [
+    (tab_task_planner.render, False),
+    (tab_sales_analysis.render, True),
+    (tab_pattern_optimizer.render, False),
+    (tab_weekly_analysis.render, True),
+    (tab_monthly_analysis.render, False),
+    (tab_order_recommendations.render, True),
+    (tab_order_creation.render, True),
+    (tab_order_tracking.render, False),
+    (tab_forecast_accuracy.render, True),
+    (tab_forecast_comparison.render, False),
+    (tab_ml_forecast.render, False),
+    (tab_nlq.render, True),
+]
 
-with tabs[1]:
-    tab_sales_analysis.render(context)
-
-with tabs[2]:
-    tab_pattern_optimizer.render()
-
-with tabs[3]:
-    tab_weekly_analysis.render(context)
-
-with tabs[4]:
-    tab_monthly_analysis.render()
-
-with tabs[5]:
-    tab_order_recommendations.render(context)
-
-with tabs[6]:
-    tab_order_creation.render(context)
-
-with tabs[7]:
-    tab_order_tracking.render()
-
-with tabs[8]:
-    tab_forecast_accuracy.render(context)
-
-with tabs[9]:
-    tab_forecast_comparison.render()
-
-with tabs[10]:
-    tab_ml_forecast.render()
-
-with tabs[11]:
-    tab_nlq.render(context)
+for i, (renderer, needs_context) in enumerate(TAB_RENDERERS):
+    with tabs[i]:
+        renderer(context) if needs_context else renderer()
 
 logger.info("Application render cycle completed")

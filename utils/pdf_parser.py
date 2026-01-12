@@ -161,47 +161,47 @@ def _extract_quantity_from_table(tables) -> int | None:
     return None
 
 
-def _extract_order_metadata(tables, page_text: str) -> dict:
-    metadata: dict = {
-        "order_date": None,
-        "model": None,
-        "product_name": None,
-        "material": None,
-        "facility": None,
-        "operation": None,
-        "total_quantity": None,
-    }
-
-    date_match = re.search(r'(\d{1,2}\.\d{1,2}\.\d{4})', page_text)
-    if date_match:
-        metadata["order_date"] = _parse_date(date_match.group(1))
-
+def _extract_from_lines(page_text: str) -> dict:
+    result = {"operation": None, "facility": None, "material": None}
     for line in page_text.split('\n'):
         line_lower = line.lower()
-        if not metadata["operation"]:
-            metadata["operation"] = _extract_operation(line_lower)
-        if not metadata["facility"]:
-            metadata["facility"] = _extract_facility(line_lower)
-        if not metadata["material"]:
-            metadata["material"] = _extract_material(line)
+        if not result["operation"]:
+            result["operation"] = _extract_operation(line_lower)
+        if not result["facility"]:
+            result["facility"] = _extract_facility(line_lower)
+        if not result["material"]:
+            result["material"] = _extract_material(line)
+    return result
 
-    metadata["product_name"] = _extract_product_name_from_table(tables)
-    if not metadata["product_name"]:
-        metadata["product_name"] = _extract_product_name_from_text(page_text)
 
+def _extract_quantity(page_text: str, tables) -> int | None:
     qty_match = re.search(r"(\d+)\s*SZTUK", page_text)
     if qty_match:
-        metadata["total_quantity"] = int(qty_match.group(1))
-    else:
-        metadata["total_quantity"] = _extract_quantity_from_table(tables)
+        return int(qty_match.group(1))
+    return _extract_quantity_from_table(tables)
 
-    metadata["model"] = _extract_model_from_table(tables)
-    if not metadata["model"]:
-        model_match = re.search(r"([A-Z]{2}\d{3})", page_text)
-        if model_match:
-            metadata["model"] = model_match.group(1)
 
-    return metadata
+def _extract_model(page_text: str, tables) -> str | None:
+    model = _extract_model_from_table(tables)
+    if model:
+        return model
+    model_match = re.search(r"([A-Z]{2}\d{3})", page_text)
+    return model_match.group(1) if model_match else None
+
+
+def _extract_order_metadata(tables, page_text: str) -> dict:
+    date_match = re.search(r'(\d{1,2}\.\d{1,2}\.\d{4})', page_text)
+    line_extracts = _extract_from_lines(page_text)
+
+    return {
+        "order_date": _parse_date(date_match.group(1)) if date_match else None,
+        "model": _extract_model(page_text, tables),
+        "product_name": _extract_product_name_from_table(tables) or _extract_product_name_from_text(page_text),
+        "material": line_extracts["material"],
+        "facility": line_extracts["facility"],
+        "operation": line_extracts["operation"],
+        "total_quantity": _extract_quantity(page_text, tables),
+    }
 
 
 def _is_date_format(text: str) -> bool:

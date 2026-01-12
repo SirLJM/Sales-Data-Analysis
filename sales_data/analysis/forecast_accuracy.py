@@ -7,6 +7,22 @@ import numpy as np
 import pandas as pd
 
 
+def _get_entity_col(entity_type: str) -> str:
+    return "model" if entity_type == "model" else "sku"
+
+
+def _ensure_entity_col(df: pd.DataFrame, entity_col: str) -> pd.DataFrame:
+    if entity_col == "model" and "model" not in df.columns:
+        df["model"] = df["sku"].astype(str).str[:5]
+    elif entity_col == "sku":
+        df[entity_col] = df["sku"]
+    return df
+
+
+def _filter_date_range(df: pd.DataFrame, start: datetime, end: datetime) -> pd.DataFrame:
+    return df[(df["date"] >= start.date()) & (df["date"] <= end.date())]
+
+
 def prepare_daily_comparison(
         sales_df: pd.DataFrame,
         forecast_df: pd.DataFrame,
@@ -18,7 +34,7 @@ def prepare_daily_comparison(
     if sales_df.empty or forecast_df.empty:
         return pd.DataFrame()
 
-    entity_col = "model" if entity_type == "model" else "sku"
+    entity_col = _get_entity_col(entity_type)
 
     daily_actual = _aggregate_daily_sales(sales_df, analysis_start, analysis_end, entity_col)
     daily_forecast = _prepare_daily_forecast(forecast_df, analysis_start, analysis_end, entity_col)
@@ -29,8 +45,7 @@ def prepare_daily_comparison(
 
     if not daily_stock.empty:
         comparison = comparison.merge(daily_stock, on=[entity_col, "date"], how="left")
-        comparison["stock_level"] = comparison["stock_level"].ffill()
-        comparison["stock_level"] = comparison["stock_level"].fillna(0)
+        comparison["stock_level"] = comparison["stock_level"].ffill().fillna(0)
     else:
         comparison["stock_level"] = np.nan
 
@@ -43,37 +58,20 @@ def _aggregate_daily_sales(
         sales_df: pd.DataFrame, start: datetime, end: datetime, entity_col: str
 ) -> pd.DataFrame:
     df = sales_df.copy()
-    df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore[attr-defined]
-
-    if entity_col == "model":
-        if "model" not in df.columns:
-            df["model"] = df["sku"].astype(str).str[:5]
-    else:
-        df[entity_col] = df["sku"]
-
-    df = df[(df["date"] >= start.date()) & (df["date"] <= end.date())]
-
-    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(actual=("ilosc", "sum"))
-
-    return daily
+    df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore
+    df = _ensure_entity_col(df, entity_col)
+    df = _filter_date_range(df, start, end)
+    return df.groupby([entity_col, "date"], as_index=False, observed=True).agg(actual=("ilosc", "sum"))
 
 
 def _prepare_daily_forecast(
         forecast_df: pd.DataFrame, start: datetime, end: datetime, entity_col: str
 ) -> pd.DataFrame:
     df = forecast_df.copy()
-    df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore[attr-defined]
-
-    if entity_col == "model":
-        if "model" not in df.columns:
-            df["model"] = df["sku"].astype(str).str[:5]
-    else:
-        df[entity_col] = df["sku"]
-
+    df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore
+    df = _ensure_entity_col(df, entity_col)
     daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(forecast=("forecast", "sum"))
-    daily = daily[(daily["date"] >= start.date()) & (daily["date"] <= end.date())]
-
-    return daily
+    return _filter_date_range(daily, start, end)
 
 
 def _prepare_daily_stock(
@@ -83,19 +81,12 @@ def _prepare_daily_stock(
         return pd.DataFrame()
 
     df = stock_df.copy()
-    df["date"] = pd.to_datetime(df["snapshot_date"]).dt.date  # type: ignore[attr-defined]
-
-    if entity_col == "model":
-        df["model"] = df["sku"].astype(str).str[:5]
-    else:
-        df[entity_col] = df["sku"]
-
+    df["date"] = pd.to_datetime(df["snapshot_date"]).dt.date  # type: ignore
+    df = _ensure_entity_col(df, entity_col)
     daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(
         stock_level=("available_stock", "sum")
     )
-    daily = daily[(daily["date"] >= start.date()) & (daily["date"] <= end.date())]
-
-    return daily
+    return _filter_date_range(daily, start, end)
 
 
 def calculate_accuracy_metrics(comparison_df: pd.DataFrame, entity_col: str) -> pd.DataFrame:
@@ -129,7 +120,8 @@ def calculate_accuracy_metrics(comparison_df: pd.DataFrame, entity_col: str) -> 
             "MISSED_OPPORTUNITY": missed_opportunity,
         })
 
-    results = comparison_df.groupby(entity_col, observed=True).apply(compute_entity_metrics, include_groups=False).reset_index()
+    results = comparison_df.groupby(entity_col, observed=True).apply(compute_entity_metrics,
+                                                                     include_groups=False).reset_index()
     results.columns = [entity_col.upper()] + list(results.columns[1:])
 
     return results
@@ -186,9 +178,7 @@ def calculate_forecast_accuracy(
     if comparison.empty:
         return pd.DataFrame()
 
-    entity_col = "model" if entity_type == "model" else "sku"
-    result = calculate_accuracy_metrics(comparison, entity_col)
-    return result
+    return calculate_accuracy_metrics(comparison, _get_entity_col(entity_type))
 
 
 def aggregate_accuracy_by_product_type(
@@ -197,13 +187,12 @@ def aggregate_accuracy_by_product_type(
     if accuracy_df.empty or sku_summary.empty:
         return pd.DataFrame()
 
-    id_col = "MODEL" if entity_type == "model" else "SKU"
+    id_col = _get_entity_col(entity_type).upper()
 
     if id_col not in sku_summary.columns or "TYPE" not in sku_summary.columns:
         return pd.DataFrame()
 
     type_lookup = sku_summary[[id_col, "TYPE"]].drop_duplicates()
-
     merged = accuracy_df.merge(type_lookup, on=id_col, how="left")
     merged["TYPE"] = merged["TYPE"].fillna("unknown")
 
@@ -221,10 +210,8 @@ def aggregate_accuracy_by_product_type(
     }).reset_index()
 
     type_summary = type_summary.rename(columns={id_col: "COUNT"})
-    type_summary["MAPE"] = type_summary["MAPE"].round(2)
-    type_summary["BIAS"] = type_summary["BIAS"].round(2)
-    type_summary["MAE"] = type_summary["MAE"].round(2)
-    type_summary["RMSE"] = type_summary["RMSE"].round(2)
+    for col in ["MAPE", "BIAS", "MAE", "RMSE"]:
+        type_summary[col] = type_summary[col].round(2)
 
     return type_summary
 
@@ -260,7 +247,8 @@ def calculate_accuracy_trend(
         bias = _calculate_bias(g_with_stock)
         return pd.Series({"MAPE": mape, "BIAS": bias})
 
-    trend = comparison.groupby("period", observed=True).apply(compute_period_metrics, include_groups=False).reset_index()
+    trend = comparison.groupby("period", observed=True).apply(compute_period_metrics,
+                                                              include_groups=False).reset_index()
     trend = trend.sort_values("period")
 
     return trend

@@ -23,19 +23,11 @@ ML_MIN_MONTHS = 12
 ML_MIN_MONTHS_SEASONAL = 24
 
 
-def train_ml_model(
-        monthly_agg: pd.DataFrame,
-        entity_id: str,
-        entity_type: str = "model",
-        model_type: str | None = None,
-        sku_stats: pd.DataFrame | None = None,
-        models_to_evaluate: list[str] | None = None,
-        include_statistical: bool = True,
-        cv_splits: int = 3,
-        cv_test_size: int = 3,
-        cv_metric: str = "mape",
-) -> dict:
-    result = {
+STATISTICAL_MODELS = frozenset(["exp_smoothing", "holt_winters", "sarima"])
+
+
+def _create_base_result(entity_id: str, entity_type: str) -> dict:
+    return {
         "entity_id": entity_id,
         "entity_type": entity_type,
         "model_type": None,
@@ -49,50 +41,55 @@ def train_ml_model(
         "error": None,
     }
 
-    x, y = prepare_ml_features(monthly_agg, entity_id, entity_type, sku_stats)
 
-    if x is None or y is None:
-        result["error"] = f"Insufficient data for entity {entity_id}"
+def _train_specific_ml_model(
+    model_type: str,
+    x: pd.DataFrame,
+    y: pd.Series,
+    result: dict,
+    product_type: str | None,
+    cv: float | None,
+) -> dict:
+    available_models = get_available_ml_models()
+
+    if model_type in available_models:
+        config = available_models[model_type]
+        trained_model = config.model_class(**config.params)
+        trained_model.fit(x, y)
+
+        result["model_type"] = model_type
+        result["trained_model"] = trained_model
+        result["feature_names"] = list(x.columns)
+        result["feature_importance"] = _get_feature_importance(trained_model, x.columns)
+        result["success"] = True
+        result["product_type"] = product_type
+        result["cv"] = cv
         return result
 
-    if len(x) < ML_MIN_MONTHS:
-        result["error"] = f"Need at least {ML_MIN_MONTHS} months of data, got {len(x)}"
+    if model_type in STATISTICAL_MODELS:
+        result["model_type"] = model_type
+        result["success"] = True
+        result["product_type"] = product_type
+        result["cv"] = cv
         return result
 
-    series = _prepare_series(monthly_agg, entity_id, entity_type)
+    result["error"] = f"Unknown model type: {model_type}"
+    return result
 
-    product_type, cv = _get_entity_stats_from_df(sku_stats, entity_id, entity_type)
 
-    if model_type and model_type != "auto":
-        available_models = get_available_ml_models()
-
-        if model_type in available_models:
-            config = available_models[model_type]
-            trained_model = config.model_class(**config.params)
-            trained_model.fit(x, y)
-
-            result["model_type"] = model_type
-            result["trained_model"] = trained_model
-            result["cv_score"] = None
-            result["feature_names"] = list(x.columns)
-            result["feature_importance"] = _get_feature_importance(trained_model, x.columns)
-            result["success"] = True
-            result["product_type"] = product_type
-            result["cv"] = cv
-            return result
-
-        elif model_type in ["exp_smoothing", "holt_winters", "sarima"]:
-            result["model_type"] = model_type
-            result["trained_model"] = None
-            result["success"] = True
-            result["product_type"] = product_type
-            result["cv"] = cv
-            return result
-
-        else:
-            result["error"] = f"Unknown model type: {model_type}"
-            return result
-
+def _train_auto_selected_model(
+    x: pd.DataFrame,
+    y: pd.Series,
+    series: pd.Series,
+    result: dict,
+    product_type: str | None,
+    cv: float | None,
+    models_to_evaluate: list[str] | None,
+    include_statistical: bool,
+    cv_splits: int,
+    cv_test_size: int,
+    cv_metric: str,
+) -> dict:
     selection_result = select_best_model(
         x, y,
         series=series,
@@ -126,11 +123,46 @@ def train_ml_model(
         result["trained_model"] = trained_model
         result["feature_names"] = list(x.columns)
         result["feature_importance"] = _get_feature_importance(trained_model, x.columns)
-    else:
-        result["trained_model"] = None
 
     result["success"] = True
     return result
+
+
+def train_ml_model(
+        monthly_agg: pd.DataFrame,
+        entity_id: str,
+        entity_type: str = "model",
+        model_type: str | None = None,
+        sku_stats: pd.DataFrame | None = None,
+        models_to_evaluate: list[str] | None = None,
+        include_statistical: bool = True,
+        cv_splits: int = 3,
+        cv_test_size: int = 3,
+        cv_metric: str = "mape",
+) -> dict:
+    result = _create_base_result(entity_id, entity_type)
+
+    x, y = prepare_ml_features(monthly_agg, entity_id, entity_type, sku_stats)
+
+    if x is None or y is None:
+        result["error"] = f"Insufficient data for entity {entity_id}"
+        return result
+
+    if len(x) < ML_MIN_MONTHS:
+        result["error"] = f"Need at least {ML_MIN_MONTHS} months of data, got {len(x)}"
+        return result
+
+    series = _prepare_series(monthly_agg, entity_id, entity_type)
+    product_type, cv = _get_entity_stats_from_df(sku_stats, entity_id, entity_type)
+
+    if model_type and model_type != "auto":
+        return _train_specific_ml_model(model_type, x, y, result, product_type, cv)
+
+    return _train_auto_selected_model(
+        x, y, series, result, product_type, cv,
+        models_to_evaluate, include_statistical,
+        cv_splits, cv_test_size, cv_metric,
+    )
 
 
 def generate_ml_forecast(
@@ -344,15 +376,15 @@ def _generate_statistical_forecast(
         generate_forecast_sarima,
     )
 
+    forecast_methods = {
+        "exp_smoothing": generate_forecast_exp_smoothing,
+        "holt_winters": generate_forecast_holt_winters,
+        "sarima": generate_forecast_sarima,
+    }
+
     try:
-        if method == "exp_smoothing":
-            return generate_forecast_exp_smoothing(series, horizon)
-        elif method == "holt_winters":
-            return generate_forecast_holt_winters(series, horizon)
-        elif method == "sarima":
-            return generate_forecast_sarima(series, horizon)
-        else:
-            return generate_forecast_exp_smoothing(series, horizon)
+        forecast_fn = forecast_methods.get(method, generate_forecast_exp_smoothing)
+        return forecast_fn(series, horizon)
     except Exception as e:
         logger.warning("Statistical forecast failed: %s", e)
         return None

@@ -15,6 +15,38 @@ from sales_data.loader import SalesDataLoader
 
 load_dotenv(find_dotenv(filename=".env"))
 
+UPSERT_SQL = """
+    INSERT INTO model_metadata (model, primary_production, secondary_production,
+                                material_type, material_weight)
+    VALUES (:model, :primary_production, :secondary_production,
+            :material_type, :material_weight)
+    ON CONFLICT (model) DO UPDATE SET primary_production   = EXCLUDED.primary_production,
+                                      secondary_production = EXCLUDED.secondary_production,
+                                      material_type        = EXCLUDED.material_type,
+                                      material_weight      = EXCLUDED.material_weight,
+                                      updated_at           = CURRENT_TIMESTAMP
+"""
+
+
+def _safe_strip(value) -> str:
+    return str(value).strip() if pd.notna(value) else ""
+
+
+def _row_to_metadata(row: dict) -> dict:
+    return {
+        "model": str(row["Model"]).strip(),
+        "primary_production": _safe_strip(row["SZWALNIA GŁÓWNA"]),
+        "secondary_production": _safe_strip(row["SZWALNIA DRUGA"]),
+        "material_type": _safe_strip(row["RODZAJ MATERIAŁU"]),
+        "material_weight": _safe_strip(row["GRAMATURA"]),
+    }
+
+
+def _get_model_count(engine: Engine) -> int:
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT COUNT(*) FROM model_metadata"))
+        return result.fetchone()[0]
+
 
 def import_model_metadata(connection_string: str) -> None:
     print("Starting model metadata import...")
@@ -39,46 +71,15 @@ def import_model_metadata(connection_string: str) -> None:
             return
 
         print(f"Loaded {len(df)} models from file")
+        print(f"Current database has {_get_model_count(engine)} models")
+
+        batch_data = [_row_to_metadata(row) for row in df.to_dict('records')]
 
         with engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM model_metadata"))
-            existing_count = result.fetchone()[0]
-            print(f"Current database has {existing_count} models")
-
-        batch_data = [
-            {
-                "model": str(row["Model"]).strip(),
-                "primary_production": str(row["SZWALNIA GŁÓWNA"]).strip() if pd.notna(row["SZWALNIA GŁÓWNA"]) else "",
-                "secondary_production": str(row["SZWALNIA DRUGA"]).strip() if pd.notna(row["SZWALNIA DRUGA"]) else "",
-                "material_type": str(row["RODZAJ MATERIAŁU"]).strip() if pd.notna(row["RODZAJ MATERIAŁU"]) else "",
-                "material_weight": str(row["GRAMATURA"]).strip() if pd.notna(row["GRAMATURA"]) else "",
-            }
-            for row in df.to_dict('records')
-        ]
-
-        with engine.connect() as conn:
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO model_metadata (model, primary_production, secondary_production,
-                                                material_type, material_weight)
-                    VALUES (:model, :primary_production, :secondary_production,
-                            :material_type, :material_weight)
-                    ON CONFLICT (model) DO UPDATE SET primary_production   = EXCLUDED.primary_production,
-                                                      secondary_production = EXCLUDED.secondary_production,
-                                                      material_type        = EXCLUDED.material_type,
-                                                      material_weight      = EXCLUDED.material_weight,
-                                                      updated_at           = CURRENT_TIMESTAMP
-                    """
-                ),
-                batch_data,
-            )
+            conn.execute(text(UPSERT_SQL), batch_data)
             conn.commit()
 
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT COUNT(*) FROM model_metadata"))
-            new_count = result.fetchone()[0]
-            print(f"  OK Database now has {new_count} models")
+        print(f"  OK Database now has {_get_model_count(engine)} models")
 
     except (ValueError, OSError, IOError) as e:
         print(f"  ERROR: {e}")

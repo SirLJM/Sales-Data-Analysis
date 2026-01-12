@@ -204,10 +204,7 @@ def _calculate_model_size_sales_history(
 
 
 def _find_column(df, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None
+    return next((col for col in candidates if col in df.columns), None)
 
 
 def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
@@ -235,14 +232,15 @@ def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
 
 
 def _clear_editor_form_state() -> None:
-    for key in st.session_state.keys():
-        if any([
-            key.startswith("size_name_"),
-            key.startswith("pname_"),
-            key.startswith("p") and "_" in key,
-            key in ("set_name_input", "num_sizes_input", "num_patterns_input"),
-        ]):
-            del st.session_state[key]
+    prefixes = ("size_name_", "pname_")
+    direct_keys = {"set_name_input", "num_sizes_input", "num_patterns_input"}
+
+    keys_to_delete = [
+        key for key in st.session_state.keys()
+        if key.startswith(prefixes) or key in direct_keys or (key.startswith("p") and "_" in key)
+    ]
+    for key in keys_to_delete:
+        del st.session_state[key]
 
 
 def _render_pattern_sets_section() -> None:
@@ -287,12 +285,12 @@ def _render_pattern_set_buttons() -> None:
 
 def _on_pattern_set_change():
     selected_name = st.session_state.get("pattern_set_selector")
-    if selected_name:
-        pattern_sets = st.session_state.get(SessionKeys.PATTERN_SETS, [])
-        for ps in pattern_sets:
-            if ps.name == selected_name:
-                st.session_state[SessionKeys.ACTIVE_SET_ID] = ps.id
-                break
+    if not selected_name:
+        return
+    pattern_sets = st.session_state.get(SessionKeys.PATTERN_SETS, [])
+    matched = next((ps for ps in pattern_sets if ps.name == selected_name), None)
+    if matched:
+        st.session_state[SessionKeys.ACTIVE_SET_ID] = matched.id
 
 
 def _render_pattern_set_selector(pattern_sets: list[PatternSet]) -> PatternSet | None:

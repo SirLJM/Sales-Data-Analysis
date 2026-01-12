@@ -61,8 +61,8 @@ def calculate_safety_stock_and_rop(
             seasonal_mask, df[AVERAGE_SALES] * lead_time_months + df["SS_OUT"], np.nan
         )
 
-        in_season_mask = df["is_in_season"]
-        out_season_mask = df["is_in_season"] is False
+        in_season_mask = df["is_in_season"] == True
+        out_season_mask = df["is_in_season"] == False
 
         df.loc[seasonal_mask & in_season_mask, "SS"] = df["SS_IN"]
         df.loc[seasonal_mask & in_season_mask, "ROP"] = df["ROP_IN"]

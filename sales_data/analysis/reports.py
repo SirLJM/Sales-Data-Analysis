@@ -13,7 +13,6 @@ def generate_weekly_new_products_analysis(
         lookback_days: int = 60,
         reference_date: datetime | None = None,
 ) -> pd.DataFrame:
-
     def get_week_start_wednesday(date: datetime) -> datetime:
         days_since_wed = (date.weekday() - 2) % 7
         return date - timedelta(days=days_since_wed)
@@ -69,7 +68,8 @@ def generate_weekly_new_products_analysis(
 
     full_combinations = pd.DataFrame(model_week_ranges)
 
-    weekly_complete = full_combinations.merge(weekly_sales, on=["model", "week_start"], how="left")
+    weekly_complete = full_combinations.merge(weekly_sales, on=["model", "week_start"], how="left",
+                                              validate="many_to_many")
     weekly_complete["ilosc"] = weekly_complete["ilosc"].fillna(0).astype(int)
 
     pivot_df = weekly_complete.pivot(index="model", columns="week_start", values="ilosc")
@@ -223,15 +223,10 @@ def calculate_top_products_by_type(
     }
 
 
-def _calculate_percent_change(current: float, prior: float, difference: float) -> float:
-    if prior == 0 and current > 0:
-        return 999.0
-    elif prior > 0 and current == 0:
-        return -100.0
-    elif prior == 0 and current == 0:
-        return 0.0
-    else:
-        return (difference / prior) * 100
+def _calculate_percent_change(current: float, prior: float) -> float:
+    if prior > 0:
+        return ((current - prior) / prior) * 100
+    return 999.0 if current > 0 else 0.0
 
 
 def calculate_monthly_yoy_by_category(
@@ -289,7 +284,7 @@ def calculate_monthly_yoy_by_category(
     kategoria_details["difference"] = kategoria_details["current_qty"] - kategoria_details["prior_qty"]
 
     kategoria_details["percent_change"] = kategoria_details.apply(
-        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"], row["difference"]),
+        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"]),
         axis=1
     )
 
@@ -302,7 +297,7 @@ def calculate_monthly_yoy_by_category(
     })
 
     podgrupa_summary["percent_change"] = podgrupa_summary.apply(
-        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"], row["difference"]),
+        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"]),
         axis=1
     )
 
@@ -356,7 +351,7 @@ def filter_and_pivot_sales(
         (df["model"] == model) &
         (df["color"].isin(colors)) &
         (df["YEAR_MONTH"].isin(last_n_months))
-    ]
+        ]
 
     if filtered.empty:
         return pd.DataFrame()

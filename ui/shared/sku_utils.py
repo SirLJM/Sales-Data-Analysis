@@ -29,3 +29,11 @@ def add_sku_components(df: pd.DataFrame, sku_col: str = "SKU") -> pd.DataFrame:
     df["COLOR"] = extract_color(df[sku_col])
     df["SIZE"] = extract_size(df[sku_col])
     return df
+
+
+def get_size_sort_key(size_alias: str, size_alias_to_code: dict[str, str]) -> int:
+    size_code = size_alias_to_code.get(size_alias, size_alias)
+    try:
+        return int(size_code)
+    except (ValueError, TypeError):
+        return 999

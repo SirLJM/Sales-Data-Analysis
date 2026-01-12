@@ -15,9 +15,7 @@ def load_sales_for_accuracy(
 ) -> pd.DataFrame | None:
     data_source = get_data_source()
     sales_df = data_source.load_sales_data(start_date=start_date, end_date=end_date)
-    if sales_df is not None and not sales_df.empty:
-        return sales_df
-    return None
+    return sales_df if sales_df is not None and not sales_df.empty else None
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -46,9 +44,7 @@ def load_stock_history_for_accuracy(
 ) -> pd.DataFrame | None:
     data_source = get_data_source()
     stock_df = data_source.load_stock_history(start_date=start_date, end_date=end_date)
-    if stock_df is not None and not stock_df.empty:
-        return stock_df
-    return None
+    return stock_df if stock_df is not None and not stock_df.empty else None
 
 
 def get_available_forecast_dates() -> list[datetime]:

@@ -70,7 +70,4 @@ def get_active_pattern_set():
     if active_id is None:
         return None
     pattern_sets = get_pattern_sets()
-    for ps in pattern_sets:
-        if ps.id == active_id:
-            return ps
-    return None
+    return next((ps for ps in pattern_sets if ps.id == active_id), None)

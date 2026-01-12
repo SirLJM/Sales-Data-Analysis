@@ -14,9 +14,10 @@ from ui.shared.data_loaders import (
     load_model_metadata,
     load_size_aliases,
     load_size_aliases_reverse,
+    merge_stock_into_summary,
 )
 from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
-from ui.shared.sku_utils import extract_color, extract_model, extract_size
+from ui.shared.sku_utils import extract_color, extract_model, extract_size, get_size_sort_key
 from ui.shared.styles import ROTATED_TABLE_STYLE
 from utils.logging_config import get_logger
 from utils.pattern_optimizer import PatternSet, get_min_order_per_pattern, load_pattern_sets
@@ -130,34 +131,9 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         lead_time_months=settings["lead_time"],
     )
 
-    sku_summary = _merge_stock_data(sku_summary, stock_df)
+    sku_summary = merge_stock_into_summary(sku_summary, stock_df, ColumnNames.STOCK)
     sku_summary = _merge_forecast_data(sku_summary, forecast_df, settings["lead_time"])
     sku_summary = apply_priority_scoring(sku_summary, settings)
-
-    return sku_summary
-
-
-def _merge_stock_data(sku_summary: pd.DataFrame, stock_df: pd.DataFrame | None) -> pd.DataFrame:
-    if stock_df is None or stock_df.empty:
-        _add_default_stock_columns(sku_summary)
-        return sku_summary
-
-    stock_df_sku_level = _prepare_stock_df(stock_df)
-    if stock_df_sku_level is None or ColumnNames.STOCK not in stock_df_sku_level.columns:
-        logger.warning("Prepared stock data missing STOCK column, adding defaults")
-        _add_default_stock_columns(sku_summary)
-        return sku_summary
-
-    stock_cols = ["SKU", ColumnNames.STOCK]
-    if "PRICE" in stock_df_sku_level.columns:
-        stock_cols.append("PRICE")
-
-    sku_stock = stock_df_sku_level[stock_cols].copy()
-    sku_summary = sku_summary.merge(sku_stock, on="SKU", how="left")
-    sku_summary[ColumnNames.STOCK] = sku_summary[ColumnNames.STOCK].fillna(0).infer_objects(copy=False)
-
-    if "PRICE" in stock_cols:
-        sku_summary["PRICE"] = sku_summary["PRICE"].fillna(0).infer_objects(copy=False)
 
     return sku_summary
 
@@ -173,50 +149,23 @@ def _merge_forecast_data(
 
 
 @st.cache_data(ttl=3600)
-def _load_stock_data() -> pd.DataFrame | None:
+def _load_cached_data(data_type: str) -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
-        return data_source.load_stock_data()
-    except Exception as e:
-        logger.warning("Could not load stock data: %s", e)
-        return None
-
-
-@st.cache_data(ttl=3600)
-def _load_forecast_data() -> pd.DataFrame | None:
-    try:
-        data_source = get_data_source()
+        if data_type == "stock":
+            return data_source.load_stock_data()
         return data_source.load_forecast_data()
     except Exception as e:
-        logger.warning("Could not load forecast data: %s", e)
+        logger.warning("Could not load %s data: %s", data_type, e)
         return None
 
 
-def _prepare_stock_df(stock_df: pd.DataFrame) -> pd.DataFrame | None:
-    if stock_df is None or stock_df.empty:
-        return None
-
-    stock_copy = stock_df.copy()
-    if "sku" in stock_copy.columns:
-        stock_copy = stock_copy.rename(columns={"sku": "SKU"})
-
-    if ColumnNames.STOCK not in stock_copy.columns:
-        if "available_stock" in stock_copy.columns:
-            stock_copy[ColumnNames.STOCK] = stock_copy["available_stock"]
-        elif "stock" in stock_copy.columns:
-            stock_copy[ColumnNames.STOCK] = stock_copy["stock"]
-
-    if "cena_netto" in stock_copy.columns:
-        stock_copy["PRICE"] = stock_copy["cena_netto"]
-
-    return stock_copy
+def _load_stock_data() -> pd.DataFrame | None:
+    return _load_cached_data("stock")
 
 
-def _add_default_stock_columns(sku_summary: pd.DataFrame) -> None:
-    if ColumnNames.STOCK not in sku_summary.columns:
-        sku_summary[ColumnNames.STOCK] = 0
-    if "PRICE" not in sku_summary.columns:
-        sku_summary["PRICE"] = 0
+def _load_forecast_data() -> pd.DataFrame | None:
+    return _load_cached_data("forecast")
 
 
 def _add_forecast_data(sku_summary: pd.DataFrame, forecast_df: pd.DataFrame, lead_time: float) -> pd.DataFrame:
@@ -397,34 +346,14 @@ def _render_zero_stock_production_table(
     color_aliases = load_color_aliases()
     size_alias_to_code = load_size_aliases_reverse()
 
-    zero_stock_items: list[dict] = []
-
-    for color, result in pattern_results.items():
-        produced = result.get("produced", {})
-        color_name = color_aliases.get(color, color)
-
-        for size_alias, qty in produced.items():
-            if qty > 0:
-                stock = stock_by_color_size.get((color, size_alias), -1)
-                if stock == 0:
-                    zero_stock_items.append({
-                        "color": color,
-                        "color_name": color_name,
-                        "size": size_alias,
-                        "produced": qty,
-                    })
+    zero_stock_items = _collect_zero_stock_items(pattern_results, stock_by_color_size, color_aliases)
 
     if not zero_stock_items:
         return
 
-    def get_size_sort_key(item: dict) -> int:
-        size_code = size_alias_to_code.get(item["size"], item["size"])
-        try:
-            return int(size_code)
-        except (ValueError, TypeError):
-            return 999
-
-    zero_stock_items.sort(key=lambda x: (x["color"], get_size_sort_key(x)))
+    zero_stock_items.sort(
+        key=lambda x: (x["color"], get_size_sort_key(x["size"], size_alias_to_code))
+    )
 
     st.markdown("---")
     st.subheader(t(Keys.TITLE_ZERO_STOCK_PRODUCTION))
@@ -440,6 +369,22 @@ def _render_zero_stock_production_table(
     col1, _ = st.columns([1, 2])
     with col1:
         st.dataframe(df[["Color Code", "Color", "Size", "Produced Qty"]], hide_index=True)
+
+
+def _collect_zero_stock_items(
+    pattern_results: dict, stock_by_color_size: dict[tuple[str, str], int], color_aliases: dict
+) -> list[dict]:
+    items = []
+    for color, result in pattern_results.items():
+        for size_alias, qty in result.get("produced", {}).items():
+            if qty > 0 and stock_by_color_size.get((color, size_alias), -1) == 0:
+                items.append({
+                    "color": color,
+                    "color_name": color_aliases.get(color, color),
+                    "size": size_alias,
+                    "produced": qty,
+                })
+    return items
 
 
 def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results: dict, metadata: dict) -> None:
@@ -507,28 +452,14 @@ def _render_size_distribution_table(
     model: str,
     monthly_agg: pd.DataFrame | None,
 ) -> None:
-    size_totals: dict[str, int] = {}
-
-    for color, result in pattern_results.items():
-        produced = result.get("produced", {})
-        for size, qty in produced.items():
-            size_totals[size] = size_totals.get(size, 0) + qty
-
+    size_totals = _aggregate_size_totals(pattern_results)
     total_qty = sum(size_totals.values())
     if total_qty == 0:
         return
 
     size_alias_to_code = load_size_aliases_reverse()
     size_aliases = load_size_aliases()
-
-    def get_size_sort_key(size_str: str) -> int:
-        size_code = size_alias_to_code.get(size_str, size_str)
-        try:
-            return int(size_code)
-        except (ValueError, TypeError):
-            return 999
-
-    sorted_sizes = sorted(size_totals.keys(), key=get_size_sort_key)
+    sorted_sizes = sorted(size_totals.keys(), key=lambda s: get_size_sort_key(s, size_alias_to_code))
 
     sales_by_month = {}
     if monthly_agg is not None:
@@ -536,9 +467,31 @@ def _render_size_distribution_table(
             monthly_agg, model, size_aliases, months=3
         )
 
-    sorted_months = sorted(sales_by_month.keys(), reverse=True) if sales_by_month else []
+    df, total_pct = _build_distribution_dataframe(size_totals, sorted_sizes, total_qty, sales_by_month)
 
-    data = {"": []}
+    st.subheader(t(Keys.TITLE_SIZE_DISTRIBUTION))
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.caption(t(Keys.CAPTION_SIZE_DISTRIBUTION))
+        st.dataframe(df, hide_index=True)
+    with col2:
+        st.metric(t(Keys.LABEL_TOTAL_QTY), total_qty)
+        check_color = "green" if abs(total_pct - 100.0) < 0.1 else "red"
+        st.markdown(f"**Sum: <span style='color:{check_color}'>{total_pct:.1f}%</span>**", unsafe_allow_html=True)
+
+
+def _aggregate_size_totals(pattern_results: dict) -> dict[str, int]:
+    size_totals: dict[str, int] = {}
+    for result in pattern_results.values():
+        for size, qty in result.get("produced", {}).items():
+            size_totals[size] = size_totals.get(size, 0) + qty
+    return size_totals
+
+
+def _build_distribution_dataframe(
+    size_totals: dict[str, int], sorted_sizes: list[str], total_qty: int, sales_by_month: dict
+) -> tuple[pd.DataFrame, float]:
+    data: dict[str, list] = {"": []}
     for size in sorted_sizes:
         data[size] = []
 
@@ -554,23 +507,14 @@ def _render_size_distribution_table(
         total_pct += pct
         data[size].append(f"{pct:.1f}%")
 
+    sorted_months = sorted(sales_by_month.keys(), reverse=True) if sales_by_month else []
     for month in sorted_months:
         month_sales = sales_by_month.get(month, {})
         data[""].append(month)
         for size in sorted_sizes:
             data[size].append(str(month_sales.get(size, 0)))
 
-    df = pd.DataFrame(data)
-
-    st.subheader(t(Keys.TITLE_SIZE_DISTRIBUTION))
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.caption(t(Keys.CAPTION_SIZE_DISTRIBUTION))
-        st.dataframe(df, hide_index=True)
-    with col2:
-        st.metric(t(Keys.LABEL_TOTAL_QTY), total_qty)
-        check_color = "green" if abs(total_pct - 100.0) < 0.1 else "red"
-        st.markdown(f"**Sum: <span style='color:{check_color}'>{total_pct:.1f}%</span>**", unsafe_allow_html=True)
+    return pd.DataFrame(data), total_pct
 
 
 def _get_stock_by_color_size(model: str) -> dict[tuple[str, str], int]:
@@ -587,15 +531,11 @@ def _get_stock_by_color_size(model: str) -> dict[tuple[str, str], int]:
         return {}
 
     size_aliases = load_size_aliases()
-    result = {}
-    for _, row in model_skus.iterrows():
-        color = row.get("COLOR", "")
-        size_code = row.get("SIZE", "")
-        size_alias = size_aliases.get(size_code, size_code)
-        stock = int(row.get(ColumnNames.STOCK, 0) or 0)
-        result[(color, size_alias)] = stock
-
-    return result
+    return {
+        (row.get("COLOR", ""), size_aliases.get(row.get("SIZE", ""), row.get("SIZE", ""))):
+            int(row.get(ColumnNames.STOCK, 0) or 0)
+        for _, row in model_skus.iterrows()
+    }
 
 
 def _get_cell_style(
@@ -611,30 +551,41 @@ def _get_cell_style(
     return ""
 
 
+def _build_header_row(columns: pd.Index) -> str:
+    header_cells = [
+        f'<th>{col}</th>' if i == 0 else f'<th><span>{col}</span></th>'
+        for i, col in enumerate(columns)
+    ]
+    return f'<tr>{"".join(header_cells)}</tr>'
+
+
+def _build_body_row(
+    row: pd.Series,
+    columns: pd.Index,
+    color_name_to_code: dict,
+    stock_by_color_size: dict[tuple[str, str], int],
+) -> str:
+    size = row.get("Size", "")
+    cells = [
+        f'<td{_get_cell_style(col, size, row[col], color_name_to_code, stock_by_color_size)}>{row[col]}</td>'
+        for col in columns
+    ]
+    return f'<tr>{"".join(cells)}</tr>'
+
+
 def _build_styled_html_table(
         df: pd.DataFrame, stock_by_color_size: dict[tuple[str, str], int]
 ) -> str:
     color_aliases = load_color_aliases()
     color_name_to_code = {v: k for k, v in color_aliases.items()} if color_aliases else {}
 
-    header_cells = [
-        f'<th>{col}</th>' if i == 0 else f'<th><span>{col}</span></th>'
-        for i, col in enumerate(df.columns)
+    header = _build_header_row(df.columns)
+    body_rows = [
+        _build_body_row(row, df.columns, color_name_to_code, stock_by_color_size)
+        for _, row in df.iterrows()
     ]
-    html = '<table class="rotated-table" border="0">'
-    html += f'<thead><tr>{"".join(header_cells)}</tr></thead>'
 
-    rows = []
-    for _, row in df.iterrows():
-        size = row.get("Size", "")
-        cells = [
-            f'<td{_get_cell_style(col, size, row[col], color_name_to_code, stock_by_color_size)}>{row[col]}</td>'
-            for col in df.columns
-        ]
-        rows.append(f'<tr>{"".join(cells)}</tr>')
-
-    html += f'<tbody>{"".join(rows)}</tbody></table>'
-    return html
+    return f'<table class="rotated-table" border="0"><thead>{header}</thead><tbody>{"".join(body_rows)}</tbody></table>'
 
 
 def _render_copy_button(tsv_data: str) -> None:
@@ -644,10 +595,7 @@ def _render_copy_button(tsv_data: str) -> None:
 
 def _lookup_pattern_set(model: str) -> PatternSet | None:
     pattern_sets = load_pattern_sets()
-    for ps in pattern_sets:
-        if ps.name == model:
-            return ps
-    return None
+    return next((ps for ps in pattern_sets if ps.name == model), None)
 
 
 def _find_urgent_colors_for_model(model: str) -> list[str]:
@@ -729,15 +677,16 @@ def _load_model_metadata_for_model(model: str) -> dict:
 
 def _display_model_metadata(metadata: dict) -> None:
     na_value = t(Keys.NA)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(t(Keys.LABEL_PRIMARY_FACILITY), metadata.get("szwalnia_glowna", na_value) or na_value)
-    with col2:
-        st.metric(t(Keys.LABEL_SECONDARY_FACILITY), metadata.get("szwalnia_druga", na_value) or na_value)
-    with col3:
-        st.metric(t(Keys.LABEL_MATERIAL_TYPE), metadata.get("rodzaj_materialu", na_value) or na_value)
-    with col4:
-        st.metric(t(Keys.LABEL_MATERIAL_WEIGHT), metadata.get("gramatura", na_value) or na_value)
+    labels = [
+        (Keys.LABEL_PRIMARY_FACILITY, "szwalnia_glowna"),
+        (Keys.LABEL_SECONDARY_FACILITY, "szwalnia_druga"),
+        (Keys.LABEL_MATERIAL_TYPE, "rodzaj_materialu"),
+        (Keys.LABEL_MATERIAL_WEIGHT, "gramatura"),
+    ]
+    cols = st.columns(len(labels))
+    for col, (label_key, field) in zip(cols, labels):
+        with col:
+            st.metric(t(label_key), metadata.get(field, na_value) or na_value)
 
 
 def _load_last_4_months_sales(
@@ -833,13 +782,12 @@ def _build_pattern_allocation_string(allocation: dict, pattern_set: PatternSet) 
     if not allocation:
         return ""
 
-    pattern_parts = []
-    for pattern_id, count in sorted(allocation.items()):
-        if count > 0:
-            pattern = next((p for p in pattern_set.patterns if p.id == pattern_id), None)
-            if pattern:
-                pattern_parts.append(f"{pattern.name}:{count}")
-    return ", ".join(pattern_parts)
+    pattern_lookup = {p.id: p.name for p in pattern_set.patterns}
+    return ", ".join(
+        f"{pattern_lookup[pid]}:{count}"
+        for pid, count in sorted(allocation.items())
+        if count > 0 and pid in pattern_lookup
+    )
 
 
 def _build_produced_string(produced: dict) -> str:
@@ -882,18 +830,14 @@ def _build_color_size_table(
     color_aliases = load_color_aliases()
     size_alias_to_code = load_size_aliases_reverse()
 
-    def get_size_sort_key(size_str: str) -> int:
-        size_code = size_alias_to_code.get(size_str, size_str)
-        try:
-            return int(size_code)
-        except (ValueError, TypeError):
-            return 999
-
     colors_to_show = _get_filtered_colors(color_filter, model_colors, active_colors)
     data = []
 
     for pattern in pattern_set.patterns:
-        pattern_sizes = sorted(pattern.sizes.keys(), key=get_size_sort_key)
+        pattern_sizes = sorted(
+            pattern.sizes.keys(),
+            key=lambda s: get_size_sort_key(s, size_alias_to_code)
+        )
 
         for size in pattern_sizes:
             row = _create_pattern_row(size, colors_to_show, color_aliases, pattern_results, pattern.id)
@@ -909,22 +853,12 @@ def _build_color_size_table(
 
 
 def _get_filtered_colors(color_filter: str, model_colors: list[str], active_colors: list[str]) -> list[str]:
-    color_aliases = load_color_aliases()
-    all_colors = sorted(color_aliases.keys()) if color_aliases else []
-
     if color_filter == "active":
         return sorted(active_colors)
-    elif color_filter == "model":
+    if color_filter == "model":
         return sorted(model_colors)
-    else:
-        return all_colors
-
-
-def _get_all_model_colors(pattern_results: dict) -> list[str]:
     color_aliases = load_color_aliases()
-    if color_aliases:
-        return sorted(color_aliases.keys())
-    return sorted(pattern_results.keys())
+    return sorted(color_aliases.keys()) if color_aliases else []
 
 
 def _create_pattern_row(size: str, all_model_colors: list[str], color_aliases: dict, pattern_results: dict,
@@ -952,39 +886,51 @@ def _create_empty_row(all_model_colors: list[str], color_aliases: dict) -> dict:
     return empty_row
 
 
+def _build_pattern_results_data(pattern_results: dict) -> dict:
+    return {
+        k: {
+            "allocation": v.get("allocation", {}),
+            "produced": v.get("produced", {}),
+            "excess": v.get("excess", {}),
+            "total_patterns": v.get("total_patterns", 0),
+            "total_excess": v.get("total_excess", 0),
+        }
+        for k, v in pattern_results.items()
+    }
+
+
+def _build_order_data(
+    order_id: str,
+    model: str,
+    order_table: pd.DataFrame,
+    pattern_results: dict,
+    metadata: dict,
+) -> dict:
+    return {
+        "order_id": order_id,
+        "model": model,
+        "status": "draft",
+        "szwalnia_glowna": metadata.get("szwalnia_glowna"),
+        "szwalnia_druga": metadata.get("szwalnia_druga"),
+        "rodzaj_materialu": metadata.get("rodzaj_materialu"),
+        "gramatura": metadata.get("gramatura"),
+        "total_colors": len(order_table),
+        "total_patterns": int(order_table[TOTAL_PATTERNS].sum()),
+        "total_excess": int(order_table["Total Excess"].sum()),
+        "total_quantity": int(order_table[TOTAL_PATTERNS].sum()),
+        "order_data": {
+            "pattern_results": _build_pattern_results_data(pattern_results),
+            "order_table": order_table.to_dict(orient="records"),
+        },
+    }
+
+
 def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_results: dict, metadata: dict) -> None:
     from utils.order_manager import save_order
 
     try:
         order_id = f"ORD_{model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        order_data = {
-            "order_id": order_id,
-            "model": model,
-            "status": "draft",
-            "szwalnia_glowna": metadata.get("szwalnia_glowna"),
-            "szwalnia_druga": metadata.get("szwalnia_druga"),
-            "rodzaj_materialu": metadata.get("rodzaj_materialu"),
-            "gramatura": metadata.get("gramatura"),
-            "total_colors": len(order_table),
-            "total_patterns": int(order_table[TOTAL_PATTERNS].sum()),
-            "total_excess": int(order_table["Total Excess"].sum()),
-            "total_quantity": int(order_table[TOTAL_PATTERNS].sum()),
-            "order_data": {
-                "pattern_results": {
-                    k: {
-                        "allocation": v.get("allocation", {}),
-                        "produced": v.get("produced", {}),
-                        "excess": v.get("excess", {}),
-                        "total_patterns": v.get("total_patterns", 0),
-                        "total_excess": v.get("total_excess", 0),
-                    }
-                    for k, v in pattern_results.items()
-                },
-                "order_table": order_table.to_dict(orient="records"),
-            },
-        }
-
+        order_data = _build_order_data(order_id, model, order_table, pattern_results, metadata)
         success = save_order(order_data)
 
         if success:

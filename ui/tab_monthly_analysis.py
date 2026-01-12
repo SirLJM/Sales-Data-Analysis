@@ -127,6 +127,12 @@ def _render_summary_metrics(metadata: dict) -> None:
             )
 
 
+def _get_trend_indicator(pct_change: float) -> str:
+    if pct_change > 10:
+        return "🟢"
+    return "🔴" if pct_change < -10 else "🟡"
+
+
 def _render_category_breakdown(podgrupa_summary: pd.DataFrame, kategoria_details: pd.DataFrame) -> None:
     st.subheader(t(Keys.SALES_BY_AGE_GROUP))
 
@@ -135,17 +141,9 @@ def _render_category_breakdown(podgrupa_summary: pd.DataFrame, kategoria_details
         current_qty = int(row["current_qty"])
         pct_change = row["percent_change"]
 
-        if pd.isna(podgrupa):
-            podgrupa = f"{Icons.WARNING} {t(Keys.METRIC_UNCATEGORIZED)}"
-
-        title = f"**{podgrupa}** | {current_qty:,} units ({pct_change:+.1f}% YoY)"
-
-        if pct_change > 10:
-            title = f"🟢 {title}"
-        elif pct_change < -10:
-            title = f"🔴 {title}"
-        else:
-            title = f"🟡 {title}"
+        display_name = f"{Icons.WARNING} {t(Keys.METRIC_UNCATEGORIZED)}" if pd.isna(podgrupa) else podgrupa
+        indicator = _get_trend_indicator(pct_change)
+        title = f"{indicator} **{display_name}** | {current_qty:,} units ({pct_change:+.1f}% YoY)"
 
         with st.expander(title, expanded=False):
             _render_kategoria_table(podgrupa, kategoria_details)

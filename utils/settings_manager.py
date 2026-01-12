@@ -99,13 +99,14 @@ def reset_settings() -> dict[str, Any]:
 def _merge_with_defaults(settings: dict[str, Any]) -> dict[str, Any]:
     merged = DEFAULT_SETTINGS.copy()
 
-    for key in DEFAULT_SETTINGS:
-        if key in settings:
-            if isinstance(DEFAULT_SETTINGS[key], dict):
-                merged[key] = DEFAULT_SETTINGS[key].copy()  # type: ignore[attr-defined]
-                merged[key].update(settings[key])  # type: ignore[attr-defined]
-            else:
-                merged[key] = settings[key]
+    for key, default_value in DEFAULT_SETTINGS.items():
+        if key not in settings:
+            continue
+
+        if isinstance(default_value, dict):
+            merged[key] = {**default_value, **settings[key]}
+        else:
+            merged[key] = settings[key]
 
     return merged
 

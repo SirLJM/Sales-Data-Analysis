@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 import re
 from datetime import datetime, timedelta
 
 import requests
 
-logger = logging.getLogger(__name__)
+from utils.logging_config import get_logger
+
+logger = get_logger("product_image_fetcher")
 
 SITEMAP_URL = "https://mybasic.pl/sitemap.xml"
 BASE_URL = "https://mybasic.pl"

@@ -280,10 +280,9 @@ def _get_mape_color(mape: float | None) -> str:
         return ""
     if mape < 20:
         return "🟢"
-    elif mape < 40:
+    if mape < 40:
         return "🟡"
-    else:
-        return "🔴"
+    return "🔴"
 
 
 def _get_mape_label(mape: float | None) -> str:
@@ -291,10 +290,9 @@ def _get_mape_label(mape: float | None) -> str:
         return ""
     if mape < 20:
         return t(Keys.GOOD)
-    elif mape < 40:
+    if mape < 40:
         return t(Keys.ACCEPTABLE)
-    else:
-        return t(Keys.POOR)
+    return t(Keys.POOR)
 
 
 def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:

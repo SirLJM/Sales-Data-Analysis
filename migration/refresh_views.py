@@ -11,8 +11,40 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 load_dotenv()
 
+VIEWS_TO_REFRESH = [
+    "mv_valid_monthly_aggs",
+    "mv_valid_sku_stats",
+    "mv_valid_order_priorities",
+]
 
-def refresh_materialized_views():
+
+def _view_exists(conn, view_name: str) -> bool:
+    query = text("SELECT COUNT(*) FROM pg_matviews WHERE matviewname = :view_name")
+    result = conn.execute(query, {"view_name": view_name})
+    return result.fetchone()[0] > 0
+
+
+def _get_row_count(conn, view_name: str) -> int:
+    result = conn.execute(text(f"SELECT COUNT(*) FROM {view_name}"))
+    return result.fetchone()[0]
+
+
+def _refresh_single_view(conn, view_name: str) -> None:
+    print(f"\n  Refreshing {view_name}...")
+
+    if not _view_exists(conn, view_name):
+        print("    [SKIP] View does not exist")
+        return
+
+    before_count = _get_row_count(conn, view_name)
+    conn.execute(text(f"REFRESH MATERIALIZED VIEW {view_name}"))
+    conn.commit()
+    after_count = _get_row_count(conn, view_name)
+
+    print(f"    [OK] Refreshed: {before_count} -> {after_count} rows")
+
+
+def refresh_materialized_views() -> int:
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         print("ERROR: DATABASE_URL not set")
@@ -24,41 +56,10 @@ def refresh_materialized_views():
 
     engine = create_engine(db_url)
 
-    views_to_refresh = [
-        "mv_valid_monthly_aggs",
-        "mv_valid_sku_stats",
-        "mv_valid_order_priorities",
-    ]
-
     try:
         with engine.connect() as conn:
-            for view in views_to_refresh:
-                print(f"\n  Refreshing {view}...")
-
-                check_query = text("""
-                                   SELECT COUNT(*)
-                                   FROM pg_matviews
-                                   WHERE matviewname = :view_name
-                                   """)
-                result = conn.execute(check_query, {"view_name": view})
-                exists = result.fetchone()[0] > 0
-
-                if not exists:
-                    print("    [SKIP] View does not exist")
-                    continue
-
-                count_query = text(f"SELECT COUNT(*) FROM {view}")
-                result = conn.execute(count_query)
-                before_count = result.fetchone()[0]
-
-                refresh_query = text(f"REFRESH MATERIALIZED VIEW {view}")
-                conn.execute(refresh_query)
-                conn.commit()
-
-                result = conn.execute(count_query)
-                after_count = result.fetchone()[0]
-
-                print(f"    [OK] Refreshed: {before_count} -> {after_count} rows")
+            for view in VIEWS_TO_REFRESH:
+                _refresh_single_view(conn, view)
 
         print("\n" + "=" * 60)
         print("All views refreshed successfully!")

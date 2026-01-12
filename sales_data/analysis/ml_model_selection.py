@@ -304,30 +304,32 @@ def select_best_model(
     }
 
 
+def _calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    mask = y_true != 0
+    if not mask.any():
+        return float("inf")
+    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
+
+
+def _calculate_smape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
+    mask = denominator != 0
+    if not mask.any():
+        return float("inf")
+    return float(np.mean(np.abs(y_true[mask] - y_pred[mask]) / denominator[mask]) * 100)
+
+
+METRIC_CALCULATORS = {
+    "mape": _calculate_mape,
+    "mae": lambda y_t, y_p: float(np.mean(np.abs(y_t - y_p))),
+    "rmse": lambda y_t, y_p: float(np.sqrt(np.mean((y_t - y_p) ** 2))),
+    "smape": _calculate_smape,
+}
+
+
 def _calculate_metric(y_true: np.ndarray, y_pred: np.ndarray, metric: str) -> float:
     y_true = np.array(y_true)
-    y_pred = np.array(y_pred)
+    y_pred = np.maximum(np.array(y_pred), 0)
 
-    y_pred = np.maximum(y_pred, 0)
-
-    if metric == "mape":
-        mask = y_true != 0
-        if not mask.any():
-            return float("inf")
-        return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
-
-    elif metric == "mae":
-        return float(np.mean(np.abs(y_true - y_pred)))
-
-    elif metric == "rmse":
-        return float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
-
-    elif metric == "smape":
-        denominator = (np.abs(y_true) + np.abs(y_pred)) / 2
-        mask = denominator != 0
-        if not mask.any():
-            return float("inf")
-        return float(np.mean(np.abs(y_true[mask] - y_pred[mask]) / denominator[mask]) * 100)
-
-    else:
-        return float(np.mean(np.abs(y_true - y_pred)))
+    calculator = METRIC_CALCULATORS.get(metric, METRIC_CALCULATORS["mae"])
+    return calculator(y_true, y_pred)

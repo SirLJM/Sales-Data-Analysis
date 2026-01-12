@@ -4,12 +4,37 @@ import os
 import sys
 from pathlib import Path
 
-CONTINUING = "   Continuing..."
-
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+
+def _get_sql_dir() -> Path:
+    return Path(__file__).parent / "sql"
+
+
+def _run_sql_file(engine, filename: str, description: str, continue_on_error: bool = True) -> bool:
+    sql_file = _get_sql_dir() / filename
+
+    if not sql_file.exists():
+        print(f"   File not found: {sql_file}")
+        return False
+
+    with open(sql_file, "r", encoding="utf-8") as f:
+        sql_content = f.read()
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(sql_content))
+            conn.commit()
+        print(f"   {description} created successfully")
+        return True
+    except Exception as e:
+        print(f"   {description} creation failed: {e}")
+        if continue_on_error:
+            print("   Continuing...")
+        return continue_on_error
 
 
 def main():
@@ -47,81 +72,17 @@ def main():
         print("  4. .env file has correct DATABASE_URL")
         return 1
 
-    print("\n2. Running schema.sql...")
-    schema_file = Path(__file__).parent / "sql" / "schema.sql"
+    sql_files = [
+        ("schema.sql", "Schema", True),
+        ("triggers.sql", "Triggers", True),
+        ("orders_schema.sql", "Order tables", True),
+        ("materialized_views.sql", "Materialized views", True),
+    ]
 
-    if not schema_file.exists():
-        print(f"   File not found: {schema_file}")
-        return 1
-
-    with open(schema_file, "r", encoding="utf-8") as f:
-        schema_sql = f.read()
-
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(schema_sql))
-            conn.commit()
-        print("   Schema created successfully")
-    except Exception as e:
-        print(f"   Schema creation failed: {e}")
-        print("\n   This is normal if tables already exist. Continuing...")
-
-    print("\n3. Running triggers.sql...")
-    triggers_file = Path(__file__).parent / "sql" / "triggers.sql"
-
-    if not triggers_file.exists():
-        print(f"   File not found: {triggers_file}")
-        return 1
-
-    with open(triggers_file, "r", encoding="utf-8") as f:
-        triggers_sql = f.read()
-
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(triggers_sql))
-            conn.commit()
-        print("   Triggers created successfully")
-    except Exception as e:
-        print(f"   Trigger creation failed: {e}")
-        print(CONTINUING)
-
-    print("\n4. Running orders_schema.sql...")
-    orders_file = Path(__file__).parent / "sql" / "orders_schema.sql"
-
-    if not orders_file.exists():
-        print(f"   File not found: {orders_file}")
-        return 1
-
-    with open(orders_file, "r", encoding="utf-8") as f:
-        orders_sql = f.read()
-
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(orders_sql))
-            conn.commit()
-        print("   Order tables created successfully")
-    except Exception as e:
-        print(f"   Order table creation failed: {e}")
-        print(CONTINUING)
-
-    print("\n5. Running materialized_views.sql...")
-    views_file = Path(__file__).parent / "sql" / "materialized_views.sql"
-
-    if not views_file.exists():
-        print(f"   File not found: {views_file}")
-        return 1
-
-    with open(views_file, "r", encoding="utf-8") as f:
-        views_sql = f.read()
-
-    try:
-        with engine.connect() as conn:
-            conn.execute(text(views_sql))
-            conn.commit()
-        print("   Materialized views created successfully")
-    except Exception as e:
-        print(f"   Materialized view creation failed: {e}")
-        print(CONTINUING)
+    for idx, (filename, description, continue_on_error) in enumerate(sql_files, start=2):
+        print(f"\n{idx}. Running {filename}...")
+        if not _run_sql_file(engine, filename, description, continue_on_error):
+            return 1
 
     print("\n6. Verifying database structure...")
     try:

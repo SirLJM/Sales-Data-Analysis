@@ -4,6 +4,12 @@ from datetime import datetime
 
 import pandas as pd
 
+PROJECTION_COLUMNS = ["date", "projected_stock", "rop_reached", "zero_reached"]
+
+
+def _empty_projection() -> pd.DataFrame:
+    return pd.DataFrame(columns=PROJECTION_COLUMNS)
+
 
 def build_projection_from_forecast(
     forecast_data: pd.DataFrame,
@@ -12,28 +18,22 @@ def build_projection_from_forecast(
     safety_stock: float,
     start_date: datetime,
 ) -> pd.DataFrame:
-    projection = [
-        {
-            "date": start_date,
-            "projected_stock": current_stock,
-            "rop_reached": current_stock <= rop,
-            "zero_reached": current_stock <= 0,
-        }
-    ]
+    projection = [{
+        "date": start_date,
+        "projected_stock": current_stock,
+        "rop_reached": current_stock <= rop,
+        "zero_reached": current_stock <= 0,
+    }]
 
     running_stock = current_stock
-
     for _, row in forecast_data.iterrows():
         running_stock -= row["forecast"]
-
-        projection.append(
-            {
-                "date": row["data"],
-                "projected_stock": running_stock,
-                "rop_reached": running_stock <= rop,
-                "zero_reached": running_stock <= 0,
-            }
-        )
+        projection.append({
+            "date": row["data"],
+            "projected_stock": running_stock,
+            "rop_reached": running_stock <= rop,
+            "zero_reached": running_stock <= 0,
+        })
 
     projection_df = pd.DataFrame(projection)
     projection_df["date"] = pd.to_datetime(projection_df["date"])
@@ -72,15 +72,13 @@ def calculate_stock_projection(
     projection_months: int = 12,
 ) -> pd.DataFrame:
     if forecast_df.empty:
-        return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
+        return _empty_projection()
 
     sku_forecast = forecast_df[forecast_df["sku"] == sku]
-
     if sku_forecast.empty:
-        return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
+        return _empty_projection()
 
     sku_forecast = filter_and_prepare_forecast(sku_forecast, start_date, projection_months)
-
     return build_projection_from_forecast(sku_forecast, current_stock, rop, safety_stock, start_date)
 
 
@@ -94,18 +92,16 @@ def calculate_model_stock_projection(
     projection_months: int = 12,
 ) -> pd.DataFrame:
     if forecast_df.empty:
-        return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
+        return _empty_projection()
 
     df = forecast_df.copy()
     df["model"] = df["sku"].astype(str).str[:5]
 
     model_forecast = df[df["model"] == model]
-
     if model_forecast.empty:
-        return pd.DataFrame(columns=["date", "projected_stock", "rop_reached", "zero_reached"])
+        return _empty_projection()
 
     model_forecast = filter_and_prepare_forecast(model_forecast, start_date, projection_months)
-
     model_forecast_aggregated = model_forecast.groupby("data", as_index=False, observed=True).agg({"forecast": "sum"})
 
     return build_projection_from_forecast(

@@ -5,39 +5,49 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 
+def _get_midnight_today() -> datetime:
+    return datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def classify_sku_type(
         sku_summary: pd.DataFrame, cv_basic: float, cv_seasonal: float
 ) -> pd.DataFrame:
     df = sku_summary.copy()
-
-    one_year_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=365)
+    one_year_ago = _get_midnight_today() - timedelta(days=365)
 
     df["TYPE"] = "regular"
     df.loc[df["first_sale"] > one_year_ago, "TYPE"] = "new"
-    df.loc[(df["TYPE"] != "new") & (df["CV"] < cv_basic), "TYPE"] = "basic"
-    df.loc[(df["TYPE"] != "new") & (df["CV"] > cv_seasonal), "TYPE"] = "seasonal"
+
+    not_new = df["TYPE"] != "new"
+    df.loc[not_new & (df["CV"] < cv_basic), "TYPE"] = "basic"
+    df.loc[not_new & (df["CV"] > cv_seasonal), "TYPE"] = "seasonal"
 
     return df
 
 
 def determine_seasonal_months(data: pd.DataFrame) -> pd.DataFrame:
-    df = data.copy()
+    two_years_ago = _get_midnight_today() - timedelta(days=730)
 
-    two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
-    df = df[df["data"] >= two_years_ago]
-
-    df["month"] = df["data"].dt.month  # type: ignore[attr-defined]
-    df["year"] = df["data"].dt.year  # type: ignore[attr-defined]
+    df = data[data["data"] >= two_years_ago].copy()
+    df["month"] = df["data"].dt.month  # type: ignore
+    df["year"] = df["data"].dt.year  # type: ignore
 
     monthly_sales = df.groupby(["sku", "year", "month"], as_index=False, observed=True)["ilosc"].sum()
 
     # noinspection PyUnresolvedReferences
-    avg_monthly_sales = monthly_sales.groupby(["sku", "month"], as_index=False, observed=True)[
-        "ilosc"].mean()
-    avg_monthly_sales = avg_monthly_sales.rename(columns={"sku": "SKU", "ilosc": "avg_sales"})
+    avg_monthly_sales = (
+        monthly_sales
+        .groupby(["sku", "month"], as_index=False, observed=True)["ilosc"]
+        .mean()
+        .rename(columns={"sku": "SKU", "ilosc": "avg_sales"})
+    )
 
-    overall_avg = avg_monthly_sales.groupby("SKU", as_index=False, observed=True)["avg_sales"].mean()  # type: ignore[attr-defined]
-    overall_avg = overall_avg.rename(columns={"avg_sales": "overall_avg"})
+    overall_avg = (
+        avg_monthly_sales
+        .groupby("SKU", as_index=False, observed=True)["avg_sales"]
+        .mean()
+        .rename(columns={"avg_sales": "overall_avg"})
+    )
 
     seasonal_data = avg_monthly_sales.merge(overall_avg, on="SKU")
     seasonal_data["seasonal_index"] = seasonal_data["avg_sales"] / seasonal_data["overall_avg"]

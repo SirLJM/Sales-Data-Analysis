@@ -118,27 +118,31 @@ def _render_top_by_type(df: pd.DataFrame, stock_df: pd.DataFrame | None) -> None
 def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, stock_df: pd.DataFrame | None) -> None:
     with column:
         st.subheader(f"{emoji} {type_name.upper()}")
-        if not df_top.empty:
-            top_products_df = df_top.copy()
-            top_products_df[ColumnNames.MODEL_COLOR] = top_products_df["model"] + top_products_df["color"]
-
-            if stock_df is not None:
-                stock_df_copy = stock_df.copy()
-                stock_df_copy["model"] = extract_model(stock_df_copy["sku"])
-                stock_df_copy["color"] = extract_color(stock_df_copy["sku"])
-                descriptions = stock_df_copy.groupby(["model", "color"], observed=True)["nazwa"].first().reset_index()
-                top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
-                top_products_df["nazwa"] = top_products_df["nazwa"].astype(str).replace("nan", "")
-                final_cols = [ColumnNames.MODEL_COLOR, "nazwa", "sales"]
-                col_names = {"nazwa": "DESCRIPTION", "sales": "SALES"}
-            else:
-                final_cols = [ColumnNames.MODEL_COLOR, "sales"]
-                col_names = {"sales": "SALES"}
-
-            top_products_df = top_products_df[final_cols].rename(columns=col_names)
-            st.dataframe(top_products_df, hide_index=True, width='stretch')
-        else:
+        if df_top.empty:
             st.info(t(Keys.NO_PRODUCTS_FOUND).format(type=type_name))
+            return
+
+        top_products_df = df_top.copy()
+        top_products_df[ColumnNames.MODEL_COLOR] = top_products_df["model"] + top_products_df["color"]
+
+        final_cols = [ColumnNames.MODEL_COLOR, "sales"]
+        col_names = {"sales": "SALES"}
+
+        if stock_df is not None:
+            stock_df_copy = stock_df.copy()
+            stock_df_copy["model"] = extract_model(stock_df_copy["sku"])
+            stock_df_copy["color"] = extract_color(stock_df_copy["sku"])
+            descriptions = stock_df_copy.groupby(["model", "color"], observed=True)["nazwa"].first().reset_index()
+            top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
+            top_products_df["nazwa"] = top_products_df["nazwa"].astype(str).replace("nan", "")
+            final_cols = [ColumnNames.MODEL_COLOR, "nazwa", "sales"]
+            col_names = {"nazwa": "DESCRIPTION", "sales": "SALES"}
+
+        st.dataframe(
+            top_products_df[final_cols].rename(columns=col_names),
+            hide_index=True,
+            width='stretch'
+        )
 
 
 def _render_new_products_monitoring(df: pd.DataFrame, stock_df: pd.DataFrame | None) -> None:

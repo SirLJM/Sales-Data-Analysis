@@ -78,23 +78,19 @@ class SalesDataLoader:
         with open(paths_file_path, "r", encoding="utf-8") as f:
             lines = [line.strip().strip("'\"") for line in f.readlines()]
 
-        self.archival_sales_dir = (
+        self.sales_dir = (
             self._parse_path(lines[0], default_data_dir) if len(lines) > 0 else default_data_dir
         )
-        self.current_sales_dir = (
+        self.stock_dir = (
             self._parse_path(lines[1], default_data_dir) if len(lines) > 1 else default_data_dir
         )
-        self.stock_dir = (
+        self.forecast_dir = (
             self._parse_path(lines[2], default_data_dir) if len(lines) > 2 else default_data_dir
         )
-        self.forecast_dir = (
-            self._parse_path(lines[3], default_data_dir) if len(lines) > 3 else default_data_dir
-        )
-        self.model_metadata_path = self._parse_optional_path(lines[4]) if len(lines) > 4 else None
+        self.model_metadata_path = self._parse_optional_path(lines[3]) if len(lines) > 3 else None
 
     def _set_default_paths(self, default_data_dir: Path) -> None:
-        self.archival_sales_dir = default_data_dir
-        self.current_sales_dir = default_data_dir
+        self.sales_dir = default_data_dir
         self.stock_dir = default_data_dir
         self.forecast_dir = default_data_dir
         self.model_metadata_path = None
@@ -144,79 +140,62 @@ class SalesDataLoader:
                 return None
         return None
 
-    def collect_files_from_directory(
-            self, directory: Path
-    ) -> list[tuple[Path, datetime, datetime]]:
-        collected_files = []
+    @staticmethod
+    def _get_unique_files_from_directory(directory: Path) -> list[Path]:
         all_files = (
             list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)) +
             list(directory.glob(ANY_CSV_RECURSIVE)) + list(directory.glob(ANY_XLSX_RECURSIVE))
         )
-        seen_paths = set()
+        seen_paths: set[Path] = set()
+        unique_files = []
         for file_path in all_files:
-            if file_path in seen_paths:
-                continue
-            seen_paths.add(file_path)
+            if file_path not in seen_paths:
+                seen_paths.add(file_path)
+                unique_files.append(file_path)
+        return unique_files
+
+    def collect_files_from_directory(
+            self, directory: Path
+    ) -> list[tuple[Path, datetime, datetime]]:
+        collected_files = []
+        for file_path in self._get_unique_files_from_directory(directory):
             date_range = self._parse_sales_filename(file_path.name)
             if date_range is not None:
                 collected_files.append((file_path, date_range[0], date_range[1]))
         return collected_files
 
-    def _add_archival_files(
-            self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
-    ) -> None:
-        if not self.archival_sales_dir.exists():
-            return
+    @staticmethod
+    def _select_best_file_per_year(
+        files: list[tuple[Path, datetime, datetime]]
+    ) -> list[tuple[Path, datetime, datetime]]:
+        by_year: dict[int, list[tuple[Path, datetime, datetime]]] = {}
+        for file_info in files:
+            year = file_info[2].year
+            if year not in by_year:
+                by_year[year] = []
+            by_year[year].append(file_info)
 
-        for file_path, start_date, end_date in self.collect_files_from_directory(
-                self.archival_sales_dir
-        ):
-            date_key = (start_date, end_date)
-            if date_key not in seen_dates:
-                files_info.append((file_path, start_date, end_date))
-                seen_dates.add(date_key)
-
-    def _add_latest_current_file(
-            self, files_info: list[tuple[Path, datetime, datetime]], seen_dates: set
-    ) -> None:
-        if not self.current_sales_dir.exists():
-            return
-
-        current_files = self.collect_files_from_directory(self.current_sales_dir)
-        if not current_files:
-            return
-
-        current_files.sort(key=lambda x: x[2], reverse=True)
-        latest_file = current_files[0]
-        date_key = (latest_file[1], latest_file[2])
-        if date_key not in seen_dates:
-            files_info.append(latest_file)
-            seen_dates.add(date_key)
+        result = []
+        for year_files in by_year.values():
+            best = max(year_files, key=lambda x: (x[2] - x[1], x[2]))
+            result.append(best)
+        return result
 
     def find_data_files(self) -> list[tuple[Path, datetime, datetime]]:
-        files_info: list[tuple[Path, datetime, datetime]] = []
-        seen_dates: set[tuple[datetime, datetime]] = set()
+        if not self.sales_dir.exists():
+            return []
 
-        self._add_archival_files(files_info, seen_dates)
-        self._add_latest_current_file(files_info, seen_dates)
-
+        all_files = self.collect_files_from_directory(self.sales_dir)
+        files_info = self._select_best_file_per_year(all_files)
         files_info.sort(key=lambda x: x[1])
         return files_info
 
     def find_stock_files(self) -> list[tuple[Path, datetime]]:
         files_info = []
-        seen_dates = set()
+        seen_dates: set[datetime] = set()
 
         if self.stock_dir.exists():
-            all_files = (
-                list(self.stock_dir.glob(ANY_CSV)) + list(self.stock_dir.glob(ANY_XLSX)) +
-                list(self.stock_dir.glob(ANY_CSV_RECURSIVE)) + list(self.stock_dir.glob(ANY_XLSX_RECURSIVE))
-            )
-            seen_paths = set()
-            for file_path in all_files:
-                if file_path in seen_paths:
-                    continue
-                seen_paths.add(file_path)
+            for file_path in self._get_unique_files_from_directory(self.stock_dir):
                 file_date = self._parse_stock_filename(file_path.name)
                 if file_date is not None and file_date not in seen_dates:
                     files_info.append((file_path, file_date))
@@ -283,16 +262,8 @@ class SalesDataLoader:
         current_year = datetime.now().year
         current_year_files = []
 
-        if self.current_sales_dir.exists():
-            all_files = (
-                list(self.current_sales_dir.glob(ANY_CSV)) + list(self.current_sales_dir.glob(ANY_XLSX)) +
-                list(self.current_sales_dir.glob(ANY_CSV_RECURSIVE)) + list(self.current_sales_dir.glob(ANY_XLSX_RECURSIVE))
-            )
-            seen_paths = set()
-            for file_path in all_files:
-                if file_path in seen_paths:
-                    continue
-                seen_paths.add(file_path)
+        if self.sales_dir.exists():
+            for file_path in self._get_unique_files_from_directory(self.sales_dir):
                 date_range = self._parse_sales_filename(file_path.name)
                 if date_range and date_range[0].year == current_year:
                     current_year_files.append((file_path, date_range[1]))
@@ -416,9 +387,7 @@ class SalesDataLoader:
         files_info = self.find_data_files()
 
         if not files_info:
-            raise ValueError(
-                f"No data files found in {self.archival_sales_dir} or {self.current_sales_dir}"
-            )
+            raise ValueError(f"No data files found in {self.sales_dir}")
 
         logger.info("Found %d data file(s)", len(files_info))
         logger.info("Loading files in parallel...")
