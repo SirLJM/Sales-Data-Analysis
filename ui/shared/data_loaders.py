@@ -1,15 +1,68 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 from ui.constants import Config
+from ui.i18n import t, Keys
 from ui.shared.session_manager import get_data_source
 from utils.logging_config import get_logger
 
 logger = get_logger("data_loaders")
+
+
+def _is_data_loaded() -> bool:
+    return st.session_state.get("_data_loaded", False)
+
+
+def _mark_data_loaded() -> None:
+    st.session_state["_data_loaded"] = True
+
+
+def load_all_data_with_progress(
+    include_forecast: bool = True,
+    include_metadata: bool = True,
+) -> dict[str, Any]:
+    if _is_data_loaded():
+        return {
+            "sales": load_data(),
+            "stock": load_stock(),
+            "forecast": load_forecast() if include_forecast else (None, None, None),
+            "metadata": load_model_metadata() if include_metadata else None,
+        }
+
+    results: dict[str, Any] = {}
+    progress_bar = st.progress(0, text=t(Keys.PROGRESS_LOADING_DATA))
+
+    try:
+        progress_bar.progress(0.1, text=t(Keys.PROGRESS_LOADING_SALES))
+        results["sales"] = load_data()
+
+        progress_bar.progress(0.4, text=t(Keys.PROGRESS_LOADING_STOCK))
+        results["stock"] = load_stock()
+
+        if include_forecast:
+            progress_bar.progress(0.7, text=t(Keys.PROGRESS_LOADING_FORECAST))
+            results["forecast"] = load_forecast()
+        else:
+            results["forecast"] = (None, None, None)
+
+        if include_metadata:
+            progress_bar.progress(0.9, text=t(Keys.PROGRESS_LOADING_METADATA))
+            results["metadata"] = load_model_metadata()
+        else:
+            results["metadata"] = None
+
+        progress_bar.progress(1.0, text=t(Keys.PROGRESS_DONE))
+        _mark_data_loaded()
+
+    finally:
+        progress_bar.empty()
+
+    return results
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)

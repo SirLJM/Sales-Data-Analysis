@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pandas as pd
+import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 if TYPE_CHECKING:
@@ -10,13 +11,38 @@ if TYPE_CHECKING:
 
 ROW_HEIGHT = 35
 HEADER_HEIGHT = 40
-MIN_HEIGHT = 100
 MAX_HEIGHT = 600
 
-
-def _calculate_height(df: pd.DataFrame, max_height: int) -> int:
-    content_height = len(df) * ROW_HEIGHT + HEADER_HEIGHT
-    return max(MIN_HEIGHT, min(content_height, max_height))
+AGGRID_FIT_CONTENT_STYLE = """
+<style>
+.ag-root-wrapper {
+    min-height: auto !important;
+    width: fit-content !important;
+    min-width: 100% !important;
+}
+.ag-body-viewport {
+    min-height: auto !important;
+}
+.ag-header, .ag-body-horizontal-scroll {
+    width: fit-content !important;
+    min-width: 100% !important;
+}
+iframe[title="st_aggrid.agGrid"] {
+    height: auto !important;
+    min-height: 100px;
+    width: fit-content !important;
+    min-width: 100% !important;
+}
+div[data-testid="stCustomComponentV1"] {
+    width: fit-content !important;
+    min-width: 0 !important;
+}
+div[data-testid="stCustomComponentV1"] > div {
+    height: auto !important;
+    width: fit-content !important;
+}
+</style>
+"""
 
 
 def _calculate_column_width(series: pd.Series) -> int:
@@ -72,7 +98,16 @@ def render_dataframe_with_aggrid(
         "skipHeader": True,
     }
 
-    actual_height = height if height is not None else _calculate_height(df, max_height)
+    content_height = len(df) * ROW_HEIGHT + HEADER_HEIGHT
+    target_height = height if height is not None else max_height
+    use_auto_height = content_height <= target_height
+
+    if use_auto_height:
+        grid_options["domLayout"] = "autoHeight"
+        st.markdown(AGGRID_FIT_CONTENT_STYLE, unsafe_allow_html=True)
+        actual_height = None
+    else:
+        actual_height = target_height
 
     return AgGrid(
         df,

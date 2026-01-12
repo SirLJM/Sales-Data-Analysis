@@ -46,3 +46,4 @@ saved_pattern_sets.json.old
 utils/optimizer_pattern_sets.json
 .coverage
 tasks.json
+tmpclaude-*

@@ -830,7 +830,16 @@ class Keys:
     ERR_TASK_PLANNER: Final[str] = "err_task_planner"
     ERR_TASK_TITLE_REQUIRED: Final[str] = "err_task_title_required"
 
+    PROGRESS_LOADING_DATA: Final[str] = "progress_loading_data"
+    PROGRESS_LOADING_SALES: Final[str] = "progress_loading_sales"
+    PROGRESS_LOADING_STOCK: Final[str] = "progress_loading_stock"
+    PROGRESS_LOADING_FORECAST: Final[str] = "progress_loading_forecast"
+    PROGRESS_LOADING_METADATA: Final[str] = "progress_loading_metadata"
+    PROGRESS_DONE: Final[str] = "progress_done"
 
+
+_EN_LOADING_DATA = "Loading data..."
+_PL_LOADING_DATA = "Wczytywanie danych..."
 _PL_QUANTITY = "Ilość"
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
@@ -1409,7 +1418,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.FC_AUTO_ARIMA: "AutoARIMA (sktime)",
         Keys.FC_GENERATE_AS_OF_HELP: "Simulate forecast generation as if it was this date. Only sales data up to this date will be used.",
         Keys.FC_COMPARE_AS_OF_HELP: "Date up to which actual sales are loaded for comparison. Set to future date of generation date to see forecast accuracy.",
-        Keys.FC_LOADING_DATA: "Loading data...",
+        Keys.FC_LOADING_DATA: _EN_LOADING_DATA,
         Keys.FC_LOADING_MONTHLY_AGG: "Loading monthly aggregations...",
         Keys.FC_NO_MONTHLY_AGG: "No monthly aggregation data available",
         Keys.FC_NO_DATA_BEFORE_DATE: "No data available before {date}",
@@ -1516,7 +1525,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.ML_TAB_TRAIN: "Train Models",
         Keys.ML_TAB_GENERATE: "Generate Forecasts",
         Keys.ML_TAB_MANAGE: "Manage Models",
-        Keys.ML_LOADING_DATA: "Loading data...",
+        Keys.ML_LOADING_DATA: _EN_LOADING_DATA,
         Keys.ML_LOADING_MONTHLY_AGG: "Loading monthly aggregations...",
         Keys.ML_NO_MONTHLY_AGG: "No monthly aggregation data available",
         Keys.ML_LOADING_SKU_STATS: "Loading SKU statistics...",
@@ -1643,6 +1652,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TASK_DUE: "Due",
         Keys.ERR_TASK_PLANNER: "Error in Task Planner: {error}",
         Keys.ERR_TASK_TITLE_REQUIRED: "Task title is required",
+
+        Keys.PROGRESS_LOADING_DATA: _EN_LOADING_DATA,
+        Keys.PROGRESS_LOADING_SALES: "Loading sales data...",
+        Keys.PROGRESS_LOADING_STOCK: "Loading stock data...",
+        Keys.PROGRESS_LOADING_FORECAST: "Loading forecast...",
+        Keys.PROGRESS_LOADING_METADATA: "Loading metadata...",
+        Keys.PROGRESS_DONE: "Done!",
     },
 
     "pl": {
@@ -2220,7 +2236,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.FC_AUTO_ARIMA: "AutoARIMA (sktime)",
         Keys.FC_GENERATE_AS_OF_HELP: "Symuluj generowanie prognozy jakby było to w tej dacie. Tylko dane sprzedaży do tej daty zostaną użyte.",
         Keys.FC_COMPARE_AS_OF_HELP: "Data, do której rzeczywista sprzedaż jest wczytywana do porównania. Ustaw na przyszłą datę względem daty generowania, aby zobaczyć dokładność prognozy.",
-        Keys.FC_LOADING_DATA: "Wczytywanie danych...",
+        Keys.FC_LOADING_DATA: _PL_LOADING_DATA,
         Keys.FC_LOADING_MONTHLY_AGG: "Wczytywanie agregacji miesięcznych...",
         Keys.FC_NO_MONTHLY_AGG: "Brak dostępnych danych agregacji miesięcznych",
         Keys.FC_NO_DATA_BEFORE_DATE: "Brak danych przed datą {date}",
@@ -2327,7 +2343,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.ML_TAB_TRAIN: "Trenuj Modele",
         Keys.ML_TAB_GENERATE: "Generuj Prognozy",
         Keys.ML_TAB_MANAGE: "Zarządzaj Modelami",
-        Keys.ML_LOADING_DATA: "Wczytywanie danych...",
+        Keys.ML_LOADING_DATA: _PL_LOADING_DATA,
         Keys.ML_LOADING_MONTHLY_AGG: "Wczytywanie agregacji miesięcznych...",
         Keys.ML_NO_MONTHLY_AGG: "Brak dostępnych danych agregacji miesięcznych",
         Keys.ML_LOADING_SKU_STATS: "Wczytywanie statystyk SKU...",
@@ -2454,6 +2470,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TASK_DUE: "Termin",
         Keys.ERR_TASK_PLANNER: "Błąd w Planerze Zadań: {error}",
         Keys.ERR_TASK_TITLE_REQUIRED: "Tytuł zadania jest wymagany",
+
+        Keys.PROGRESS_LOADING_DATA: _PL_LOADING_DATA,
+        Keys.PROGRESS_LOADING_SALES: "Ładowanie sprzedaży...",
+        Keys.PROGRESS_LOADING_STOCK: "Ładowanie stanu magazynowego...",
+        Keys.PROGRESS_LOADING_FORECAST: "Ładowanie prognozy...",
+        Keys.PROGRESS_LOADING_METADATA: "Ładowanie metadanych...",
+        Keys.PROGRESS_DONE: "Gotowe!",
     },
 }
 
