@@ -43,7 +43,7 @@ def setup_logging(level: int | None = None, log_to_file: bool = False) -> loggin
             handler, logging.FileHandler
         ):
             handler.setFormatter(
-                logging.Formatter(console_format, datefmt="%H:%M:%S.%f")
+                logging.Formatter(console_format, datefmt="%H:%M:%S")
             )
 
     logging.basicConfig(

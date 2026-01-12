@@ -1,5 +1,6 @@
 streamlit
 streamlit-aggrid
+streamlit-sortables
 st-copy-to-clipboard
 pandas
 numpy

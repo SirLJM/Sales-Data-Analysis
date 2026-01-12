@@ -774,7 +774,7 @@ def _build_yearly_summary_data(
         forecast_agg = yearly_forecast.groupby(id_col, observed=True)["QUANTITY"].sum().reset_index()
         forecast_agg.columns = [id_col, "Forecast"]
         forecast_agg["Forecast"] = forecast_agg["Forecast"].astype(int)
-        summary = summary.merge(forecast_agg, on=id_col, how="left")
+        summary = summary.merge(forecast_agg, on=id_col, how="left", validate="many_to_many")
         summary["Forecast"] = summary["Forecast"].fillna(0).astype(int)
     else:
         summary["Forecast"] = 0

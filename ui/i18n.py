@@ -23,6 +23,7 @@ def t(key: str) -> str:
 class Keys:
     PAGE_TITLE: Final[str] = "page_title"
 
+    TAB_TASK_PLANNER: Final[str] = "tab_task_planner"
     TAB_SALES_ANALYSIS: Final[str] = "tab_sales_analysis"
     TAB_PATTERN_OPTIMIZER: Final[str] = "tab_pattern_optimizer"
     TAB_WEEKLY_ANALYSIS: Final[str] = "tab_weekly_analysis"
@@ -103,6 +104,7 @@ class Keys:
     MSG_LOAD_BOTH_DATASETS: Final[str] = "msg_load_both_datasets"
     MSG_NO_FORECAST_DATA: Final[str] = "msg_no_forecast_data"
 
+    TITLE_TASK_PLANNER: Final[str] = "title_task_planner"
     TITLE_SALES_DATA_ANALYSIS: Final[str] = "title_sales_data_analysis"
     TITLE_STOCK_PROJECTION: Final[str] = "title_stock_projection"
     TITLE_YEARLY_SALES_TREND: Final[str] = "title_yearly_sales_trend"
@@ -799,6 +801,35 @@ class Keys:
     DISPLAY_DOWNLOAD_CSV: Final[str] = "display_download_csv"
     DISPLAY_MODEL: Final[str] = "display_model"
 
+    TASK_ADD_NEW: Final[str] = "task_add_new"
+    TASK_TITLE: Final[str] = "task_title"
+    TASK_TITLE_PLACEHOLDER: Final[str] = "task_title_placeholder"
+    TASK_DESCRIPTION: Final[str] = "task_description"
+    TASK_DESCRIPTION_PLACEHOLDER: Final[str] = "task_description_placeholder"
+    TASK_DESCRIPTION_HELP: Final[str] = "task_description_help"
+    TASK_DUE_DATE: Final[str] = "task_due_date"
+    TASK_PRIORITY: Final[str] = "task_priority"
+    TASK_PRIORITY_HIGH: Final[str] = "task_priority_high"
+    TASK_PRIORITY_MEDIUM: Final[str] = "task_priority_medium"
+    TASK_PRIORITY_LOW: Final[str] = "task_priority_low"
+    TASK_STATUS_TODO: Final[str] = "task_status_todo"
+    TASK_STATUS_IN_PROGRESS: Final[str] = "task_status_in_progress"
+    TASK_STATUS_DONE: Final[str] = "task_status_done"
+    TASK_ADD_BTN: Final[str] = "task_add_btn"
+    TASK_DELETE_BTN: Final[str] = "task_delete_btn"
+    TASK_EDIT_BTN: Final[str] = "task_edit_btn"
+    TASK_SAVE_BTN: Final[str] = "task_save_btn"
+    TASK_LIST: Final[str] = "task_list"
+    TASK_KANBAN: Final[str] = "task_kanban"
+    TASK_FILTER_STATUS: Final[str] = "task_filter_status"
+    TASK_FILTER_PRIORITY: Final[str] = "task_filter_priority"
+    TASK_FILTER_ALL: Final[str] = "task_filter_all"
+    TASK_NO_TASKS: Final[str] = "task_no_tasks"
+    TASK_CREATED: Final[str] = "task_created"
+    TASK_DUE: Final[str] = "task_due"
+    ERR_TASK_PLANNER: Final[str] = "err_task_planner"
+    ERR_TASK_TITLE_REQUIRED: Final[str] = "err_task_title_required"
+
 
 _PL_QUANTITY = "Ilość"
 
@@ -806,6 +837,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         Keys.PAGE_TITLE: "Inventory & Pattern Optimizer",
 
+        Keys.TAB_TASK_PLANNER: "📝 Task Planner",
         Keys.TAB_SALES_ANALYSIS: "📊 Sales & Inventory Analysis",
         Keys.TAB_PATTERN_OPTIMIZER: "✂️ Size Pattern Optimizer",
         Keys.TAB_WEEKLY_ANALYSIS: "📋 Weekly Analysis",
@@ -886,6 +918,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.MSG_LOAD_BOTH_DATASETS: "No {entity_type} have both stock and forecast data available. Load both datasets to use this feature.",
         Keys.MSG_NO_FORECAST_DATA: "No forecast data available for this {entity} in the projection window.",
 
+        Keys.TITLE_TASK_PLANNER: "📝 Task Planner",
         Keys.TITLE_SALES_DATA_ANALYSIS: "Sales Data Analysis",
         Keys.TITLE_STOCK_PROJECTION: "📈 Stock Projection Analysis",
         Keys.TITLE_YEARLY_SALES_TREND: "📊 Yearly Sales Trend",
@@ -1581,11 +1614,41 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.DISPLAY_COVERAGE: "Coverage",
         Keys.DISPLAY_DOWNLOAD_CSV: "Download CSV",
         Keys.DISPLAY_MODEL: "Model",
+
+        Keys.TASK_ADD_NEW: "Add New Task",
+        Keys.TASK_TITLE: "Title",
+        Keys.TASK_TITLE_PLACEHOLDER: "Short task title...",
+        Keys.TASK_DESCRIPTION: "Description",
+        Keys.TASK_DESCRIPTION_PLACEHOLDER: "Detailed description (supports **bold**, *italic*, - lists)",
+        Keys.TASK_DESCRIPTION_HELP: "Supports Markdown: **bold**, *italic*, - bullet lists, 1. numbered lists",
+        Keys.TASK_DUE_DATE: "Due Date",
+        Keys.TASK_PRIORITY: "Priority",
+        Keys.TASK_PRIORITY_HIGH: "High",
+        Keys.TASK_PRIORITY_MEDIUM: "Medium",
+        Keys.TASK_PRIORITY_LOW: "Low",
+        Keys.TASK_STATUS_TODO: "To Do",
+        Keys.TASK_STATUS_IN_PROGRESS: "In Progress",
+        Keys.TASK_STATUS_DONE: "Done",
+        Keys.TASK_ADD_BTN: "Add Task",
+        Keys.TASK_DELETE_BTN: "Delete",
+        Keys.TASK_EDIT_BTN: "Edit",
+        Keys.TASK_SAVE_BTN: "Save",
+        Keys.TASK_LIST: "Task List",
+        Keys.TASK_KANBAN: "Kanban Board",
+        Keys.TASK_FILTER_STATUS: "Filter by Status",
+        Keys.TASK_FILTER_PRIORITY: "Filter by Priority",
+        Keys.TASK_FILTER_ALL: "All",
+        Keys.TASK_NO_TASKS: "No tasks yet. Add your first task above!",
+        Keys.TASK_CREATED: "Created",
+        Keys.TASK_DUE: "Due",
+        Keys.ERR_TASK_PLANNER: "Error in Task Planner: {error}",
+        Keys.ERR_TASK_TITLE_REQUIRED: "Task title is required",
     },
 
     "pl": {
         Keys.PAGE_TITLE: "Zarządzanie Zapasami i Optymalizator Wzorców",
 
+        Keys.TAB_TASK_PLANNER: "📝 Planer Zadań",
         Keys.TAB_SALES_ANALYSIS: "📊 Analiza Sprzedaży i Zapasów",
         Keys.TAB_PATTERN_OPTIMIZER: "✂️ Optymalizator Rozmiarów",
         Keys.TAB_WEEKLY_ANALYSIS: "📋 Analiza Tygodniowa",
@@ -1666,6 +1729,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.MSG_LOAD_BOTH_DATASETS: "Żaden {entity_type} nie ma zarówno danych o stanie, jak i prognozy. Wczytaj oba zestawy danych, aby użyć tej funkcji.",
         Keys.MSG_NO_FORECAST_DATA: "Brak danych prognozy dla tego {entity} w oknie projekcji.",
 
+        Keys.TITLE_TASK_PLANNER: "📝 Planer Zadań",
         Keys.TITLE_SALES_DATA_ANALYSIS: "Analiza Danych Sprzedaży",
         Keys.TITLE_STOCK_PROJECTION: "📈 Analiza Projekcji Stanu",
         Keys.TITLE_YEARLY_SALES_TREND: "📊 Roczny Trend Sprzedaży",
@@ -2361,12 +2425,42 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.DISPLAY_COVERAGE: "Pokrycie",
         Keys.DISPLAY_DOWNLOAD_CSV: "Pobierz CSV",
         Keys.DISPLAY_MODEL: "Model",
+
+        Keys.TASK_ADD_NEW: "Dodaj Nowe Zadanie",
+        Keys.TASK_TITLE: "Tytuł",
+        Keys.TASK_TITLE_PLACEHOLDER: "Krótki tytuł zadania...",
+        Keys.TASK_DESCRIPTION: "Opis",
+        Keys.TASK_DESCRIPTION_PLACEHOLDER: "Szczegółowy opis (obsługuje **pogrubienie**, *kursywę*, - listy)",
+        Keys.TASK_DESCRIPTION_HELP: "Obsługuje Markdown: **pogrubienie**, *kursywa*, - listy punktowane, 1. listy numerowane",
+        Keys.TASK_DUE_DATE: "Termin",
+        Keys.TASK_PRIORITY: "Priorytet",
+        Keys.TASK_PRIORITY_HIGH: "Wysoki",
+        Keys.TASK_PRIORITY_MEDIUM: "Średni",
+        Keys.TASK_PRIORITY_LOW: "Niski",
+        Keys.TASK_STATUS_TODO: "Do Zrobienia",
+        Keys.TASK_STATUS_IN_PROGRESS: "W Trakcie",
+        Keys.TASK_STATUS_DONE: "Zrobione",
+        Keys.TASK_ADD_BTN: "Dodaj Zadanie",
+        Keys.TASK_DELETE_BTN: "Usuń",
+        Keys.TASK_EDIT_BTN: "Edytuj",
+        Keys.TASK_SAVE_BTN: "Zapisz",
+        Keys.TASK_LIST: "Lista Zadań",
+        Keys.TASK_KANBAN: "Tablica Kanban",
+        Keys.TASK_FILTER_STATUS: "Filtruj wg Statusu",
+        Keys.TASK_FILTER_PRIORITY: "Filtruj wg Priorytetu",
+        Keys.TASK_FILTER_ALL: "Wszystkie",
+        Keys.TASK_NO_TASKS: "Brak zadań. Dodaj pierwsze zadanie powyżej!",
+        Keys.TASK_CREATED: "Utworzono",
+        Keys.TASK_DUE: "Termin",
+        Keys.ERR_TASK_PLANNER: "Błąd w Planerze Zadań: {error}",
+        Keys.ERR_TASK_TITLE_REQUIRED: "Tytuł zadania jest wymagany",
     },
 }
 
 
 def get_tab_names() -> list[str]:
     return [
+        t(Keys.TAB_TASK_PLANNER),
         t(Keys.TAB_SALES_ANALYSIS),
         t(Keys.TAB_PATTERN_OPTIMIZER),
         t(Keys.TAB_WEEKLY_ANALYSIS),

@@ -27,6 +27,9 @@ class SessionKeys:
     ML_TRAINED_MODELS: Final[str] = "ml_trained_models"
     ML_TRAINING_STATS: Final[str] = "ml_training_stats"
     FACILITY_CAPACITY: Final[str] = "facility_capacity"
+    TASKS: Final[str] = "tasks"
+    TASK_FILTER_STATUS: Final[str] = "task_filter_status"
+    TASK_FILTER_PRIORITY: Final[str] = "task_filter_priority"
 
 
 class ColumnNames:

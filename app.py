@@ -20,6 +20,7 @@ from ui import tab_order_recommendations
 from ui import tab_order_tracking
 from ui import tab_pattern_optimizer
 from ui import tab_sales_analysis
+from ui import tab_task_planner
 from ui import tab_weekly_analysis
 from ui.i18n import t, Keys, get_tab_names
 from ui.shared.session_manager import initialize_session_state
@@ -103,36 +104,39 @@ context = {
 }
 
 with tabs[0]:
-    tab_sales_analysis.render(context)
+    tab_task_planner.render()
 
 with tabs[1]:
-    tab_pattern_optimizer.render()
+    tab_sales_analysis.render(context)
 
 with tabs[2]:
-    tab_weekly_analysis.render(context)
+    tab_pattern_optimizer.render()
 
 with tabs[3]:
-    tab_monthly_analysis.render()
+    tab_weekly_analysis.render(context)
 
 with tabs[4]:
-    tab_order_recommendations.render(context)
+    tab_monthly_analysis.render()
 
 with tabs[5]:
-    tab_order_creation.render(context)
+    tab_order_recommendations.render(context)
 
 with tabs[6]:
-    tab_order_tracking.render()
+    tab_order_creation.render(context)
 
 with tabs[7]:
-    tab_forecast_accuracy.render(context)
+    tab_order_tracking.render()
 
 with tabs[8]:
-    tab_forecast_comparison.render()
+    tab_forecast_accuracy.render(context)
 
 with tabs[9]:
-    tab_ml_forecast.render()
+    tab_forecast_comparison.render()
 
 with tabs[10]:
+    tab_ml_forecast.render()
+
+with tabs[11]:
     tab_nlq.render(context)
 
 logger.info("Application render cycle completed")
