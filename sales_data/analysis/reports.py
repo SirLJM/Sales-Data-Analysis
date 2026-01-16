@@ -382,3 +382,117 @@ def get_last_n_months_sales_by_color(
 
     df = normalize_monthly_agg_columns(monthly_agg.copy())
     return filter_and_pivot_sales(df, model, colors, months)
+
+
+def calculate_worst_models_12m(
+        sales_df: pd.DataFrame,
+        model_metadata_df: pd.DataFrame | None = None,
+        top_n: int = 20,
+        reference_date: datetime | None = None,
+) -> pd.DataFrame:
+    if reference_date is None:
+        reference_date = datetime.today()
+
+    twelve_months_ago = reference_date - timedelta(days=365)
+
+    df = sales_df.copy()
+    df["data"] = pd.to_datetime(df["data"])
+    df = df[df["data"] >= twelve_months_ago]
+
+    if df.empty:
+        return pd.DataFrame()
+
+    df["model"] = df["sku"].astype(str).str[:5]
+    df["color"] = df["sku"].astype(str).str[5:7]
+    df["year_month"] = df["data"].dt.to_period("M")  # type: ignore
+
+    model_color_stats = df.groupby(["model", "color"], observed=True).agg(
+        total_sales=("ilosc", "sum"),
+        months_active=("year_month", "nunique")
+    ).reset_index()
+
+    model_color_stats["monthly_velocity"] = (
+            model_color_stats["total_sales"] / model_color_stats["months_active"]
+    ).round(2)
+
+    model_color_stats = _join_material_type(model_color_stats, model_metadata_df)
+
+    result = model_color_stats.nsmallest(top_n, "monthly_velocity")
+
+    return result.rename(columns={
+        "model": "MODEL",
+        "color": "COLOR",
+        "material_type": "MATERIAL_TYPE",
+        "monthly_velocity": "MONTHLY_VELOCITY",
+        "total_sales": "TOTAL_SALES_12M"
+    })[["MODEL", "COLOR", "MATERIAL_TYPE", "MONTHLY_VELOCITY", "TOTAL_SALES_12M"]]
+
+
+def _join_material_type(
+        stats_df: pd.DataFrame,
+        metadata_df: pd.DataFrame | None
+) -> pd.DataFrame:
+    if metadata_df is None or metadata_df.empty:
+        stats_df["material_type"] = "Unknown"
+        return stats_df
+
+    metadata_cols = metadata_df.copy()
+    if "Model" in metadata_cols.columns:
+        metadata_cols = metadata_cols.rename(columns={"Model": "model"})
+
+    material_col = "RODZAJ MATERIAŁU"
+    if material_col not in metadata_cols.columns:
+        stats_df["material_type"] = "Unknown"
+        return stats_df
+
+    stats_df = stats_df.merge(
+        metadata_cols[["model", material_col]],
+        on="model",
+        how="left"
+    )
+    stats_df["material_type"] = stats_df[material_col].fillna("Unknown")
+    stats_df = stats_df.drop(columns=[material_col])
+
+    return stats_df
+
+
+def calculate_worst_rotating_models(
+        sales_df: pd.DataFrame,
+        top_n: int = 20,
+        reference_date: datetime | None = None,
+) -> pd.DataFrame:
+    if reference_date is None:
+        reference_date = datetime.today()
+
+    df = sales_df.copy()
+    df["data"] = pd.to_datetime(df["data"])
+    df["model"] = df["sku"].astype(str).str[:5]
+
+    model_stats = df.groupby("model", observed=True).agg(
+        total_sales=("ilosc", "sum"),
+        first_sale=("data", "min")
+    ).reset_index()
+
+    timedelta_series = reference_date - model_stats["first_sale"]
+    days_since_first: pd.Series = timedelta_series.dt.days  # type: ignore[assignment]
+    model_stats["months_active"] = (days_since_first / 30.44).round(1)
+
+    model_stats = model_stats[model_stats["months_active"] > 0]
+
+    model_stats["monthly_velocity"] = (
+            model_stats["total_sales"] / model_stats["months_active"]
+    ).round(2)
+
+    result = model_stats.nsmallest(top_n, "monthly_velocity")
+
+    result = result.rename(columns={
+        "model": "MODEL",
+        "first_sale": "FIRST_SALE_DATE",
+        "months_active": "MONTHS_ACTIVE",
+        "total_sales": "TOTAL_SALES",
+        "monthly_velocity": "MONTHLY_VELOCITY"
+    })
+
+    result["FIRST_SALE_DATE"] = result["FIRST_SALE_DATE"].dt.strftime("%Y-%m-%d")
+
+    return result[["MODEL", "FIRST_SALE_DATE", "MONTHS_ACTIVE", "TOTAL_SALES", "MONTHLY_VELOCITY"]]

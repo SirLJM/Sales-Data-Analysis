@@ -42,9 +42,12 @@ TAB_NAMES = get_tab_names()
 def _get_active_tab_index() -> int:
     params = st.query_params
     try:
-        return int(params.get("tab", 0))
+        tab_idx = params.get("tab")
+        if tab_idx is not None:
+            return int(tab_idx)
     except (ValueError, TypeError):
-        return 0
+        pass
+    return -1
 
 ACTIVE_TAB_INDEX = _get_active_tab_index()
 
@@ -54,25 +57,36 @@ NAV_INJECT_JS = """
     var tabsContainer = window.parent.document.querySelector('div[data-testid="stTabs"]');
     if (!tabsContainer) return;
 
-    var activeTabIndex = """ + str(ACTIVE_TAB_INDEX) + """;
+    var urlTabIndex = """ + str(ACTIVE_TAB_INDEX) + """;
+    var storageKey = 'stockmonitor_active_tab';
 
-    // Restore active tab from query params
-    if (!window.parent._tabRestored) {
-        window.parent._tabRestored = true;
-        var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-        if (allTabs[activeTabIndex] && activeTabIndex > 0) {
+    // Get target tab: prefer URL param, fallback to sessionStorage
+    var targetTabIndex = urlTabIndex;
+    if (targetTabIndex < 0) {
+        var stored = window.parent.sessionStorage.getItem(storageKey);
+        if (stored !== null) {
+            targetTabIndex = parseInt(stored, 10);
+        }
+    }
+
+    // Restore active tab on every rerun
+    var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+    if (allTabs[targetTabIndex] && targetTabIndex > 0) {
+        var currentActive = window.parent.document.querySelector('button[data-baseweb="tab"][aria-selected="true"]');
+        var currentIndex = Array.from(allTabs).indexOf(currentActive);
+        if (currentIndex !== targetTabIndex) {
             setTimeout(function() {
-                allTabs[activeTabIndex].click();
+                allTabs[targetTabIndex].click();
             }, 50);
         }
     }
 
-    // Track tab clicks and update URL
+    // Track tab clicks and update URL + sessionStorage
     if (!window.parent._tabTrackingSetup) {
         window.parent._tabTrackingSetup = true;
-        var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
         allTabs.forEach(function(tab, idx) {
             tab.addEventListener('click', function() {
+                window.parent.sessionStorage.setItem(storageKey, idx);
                 var url = new URL(window.parent.location.href);
                 url.searchParams.set('tab', idx);
                 window.parent.history.replaceState({}, '', url);

@@ -256,7 +256,12 @@ def _render_filters(
     with col1:
         search_label = t(Keys.SEARCH_MODEL) if group_by_model else t(Keys.SEARCH_SKU)
         search_placeholder = t(Keys.SEARCH_MODEL_PLACEHOLDER) if group_by_model else t(Keys.SEARCH_SKU_PLACEHOLDER)
-        search_term = st.text_input(search_label, placeholder=search_placeholder, key="sales_analysis_search")
+        with st.form("sales_search_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                search_term = st.text_input(search_label, placeholder=search_placeholder, key="sales_analysis_search")
+            with form_col2:
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
 
     with col2:
         st.write("")
@@ -458,7 +463,12 @@ def _render_stock_projection(
     with col_input:
         input_label = t(Keys.ENTER_MODEL_TO_ANALYZE) if group_by_model else t(Keys.ENTER_SKU_TO_ANALYZE)
         input_placeholder = t(Keys.SEARCH_MODEL_PLACEHOLDER) if group_by_model else t(Keys.SEARCH_SKU_PLACEHOLDER)
-        selected_id = st.text_input(input_label, placeholder=input_placeholder)
+        with st.form("projection_search_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([3, 1])
+            with form_col1:
+                selected_id = st.text_input(input_label, placeholder=input_placeholder)
+            with form_col2:
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
 
     with col_months:
         projection_months = st.slider(t(Keys.PROJECTION_MONTHS), min_value=1, max_value=12, value=6, step=1)
@@ -650,11 +660,16 @@ def _render_yearly_sales_trend() -> None:
 
     with col_input:
         input_label = t(Keys.INPUT_MODEL_COLOR) if include_color else t(Keys.INPUT_MODEL)
-        selected_id = st.text_input(
-            input_label,
-            placeholder=t(Keys.ENTER_CODE_PLACEHOLDER),
-            key="yearly_trend_input"
-        )
+        with st.form("yearly_trend_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                selected_id = st.text_input(
+                    input_label,
+                    placeholder=t(Keys.ENTER_CODE_PLACEHOLDER),
+                    key="yearly_trend_input"
+                )
+            with form_col2:
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
 
     st.caption(t(Keys.ITEMS_AVAILABLE_SHORT).format(count=len(available_ids)))
 
@@ -695,11 +710,16 @@ def _render_yearly_summary_table(
         col_filter, col_sort = st.columns([2, 2])
 
         with col_filter:
-            search_filter = st.text_input(
-                t(Keys.FILTER_BY_CODE),
-                placeholder=t(Keys.TYPE_TO_FILTER),
-                key="yearly_summary_filter"
-            )
+            with st.form("yearly_summary_filter_form", clear_on_submit=False, border=False):
+                form_col1, form_col2 = st.columns([4, 1])
+                with form_col1:
+                    search_filter = st.text_input(
+                        t(Keys.FILTER_BY_CODE),
+                        placeholder=t(Keys.TYPE_TO_FILTER),
+                        key="yearly_summary_filter"
+                    )
+                with form_col2:
+                    st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
 
         with col_sort:
             sort_options = [

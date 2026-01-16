@@ -302,11 +302,16 @@ def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        search_term = st.text_input(
-            t(Keys.SEARCH_ENTITY).format(entity=id_col),
-            placeholder=t(Keys.SEARCH_ENTITY_PLACEHOLDER).format(entity=id_col),
-            key="accuracy_search",
-        )
+        with st.form("accuracy_search_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                search_term = st.text_input(
+                    t(Keys.SEARCH_ENTITY).format(entity=id_col),
+                    placeholder=t(Keys.SEARCH_ENTITY_PLACEHOLDER).format(entity=id_col),
+                    key="accuracy_search",
+                )
+            with form_col2:
+                st.form_submit_button("🔍", use_container_width=True)
     with col2:
         sort_by = st.selectbox(
             t(Keys.SORT_BY),

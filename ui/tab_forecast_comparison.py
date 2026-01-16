@@ -207,11 +207,16 @@ def _render_parameters() -> dict:
             )
 
         if entity_type == "sku":
-            filter_params["model_filter"] = st.text_input(
-                t(Keys.FILTER_BY_MODEL),
-                placeholder="e.g., CH031",
-                key="fc_model_filter",
-            )
+            with st.form("fc_model_filter_form", clear_on_submit=False, border=False):
+                form_col1, form_col2 = st.columns([4, 1])
+                with form_col1:
+                    filter_params["model_filter"] = st.text_input(
+                        t(Keys.FILTER_BY_MODEL),
+                        placeholder="e.g., CH031",
+                        key="fc_model_filter",
+                    )
+                with form_col2:
+                    st.form_submit_button("🔍", use_container_width=True)
 
     return {
         "horizon": horizon,
@@ -436,7 +441,12 @@ def _display_all_forecasts_table(data: dict) -> None:
         return
 
     with st.expander(t(Keys.FC_VIEW_ALL_ITEMS), expanded=False):
-        search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_all_search")
+        with st.form("fc_all_search_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_all_search")
+            with form_col2:
+                st.form_submit_button("🔍", use_container_width=True)
 
         df = comparison_df.copy()
         if search:
@@ -561,7 +571,12 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
         st.info(t(Keys.FC_NO_COMPARISON_DATA))
         return
 
-    search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_search")
+    with st.form("fc_search_form", clear_on_submit=False, border=False):
+        form_col1, form_col2 = st.columns([4, 1])
+        with form_col1:
+            search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_search")
+        with form_col2:
+            st.form_submit_button("🔍", use_container_width=True)
 
     display_df = metrics_df.copy()
     if search:

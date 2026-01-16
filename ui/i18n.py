@@ -68,6 +68,7 @@ class Keys:
     BTN_GENERATE_RECOMMENDATIONS: Final[str] = "btn_generate_recommendations"
     BTN_GENERATE_COMPARISON: Final[str] = "btn_generate_comparison"
     BTN_GENERATE_FORECASTS: Final[str] = "btn_generate_forecasts"
+    BTN_SEARCH: Final[str] = "btn_search"
 
     LEAD_TIME_MONTHS: Final[str] = "lead_time_months"
     LEAD_TIME_HELP: Final[str] = "lead_time_help"
@@ -227,6 +228,25 @@ class Keys:
     WEEKLY_TOP_SALES_CAPTION: Final[str] = "weekly_top_sales_caption"
     WEEKLY_NEW_PRODUCTS_CAPTION: Final[str] = "weekly_new_products_caption"
     MONTHLY_CAPTION: Final[str] = "monthly_caption"
+    TITLE_WORST_MODELS_12M: Final[str] = "title_worst_models_12m"
+    TITLE_WORST_ROTATING: Final[str] = "title_worst_rotating"
+    WORST_MODELS_CAPTION: Final[str] = "worst_models_caption"
+    WORST_ROTATING_CAPTION: Final[str] = "worst_rotating_caption"
+    BTN_GENERATE_WORST_MODELS: Final[str] = "btn_generate_worst_models"
+    BTN_GENERATE_WORST_ROTATING: Final[str] = "btn_generate_worst_rotating"
+    CALCULATING_WORST_MODELS: Final[str] = "calculating_worst_models"
+    FILTER_MATERIAL_TYPE: Final[str] = "filter_material_type"
+    FILTER_COLOR: Final[str] = "filter_color"
+    ALL_MATERIALS: Final[str] = "all_materials"
+    ALL_COLORS: Final[str] = "all_colors"
+    COL_MONTHLY_VELOCITY: Final[str] = "col_monthly_velocity"
+    COL_TOTAL_SALES_12M: Final[str] = "col_total_sales_12m"
+    COL_FIRST_SALE_DATE: Final[str] = "col_first_sale_date"
+    COL_MONTHS_ACTIVE: Final[str] = "col_months_active"
+    COL_TOTAL_SALES: Final[str] = "col_total_sales"
+    NO_WORST_MODELS_DATA: Final[str] = "no_worst_models_data"
+    DOWNLOAD_WORST_MODELS_12M: Final[str] = "download_worst_models_12m"
+    DOWNLOAD_WORST_ROTATING: Final[str] = "download_worst_rotating"
 
     RISING_STAR: Final[str] = "rising_star"
     FALLING_STAR: Final[str] = "falling_star"
@@ -891,6 +911,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_RECOMMENDATIONS: "Generate Recommendations",
         Keys.BTN_GENERATE_COMPARISON: "Generate Comparison",
         Keys.BTN_GENERATE_FORECASTS: "Generate Forecasts",
+        Keys.BTN_SEARCH: "Search",
 
         Keys.LEAD_TIME_MONTHS: "Lead time in months",
         Keys.LEAD_TIME_HELP: "Time between order placement and receipt (used in ROP and SS calculations)",
@@ -1050,6 +1071,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.WEEKLY_TOP_SALES_CAPTION: "Best sellers from last week by product category",
         Keys.WEEKLY_NEW_PRODUCTS_CAPTION: "Track weekly sales for products launched in the last 2 months (Weeks aligned to calendar Wednesdays)",
         Keys.MONTHLY_CAPTION: "Compare monthly sales quantities from current year to previous year, organized by age group (Podgrupa) and clothing category (Kategoria). Automatically excludes the current incomplete month.",
+        Keys.TITLE_WORST_MODELS_12M: "Worst 20 Models (Last 12 Months)",
+        Keys.TITLE_WORST_ROTATING: "Worst Rotating Models (Outlet Candidates)",
+        Keys.WORST_MODELS_CAPTION: "Models with lowest monthly sales velocity in the last 12 months",
+        Keys.WORST_ROTATING_CAPTION: "Models with lowest lifetime velocity - recommended for outlet transfer",
+        Keys.BTN_GENERATE_WORST_MODELS: "Generate Worst Models Report",
+        Keys.BTN_GENERATE_WORST_ROTATING: "Generate Outlet Candidates",
+        Keys.CALCULATING_WORST_MODELS: "Calculating worst performing models...",
+        Keys.FILTER_MATERIAL_TYPE: "Material Type",
+        Keys.FILTER_COLOR: "Color",
+        Keys.ALL_MATERIALS: "All Materials",
+        Keys.ALL_COLORS: "All Colors",
+        Keys.COL_MONTHLY_VELOCITY: "Monthly Velocity",
+        Keys.COL_TOTAL_SALES_12M: "Total Sales (12m)",
+        Keys.COL_FIRST_SALE_DATE: "First Sale Date",
+        Keys.COL_MONTHS_ACTIVE: "Months Active",
+        Keys.COL_TOTAL_SALES: "Total Sales",
+        Keys.NO_WORST_MODELS_DATA: "No data available. Generate the report first.",
+        Keys.DOWNLOAD_WORST_MODELS_12M: "Download Worst 20 Models (12m)",
+        Keys.DOWNLOAD_WORST_ROTATING: "Download Outlet Candidates",
 
         Keys.RISING_STAR: "🚀 RISING STAR",
         Keys.FALLING_STAR: "📉 FALLING STAR",
@@ -1709,6 +1749,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_RECOMMENDATIONS: "Generuj Rekomendacje",
         Keys.BTN_GENERATE_COMPARISON: "Generuj Porównanie",
         Keys.BTN_GENERATE_FORECASTS: "Generuj Prognozy",
+        Keys.BTN_SEARCH: "Szukaj",
 
         Keys.LEAD_TIME_MONTHS: "Lead time w miesiącach",
         Keys.LEAD_TIME_HELP: "Czas między złożeniem zamówienia a jego otrzymaniem (używany w obliczeniach ROP i SS)",
@@ -1868,6 +1909,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.WEEKLY_TOP_SALES_CAPTION: "Bestsellery z ostatniego tygodnia wg kategorii produktów",
         Keys.WEEKLY_NEW_PRODUCTS_CAPTION: "Śledź tygodniową sprzedaż produktów wprowadzonych w ostatnich 2 miesiącach (Tygodnie wyrównane do środy)",
         Keys.MONTHLY_CAPTION: "Porównaj miesięczne ilości sprzedaży z bieżącego roku do poprzedniego, zorganizowane wg grupy wiekowej (Podgrupa) i kategorii odzieży (Kategoria). Automatycznie wyklucza bieżący niepełny miesiąc.",
+        Keys.TITLE_WORST_MODELS_12M: "Najsłabsze 20 Modeli (Ostatnie 12 Miesięcy)",
+        Keys.TITLE_WORST_ROTATING: "Najwolniej Rotujące Modele (Kandydaci do Outletu)",
+        Keys.WORST_MODELS_CAPTION: "Modele z najniższą miesięczną prędkością sprzedaży w ostatnich 12 miesiącach",
+        Keys.WORST_ROTATING_CAPTION: "Modele z najniższą prędkością od początku sprzedaży - rekomendowane do przeniesienia do outletu",
+        Keys.BTN_GENERATE_WORST_MODELS: "Generuj Raport Najsłabszych Modeli",
+        Keys.BTN_GENERATE_WORST_ROTATING: "Generuj Kandydatów do Outletu",
+        Keys.CALCULATING_WORST_MODELS: "Obliczanie najsłabiej sprzedających się modeli...",
+        Keys.FILTER_MATERIAL_TYPE: "Rodzaj Materiału",
+        Keys.FILTER_COLOR: "Kolor",
+        Keys.ALL_MATERIALS: "Wszystkie Materiały",
+        Keys.ALL_COLORS: "Wszystkie Kolory",
+        Keys.COL_MONTHLY_VELOCITY: "Miesięczna Prędkość",
+        Keys.COL_TOTAL_SALES_12M: "Sprzedaż Razem (12m)",
+        Keys.COL_FIRST_SALE_DATE: "Data Pierwszej Sprzedaży",
+        Keys.COL_MONTHS_ACTIVE: "Miesiące Aktywne",
+        Keys.COL_TOTAL_SALES: "Sprzedaż Razem",
+        Keys.NO_WORST_MODELS_DATA: "Brak danych. Najpierw wygeneruj raport.",
+        Keys.DOWNLOAD_WORST_MODELS_12M: "Pobierz Najsłabsze 20 Modeli (12m)",
+        Keys.DOWNLOAD_WORST_ROTATING: "Pobierz Kandydatów do Outletu",
 
         Keys.RISING_STAR: "🚀 WSCHODZĄCA GWIAZDA",
         Keys.FALLING_STAR: "📉 SPADAJĄCA GWIAZDA",

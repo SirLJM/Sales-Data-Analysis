@@ -432,11 +432,16 @@ def _render_generate_tab() -> None:
             key="ml_gen_horizon",
         )
     with col2:
-        entity_filter = st.text_input(
-            t(Keys.ML_ENTITY_FILTER),
-            placeholder="e.g., CH031",
-            key="ml_gen_filter",
-        )
+        with st.form("ml_gen_filter_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                entity_filter = st.text_input(
+                    t(Keys.ML_ENTITY_FILTER),
+                    placeholder="e.g., CH031",
+                    key="ml_gen_filter",
+                )
+            with form_col2:
+                st.form_submit_button("🔍", use_container_width=True)
 
     if st.button(t(Keys.ML_GENERATING_FORECASTS), type="primary", key="ml_gen_btn"):
         _generate_forecasts_from_models(horizon, entity_filter)
@@ -596,7 +601,12 @@ def _render_manage_tab() -> None:
 
     col_search, col_filter = st.columns([2, 1])
     with col_search:
-        search = st.text_input(t(Keys.ML_SEARCH_ENTITY), key="ml_manage_search")
+        with st.form("ml_manage_search_form", clear_on_submit=False, border=False):
+            form_col1, form_col2 = st.columns([4, 1])
+            with form_col1:
+                search = st.text_input(t(Keys.ML_SEARCH_ENTITY), key="ml_manage_search")
+            with form_col2:
+                st.form_submit_button("🔍", use_container_width=True)
     with col_filter:
         type_filter = st.selectbox(
             t(Keys.ML_FILTER_BY_TYPE),

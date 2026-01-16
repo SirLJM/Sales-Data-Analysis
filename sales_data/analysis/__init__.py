@@ -36,6 +36,8 @@ from .reports import (
     calculate_monthly_yoy_by_category,
     calculate_top_products_by_type,
     calculate_top_sales_report,
+    calculate_worst_models_12m,
+    calculate_worst_rotating_models,
     generate_weekly_new_products_analysis,
     get_last_n_months_sales_by_color,
 )
@@ -77,6 +79,8 @@ __all__ = [
     "calculate_stock_projection",
     "calculate_top_products_by_type",
     "calculate_top_sales_report",
+    "calculate_worst_models_12m",
+    "calculate_worst_rotating_models",
     "classify_sku_type",
     "determine_seasonal_months",
     "apply_priority_scoring",

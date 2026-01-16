@@ -157,6 +157,10 @@ INPUT_FIELD_STYLE: Final[str] = """
 [data-testid="stSelectbox"] {
     max-width: 250px !important;
 }
+/* Align form submit button with text input (account for input label height) */
+[data-testid="stForm"] [data-testid="stFormSubmitButton"] {
+    margin-top: 1.65rem !important;
+}
 </style>
 """
 

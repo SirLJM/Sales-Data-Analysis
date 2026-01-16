@@ -97,18 +97,18 @@ def _render_query_input(
 ) -> None:
     st.subheader(t(Keys.NLQ_ENTER_QUERY))
 
-    query = st.text_input(
-        t(Keys.NLQ_QUERY),
-        placeholder=t(Keys.NLQ_PLACEHOLDER),
-        label_visibility="collapsed",
-        key="nlq_query_input",
-    )
-
-    col1, col2, _ = st.columns([1, 1, 4])
-    with col1:
-        execute_clicked = st.button(t(Keys.NLQ_EXECUTE), type="primary", key="nlq_execute")
-    with col2:
-        clear_clicked = st.button(t(Keys.NLQ_CLEAR), key="nlq_clear")
+    with st.form("nlq_query_form", clear_on_submit=False, border=False):
+        query = st.text_input(
+            t(Keys.NLQ_QUERY),
+            placeholder=t(Keys.NLQ_PLACEHOLDER),
+            label_visibility="collapsed",
+            key="nlq_query_input",
+        )
+        col1, col2, _ = st.columns([1, 1, 4])
+        with col1:
+            execute_clicked = st.form_submit_button(t(Keys.NLQ_EXECUTE), type="primary")
+        with col2:
+            clear_clicked = st.form_submit_button(t(Keys.NLQ_CLEAR))
 
     if clear_clicked:
         _clear_session_state()
