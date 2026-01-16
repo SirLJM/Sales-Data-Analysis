@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 
 import pandas as pd
@@ -14,6 +15,8 @@ ORDER_COUNT = "Order Count"
 MONTHLY_CAPACITY = "Monthly Capacity"
 
 TOTAL_QUANTITY = "Total Quantity"
+
+OTHER_OPTION = "(Other)"
 
 logger = get_logger("tab_order_tracking")
 
@@ -56,9 +59,18 @@ def _init_pdf_parser_lookup_data() -> None:
     st.session_state["_pdf_parser_initialized"] = True
 
 
+def _get_available_facilities() -> list[str]:
+    from ui.shared import load_unique_facilities
+    return load_unique_facilities()
+
+
+def _get_available_materials() -> list[str]:
+    from ui.shared import load_unique_materials
+    return load_unique_materials()
+
+
 @st.fragment
 def _render_pdf_upload() -> None:
-    from utils.order_manager import add_manual_order
     from utils.pdf_parser import parse_order_pdf
 
     st.subheader(t(Keys.TITLE_IMPORT_PDF))
@@ -78,119 +90,305 @@ def _render_pdf_upload() -> None:
 
         with col2:
             if st.button(t(Keys.BTN_PARSE_PDF), key="parse_pdf_btn", type="primary"):
-                # noinspection PyTypeChecker
-                with st.spinner(t(Keys.LABEL_PARSING_PDF)):
+                with st.spinner(t(Keys.LABEL_PARSING_PDF)):  # type: ignore[arg-type]
+                    pdf_bytes = uploaded_file.getvalue()
                     order_data = parse_order_pdf(uploaded_file)
                     if order_data:
                         st.session_state["parsed_order_data"] = order_data
+                        st.session_state["parsed_pdf_bytes"] = pdf_bytes
+                        st.session_state["parsed_pdf_filename"] = uploaded_file.name
+                        st.rerun()
                     else:
                         st.error(f"{Icons.ERROR} {t(Keys.FAILED_PARSE_PDF)}")
 
     if "parsed_order_data" in st.session_state:
-        order_data = st.session_state["parsed_order_data"]
         st.success(f"{Icons.SUCCESS} {t(Keys.PDF_PARSED)}")
-        _display_parsed_order(order_data)
-
-        if st.button(t(Keys.BTN_CREATE_FROM_PDF), key="create_from_pdf_btn", type="primary"):
-            order_id = f"ORD_{order_data.get('model', 'UNKNOWN')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            if add_manual_order(order_id, order_data):
-                st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_CREATED_PDF).format(order_id=order_id)}")
-                del st.session_state["parsed_order_data"]
-                _invalidate_orders_cache()
-                st.rerun()
-            else:
-                st.error(f"{Icons.ERROR} {t(Keys.FAILED_CREATE_ORDER)}")
+        _render_editable_parsed_order()
 
 
-def _display_parsed_order(order_data: dict) -> None:
-    order_date = order_data.get('order_date')
-    na_value = t(Keys.NA)
-    date_str = order_date.strftime('%Y-%m-%d') if order_date else na_value
+def _render_editable_parsed_order() -> None:
+    order_data = st.session_state["parsed_order_data"]
+    facilities = _get_available_facilities()
+    materials = _get_available_materials()
 
-    parsed_df = pd.DataFrame([{
-        t(Keys.ORDER_DATE): date_str,
-        t(Keys.MODEL): order_data.get('model', na_value),
-        t(Keys.PRODUCT): order_data.get('product_name', na_value),
-        t(Keys.QUANTITY): order_data.get('total_quantity', na_value),
-        t(Keys.FACILITY): order_data.get('facility', na_value),
-        t(Keys.OPERATION): order_data.get('operation', na_value),
-        t(Keys.MATERIAL): order_data.get('material', na_value),
-    }])
+    order_date = order_data.get("order_date")
+    default_date = order_date if order_date else datetime.today()
 
-    st.dataframe(parsed_df, hide_index=True)
+    with st.form("pdf_order_form"):
+        form_values = _render_pdf_form_fields(order_data, default_date, facilities, materials)
+        submitted, cancelled = _render_form_buttons()
+
+        if submitted:
+            _handle_pdf_order_submit(form_values)
+        if cancelled:
+            _clear_parsed_order_state()
+            st.rerun()
+
+
+def _render_pdf_form_fields(
+        order_data: dict,
+        default_date: datetime,
+        facilities: list[str],
+        materials: list[str],
+) -> dict:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        edit_order_date = st.date_input(
+            t(Keys.ORDER_DATE),
+            value=default_date,
+            help=t(Keys.HELP_ORDER_DATE),
+        )
+    with col2:
+        edit_model = st.text_input(
+            t(Keys.LABEL_MODEL_CODE),
+            value=order_data.get("model") or "",
+        )
+    with col3:
+        edit_product_name = st.text_input(
+            t(Keys.LABEL_PRODUCT_NAME),
+            value=order_data.get("product_name") or "",
+        )
+    with col4:
+        edit_quantity = st.number_input(
+            t(Keys.QUANTITY),
+            min_value=0,
+            value=order_data.get("total_quantity") or 0,
+        )
+
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        edit_facility, edit_facility_other = _render_dropdown_with_other(
+            label=t(Keys.FACILITY),
+            options=facilities,
+            default_value=order_data.get("facility"),
+            key_prefix="pdf_facility",
+        )
+    with col6:
+        edit_operation = st.text_input(
+            t(Keys.OPERATION),
+            value=order_data.get("operation") or "",
+        )
+    with col7:
+        edit_material, edit_material_other = _render_dropdown_with_other(
+            label=t(Keys.MATERIAL),
+            options=materials,
+            default_value=order_data.get("material"),
+            key_prefix="pdf_material",
+        )
+    with col8:
+        st.write("")
+
+    return {
+        "order_date": edit_order_date,
+        "model": edit_model,
+        "product_name": edit_product_name,
+        "quantity": edit_quantity,
+        "facility": edit_facility,
+        "facility_other": edit_facility_other,
+        "operation": edit_operation,
+        "material": edit_material,
+        "material_other": edit_material_other,
+    }
+
+
+def _render_form_buttons() -> tuple[bool, bool]:
+    col_submit, col_cancel = st.columns([1, 1])
+    with col_submit:
+        submitted = st.form_submit_button(t(Keys.BTN_CREATE_FROM_PDF), type="primary")
+    with col_cancel:
+        cancelled = st.form_submit_button(t(Keys.BTN_CANCEL))
+    return submitted, cancelled
+
+
+def _handle_pdf_order_submit(form_values: dict) -> None:
+    from utils.order_manager import add_manual_order
+
+    final_facility = (
+        form_values["facility_other"]
+        if form_values["facility"] == OTHER_OPTION
+        else form_values["facility"]
+    )
+    final_material = (
+        form_values["material_other"]
+        if form_values["material"] == OTHER_OPTION
+        else form_values["material"]
+    )
+
+    final_order_data = {
+        "order_date": form_values["order_date"],
+        "model": form_values["model"].upper() if form_values["model"] else None,
+        "product_name": form_values["product_name"] or None,
+        "total_quantity": form_values["quantity"],
+        "facility": final_facility or None,
+        "operation": form_values["operation"] or None,
+        "material": final_material or None,
+    }
+
+    if st.session_state.get("parsed_pdf_bytes"):
+        final_order_data["pdf_data"] = base64.b64encode(
+            st.session_state["parsed_pdf_bytes"]
+        ).decode("utf-8")
+        final_order_data["pdf_filename"] = st.session_state.get("parsed_pdf_filename")
+
+    order_id = f"ORD_{final_order_data.get('model', 'UNKNOWN')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    if add_manual_order(order_id, final_order_data):
+        st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_CREATED_PDF).format(order_id=order_id)}")
+        _clear_parsed_order_state()
+        _invalidate_orders_cache()
+        st.rerun()
+    else:
+        st.error(f"{Icons.ERROR} {t(Keys.FAILED_CREATE_ORDER)}")
+
+
+def _render_dropdown_with_other(
+        label: str,
+        options: list[str],
+        default_value: str | None,
+        key_prefix: str,
+) -> tuple[str, str]:
+    options_with_other = options + [OTHER_OPTION] if options else [OTHER_OPTION]
+
+    if default_value and default_value in options:
+        default_index = options.index(default_value)
+    elif default_value:
+        default_index = len(options_with_other) - 1
+    else:
+        default_index = 0
+
+    selected = st.selectbox(
+        label,
+        options=options_with_other,
+        index=default_index,
+        key=f"{key_prefix}_select",
+    )
+
+    other_value = ""
+    if selected == OTHER_OPTION:
+        other_value = st.text_input(
+            f"{label} ({t(Keys.PLACEHOLDER_SPECIFY)})",
+            value=default_value if default_value and default_value not in options else "",
+            key=f"{key_prefix}_other",
+        )
+
+    return selected, other_value
+
+
+def _clear_parsed_order_state() -> None:
+    keys_to_clear = ["parsed_order_data", "parsed_pdf_bytes", "parsed_pdf_filename"]
+    for key in keys_to_clear:
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 @st.fragment
 def _render_manual_order_form() -> None:
-    from utils.order_manager import add_manual_order
-
     st.subheader(t(Keys.TITLE_MANUAL_ORDER))
 
+    facilities = _get_available_facilities()
+    materials = _get_available_materials()
+
     with st.form("manual_order_form"):
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            manual_order_date = st.date_input(
-                t(Keys.ORDER_DATE),
-                value=datetime.today(),
-                help=t(Keys.HELP_ORDER_DATE),
-            )
-        with col2:
-            manual_order_model = st.text_input(
-                t(Keys.LABEL_MODEL_CODE),
-                placeholder=t(Keys.PLACEHOLDER_MODEL_CODE),
-            )
-        with col3:
-            manual_product_name = st.text_input(
-                t(Keys.LABEL_PRODUCT_NAME),
-                placeholder=t(Keys.PLACEHOLDER_PRODUCT_NAME),
-            )
-        with col4:
-            manual_quantity = st.number_input(
-                t(Keys.QUANTITY),
-                min_value=0,
-                value=0,
-            )
-
-        col5, col6, col7, col8 = st.columns(4)
-        with col5:
-            manual_facility = st.text_input(
-                t(Keys.FACILITY),
-                placeholder=t(Keys.PLACEHOLDER_FACILITY),
-            )
-        with col6:
-            manual_operation = st.text_input(
-                t(Keys.OPERATION),
-                placeholder=t(Keys.PLACEHOLDER_OPERATION),
-            )
-        with col7:
-            manual_material = st.text_input(
-                t(Keys.MATERIAL),
-                placeholder=t(Keys.PLACEHOLDER_MATERIAL),
-            )
-        with col8:
-            st.write("")
-
+        form_values = _render_manual_form_fields(facilities, materials)
         submitted = st.form_submit_button(t(Keys.BTN_ADD_ORDER), type="primary")
         if submitted:
-            if not manual_order_model:
-                st.warning(f"{Icons.WARNING} {t(Keys.MSG_ENTER_MODEL_CODE)}")
-            else:
-                order_id = f"ORD_{manual_order_model.upper()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                order_data = {
-                    "order_date": manual_order_date,
-                    "model": manual_order_model.upper(),
-                    "product_name": manual_product_name or None,
-                    "total_quantity": manual_quantity,
-                    "facility": manual_facility or None,
-                    "operation": manual_operation or None,
-                    "material": manual_material or None,
-                }
-                if add_manual_order(order_id, order_data):
-                    st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ADDED).format(order_id=order_id)}")
-                    _invalidate_orders_cache()
-                    st.rerun()
-                else:
-                    st.error(f"{Icons.ERROR} {t(Keys.FAILED_ADD_ORDER)}")
+            _handle_manual_order_submit(form_values)
+
+
+def _render_manual_form_fields(facilities: list[str], materials: list[str]) -> dict:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        manual_order_date = st.date_input(
+            t(Keys.ORDER_DATE),
+            value=datetime.today(),
+            help=t(Keys.HELP_ORDER_DATE),
+        )
+    with col2:
+        manual_order_model = st.text_input(
+            t(Keys.LABEL_MODEL_CODE),
+            placeholder=t(Keys.PLACEHOLDER_MODEL_CODE),
+        )
+    with col3:
+        manual_product_name = st.text_input(
+            t(Keys.LABEL_PRODUCT_NAME),
+            placeholder=t(Keys.PLACEHOLDER_PRODUCT_NAME),
+        )
+    with col4:
+        manual_quantity = st.number_input(
+            t(Keys.QUANTITY),
+            min_value=0,
+            value=0,
+        )
+
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        manual_facility, manual_facility_other = _render_dropdown_with_other(
+            label=t(Keys.FACILITY),
+            options=facilities,
+            default_value=None,
+            key_prefix="manual_facility",
+        )
+    with col6:
+        manual_operation = st.text_input(
+            t(Keys.OPERATION),
+            placeholder=t(Keys.PLACEHOLDER_OPERATION),
+        )
+    with col7:
+        manual_material, manual_material_other = _render_dropdown_with_other(
+            label=t(Keys.MATERIAL),
+            options=materials,
+            default_value=None,
+            key_prefix="manual_material",
+        )
+    with col8:
+        st.write("")
+
+    return {
+        "order_date": manual_order_date,
+        "model": manual_order_model,
+        "product_name": manual_product_name,
+        "quantity": manual_quantity,
+        "facility": manual_facility,
+        "facility_other": manual_facility_other,
+        "operation": manual_operation,
+        "material": manual_material,
+        "material_other": manual_material_other,
+    }
+
+
+def _handle_manual_order_submit(form_values: dict) -> None:
+    from utils.order_manager import add_manual_order
+
+    if not form_values["model"]:
+        st.warning(f"{Icons.WARNING} {t(Keys.MSG_ENTER_MODEL_CODE)}")
+        return
+
+    final_facility = (
+        form_values["facility_other"]
+        if form_values["facility"] == OTHER_OPTION
+        else form_values["facility"]
+    )
+    final_material = (
+        form_values["material_other"]
+        if form_values["material"] == OTHER_OPTION
+        else form_values["material"]
+    )
+
+    order_id = f"ORD_{form_values['model'].upper()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    order_data = {
+        "order_date": form_values["order_date"],
+        "model": form_values["model"].upper(),
+        "product_name": form_values["product_name"] or None,
+        "total_quantity": form_values["quantity"],
+        "facility": final_facility or None,
+        "operation": form_values["operation"] or None,
+        "material": final_material or None,
+    }
+    if add_manual_order(order_id, order_data):
+        st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ADDED).format(order_id=order_id)}")
+        _invalidate_orders_cache()
+        st.rerun()
+    else:
+        st.error(f"{Icons.ERROR} {t(Keys.FAILED_ADD_ORDER)}")
 
 
 def _get_cached_active_orders() -> list[dict]:
@@ -207,10 +405,7 @@ def _invalidate_orders_cache() -> None:
         del st.session_state["cached_active_orders"]
 
 
-@st.fragment
 def _render_active_orders() -> None:
-    from ui.shared import render_dataframe_with_aggrid
-
     st.subheader(t(Keys.TITLE_ACTIVE_ORDERS))
 
     active_orders = _get_cached_active_orders()
@@ -222,15 +417,27 @@ def _render_active_orders() -> None:
     order_list = _build_order_list(active_orders)
     orders_df = pd.DataFrame(order_list)
 
-    grid_response = render_dataframe_with_aggrid(
-        orders_df,
-        selection_mode="multiple",
-        pinned_columns=[ColumnNames.ORDER_ID],
-        max_height=Config.DATAFRAME_HEIGHT,
-    )
+    row_height = 35
+    header_height = 40
+    table_height = min(header_height + len(orders_df) * row_height, 400)
 
-    selected_rows = grid_response.selected_rows
-    _handle_aggrid_archive_selection(selected_rows)
+    selected_indices = []
+    with st.container():
+        event = st.dataframe(
+            orders_df,
+            hide_index=True,
+            width='stretch',
+            height=table_height,
+            selection_mode="multi-row",
+            on_select="rerun",
+            key="active_orders_df",
+        )
+        if event and event.selection and event.selection.rows:
+            selected_indices = event.selection.rows
+
+    if selected_indices:
+        selected_df: pd.DataFrame = orders_df.iloc[selected_indices]  # type: ignore[assignment]
+        _handle_dataframe_archive_selection(selected_df)
 
     st.caption(t(Keys.TOTAL_ACTIVE_ORDERS).format(count=len(active_orders)))
     ready_count = len([o for o in order_list if o["Days Elapsed"] >= Config.DELIVERY_THRESHOLD_DAYS])
@@ -274,13 +481,8 @@ def _parse_order_date(order_date) -> datetime:
     return datetime.combine(order_date, datetime.min.time())
 
 
-def _handle_aggrid_archive_selection(selected_rows) -> None:
+def _handle_dataframe_archive_selection(selected_df: pd.DataFrame) -> None:
     from utils.order_manager import archive_order
-
-    if selected_rows is None or len(selected_rows) == 0:
-        return
-
-    selected_df = pd.DataFrame(selected_rows) if not isinstance(selected_rows, pd.DataFrame) else selected_rows
 
     if selected_df.empty:
         return

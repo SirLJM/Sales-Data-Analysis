@@ -18,9 +18,11 @@ DATA_ORDERS = str(Path(__file__).parent.parent / "data" / "orders")
 
 ORDER_FIELDS = ["order_id", "order_date", "model", "product_name", "total_quantity", "facility", "operation", "material", "status"]
 
+PDF_FIELDS = ["pdf_data", "pdf_filename"]
 
-def _extract_order_fields(order_data: dict) -> dict:
-    return {
+
+def _extract_order_fields(order_data: dict, include_pdf: bool = False) -> dict:
+    result = {
         "order_id": order_data.get("order_id"),
         "order_date": order_data.get("order_date"),
         "model": order_data.get("model") or "",
@@ -31,6 +33,11 @@ def _extract_order_fields(order_data: dict) -> dict:
         "material": order_data.get("material") or "",
         "status": order_data.get("status", "active"),
     }
+    if include_pdf:
+        for field in PDF_FIELDS:
+            if order_data.get(field):
+                result[field] = order_data[field]
+    return result
 
 
 def _parse_order_date(order_date) -> datetime:
@@ -134,7 +141,7 @@ class FileOrderRepository(OrderRepository):
         order_data["order_id"] = order_id
         order_data["order_date"] = str(order_data.get("order_date") or datetime.now())
         order_data["status"] = "active"
-        return self.save(_extract_order_fields(order_data))
+        return self.save(_extract_order_fields(order_data, include_pdf=True))
 
 
 class DatabaseOrderRepository(OrderRepository):

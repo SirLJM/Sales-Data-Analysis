@@ -251,7 +251,8 @@ def _execute_training(
 ) -> tuple:
     def progress_callback(current, total, entity_id):
         pct = 20 + int((current / total) * 70)
-        progress_bar.progress(pct, text=t(Keys.ML_TRAINING_PROGRESS).format(current=current, total=total, entity=entity_id))
+        progress_bar.progress(pct,
+                              text=t(Keys.ML_TRAINING_PROGRESS).format(current=current, total=total, entity=entity_id))
 
     progress_bar.progress(25, text=t(Keys.ML_TRAINING_MODELS))
 
@@ -441,7 +442,7 @@ def _render_generate_tab() -> None:
                     key="ml_gen_filter",
                 )
             with form_col2:
-                st.form_submit_button("🔍", use_container_width=True)
+                st.form_submit_button("🔍", width='stretch')
 
     if st.button(t(Keys.ML_GENERATING_FORECASTS), type="primary", key="ml_gen_btn"):
         _generate_forecasts_from_models(horizon, entity_filter)
@@ -606,7 +607,7 @@ def _render_manage_tab() -> None:
             with form_col1:
                 search = st.text_input(t(Keys.ML_SEARCH_ENTITY), key="ml_manage_search")
             with form_col2:
-                st.form_submit_button("🔍", use_container_width=True)
+                st.form_submit_button("🔍", width='stretch')
     with col_filter:
         type_filter = st.selectbox(
             t(Keys.ML_FILTER_BY_TYPE),

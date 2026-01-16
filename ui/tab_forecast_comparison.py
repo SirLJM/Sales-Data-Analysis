@@ -216,7 +216,7 @@ def _render_parameters() -> dict:
                         key="fc_model_filter",
                     )
                 with form_col2:
-                    st.form_submit_button("🔍", use_container_width=True)
+                    st.form_submit_button("🔍", width='stretch')
 
     return {
         "horizon": horizon,
@@ -292,7 +292,8 @@ def _generate_comparison(params: dict) -> None:
 
         def progress_callback(current, total, entity_id):
             pct = 30 + int((current / total) * 60)
-            progress_bar.progress(pct, text=t(Keys.FC_FORECASTING_PROGRESS).format(current=current, total=total, entity=entity_id))
+            progress_bar.progress(pct, text=t(Keys.FC_FORECASTING_PROGRESS).format(current=current, total=total,
+                                                                                   entity=entity_id))
 
         progress_bar.progress(35, text=t(Keys.FC_GENERATING_FORECASTS))
 
@@ -339,7 +340,8 @@ def _generate_comparison(params: dict) -> None:
         st.session_state[SESSION_KEY_PARAMS] = params
         st.session_state[SESSION_KEY_INTERNAL_FORECASTS] = internal_forecasts
 
-        st.success(t(Keys.FC_COMPARISON_COMPLETE).format(success=stats['success'], gen_date=generation_date, comp_date=comparison_date))
+        st.success(t(Keys.FC_COMPARISON_COMPLETE).format(success=stats['success'], gen_date=generation_date,
+                                                         comp_date=comparison_date))
         if stats["failed"] > 0:
             st.warning(t(Keys.FC_ENTITIES_FAILED).format(count=stats['failed']))
 
@@ -446,7 +448,7 @@ def _display_all_forecasts_table(data: dict) -> None:
             with form_col1:
                 search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_all_search")
             with form_col2:
-                st.form_submit_button("🔍", use_container_width=True)
+                st.form_submit_button("🔍", width='stretch')
 
         df = comparison_df.copy()
         if search:
@@ -476,7 +478,8 @@ def _display_all_forecasts_table(data: dict) -> None:
         display_df["external_forecast"] = display_df["external_forecast"].apply(lambda x: f"{x:,.0f}")
         display_df["actual"] = display_df["actual"].apply(lambda x: f"{x:,.0f}")
 
-        display_df.columns = [t(Keys.FC_COL_ENTITY), t(Keys.FC_COL_PERIOD), t(Keys.FC_COL_INTERNAL_FORECAST), t(Keys.FC_COL_EXTERNAL_FORECAST), t(Keys.FC_COL_ACTUAL_SALES), t(Keys.FC_COL_METHOD)]
+        display_df.columns = [t(Keys.FC_COL_ENTITY), t(Keys.FC_COL_PERIOD), t(Keys.FC_COL_INTERNAL_FORECAST),
+                              t(Keys.FC_COL_EXTERNAL_FORECAST), t(Keys.FC_COL_ACTUAL_SALES), t(Keys.FC_COL_METHOD)]
 
         from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
         render_dataframe_with_aggrid(display_df, height=400, pinned_columns=[t(Keys.FC_COL_ENTITY)])
@@ -554,7 +557,8 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
     col_avg_int_mape = t(Keys.FC_COL_AVG_INT_MAPE)
     col_avg_ext_mape = t(Keys.FC_COL_AVG_EXT_MAPE)
 
-    display_df.columns = [col_type, col_total, col_int_wins, col_ext_wins, col_ties, col_int_win_pct, col_avg_int_mape, col_avg_ext_mape]
+    display_df.columns = [col_type, col_total, col_int_wins, col_ext_wins, col_ties, col_int_win_pct, col_avg_int_mape,
+                          col_avg_ext_mape]
 
     display_df[col_int_win_pct] = display_df[col_int_win_pct].apply(lambda x: f"{x:.1f}%")
     display_df[col_avg_int_mape] = display_df[col_avg_int_mape].apply(lambda x: f"{x:.1f}%")
@@ -576,7 +580,7 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
         with form_col1:
             search = st.text_input(t(Keys.FC_SEARCH_ENTITY), key="fc_search")
         with form_col2:
-            st.form_submit_button("🔍", use_container_width=True)
+            st.form_submit_button("🔍", width='stretch')
 
     display_df = metrics_df.copy()
     if search:
@@ -611,7 +615,8 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
         "internal_mape", "external_mape", "winner", "improvement_pct"
     ]].copy()
 
-    show_df.columns = [col_entity, col_method, col_months, col_actual_vol, col_int_mape, col_ext_mape, col_winner, col_improvement]
+    show_df.columns = [col_entity, col_method, col_months, col_actual_vol, col_int_mape, col_ext_mape, col_winner,
+                       col_improvement]
 
     show_df[col_int_mape] = show_df[col_int_mape].apply(lambda x: f"{x:.1f}%")
     show_df[col_ext_mape] = show_df[col_ext_mape].apply(lambda x: f"{x:.1f}%")

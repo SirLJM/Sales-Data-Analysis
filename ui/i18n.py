@@ -519,6 +519,7 @@ class Keys:
     PLACEHOLDER_FACILITY: Final[str] = "placeholder_facility"
     PLACEHOLDER_OPERATION: Final[str] = "placeholder_operation"
     PLACEHOLDER_MATERIAL: Final[str] = "placeholder_material"
+    PLACEHOLDER_SPECIFY: Final[str] = "placeholder_specify"
 
     HELP_ORDER_DATE: Final[str] = "help_order_date"
     HELP_UPLOAD_PDF: Final[str] = "help_upload_pdf"
@@ -1362,6 +1363,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.PLACEHOLDER_FACILITY: "e.g., Sieradz",
         Keys.PLACEHOLDER_OPERATION: "e.g., szycie i skladanie",
         Keys.PLACEHOLDER_MATERIAL: "e.g., DRES PETELKA 280 GSM",
+        Keys.PLACEHOLDER_SPECIFY: "specify",
 
         Keys.HELP_ORDER_DATE: "Date when the order was placed",
         Keys.HELP_UPLOAD_PDF: "Upload a PDF file containing order details",
@@ -2200,6 +2202,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.PLACEHOLDER_FACILITY: "np. Sieradz",
         Keys.PLACEHOLDER_OPERATION: "np. szycie i składanie",
         Keys.PLACEHOLDER_MATERIAL: "np. DRES PĘTELKA 280 GSM",
+        Keys.PLACEHOLDER_SPECIFY: "podaj",
 
         Keys.HELP_ORDER_DATE: "Data złożenia zamówienia",
         Keys.HELP_UPLOAD_PDF: "Wgraj plik PDF zawierający szczegóły zamówienia",

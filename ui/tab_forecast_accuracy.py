@@ -311,7 +311,7 @@ def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:
                     key="accuracy_search",
                 )
             with form_col2:
-                st.form_submit_button("🔍", use_container_width=True)
+                st.form_submit_button("🔍", width='stretch')
     with col2:
         sort_by = st.selectbox(
             t(Keys.SORT_BY),
@@ -429,7 +429,8 @@ def _render_detail_view(data: dict, params: dict) -> None:
             with col1:
                 st.metric(t(Keys.METRIC_MAPE), f"{item_row['MAPE']:.1f}%" if pd.notna(item_row['MAPE']) else t(Keys.NA))
             with col2:
-                st.metric(t(Keys.METRIC_BIAS), f"{item_row['BIAS']:+.1f}%" if pd.notna(item_row['BIAS']) else t(Keys.NA))
+                st.metric(t(Keys.METRIC_BIAS),
+                          f"{item_row['BIAS']:+.1f}%" if pd.notna(item_row['BIAS']) else t(Keys.NA))
             with col3:
                 st.metric(t(Keys.DAYS_ANALYZED), int(item_row['DAYS_ANALYZED']))
             with col4:

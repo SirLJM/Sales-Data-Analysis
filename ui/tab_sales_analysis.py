@@ -261,11 +261,12 @@ def _render_filters(
             with form_col1:
                 search_term = st.text_input(search_label, placeholder=search_placeholder, key="sales_analysis_search")
             with form_col2:
-                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", width='stretch')
 
     with col2:
         st.write("")
-        show_only_below_rop = st.checkbox(t(Keys.SHOW_ONLY_BELOW_ROP), value=False, key="show_below_rop") if stock_loaded else False
+        show_only_below_rop = st.checkbox(t(Keys.SHOW_ONLY_BELOW_ROP), value=False,
+                                          key="show_below_rop") if stock_loaded else False
 
     with col3:
         if group_by_model:
@@ -421,10 +422,10 @@ def _render_download_button(display_data: pd.DataFrame, group_by_model: bool) ->
 
 
 def _get_available_ids_for_projection(
-    summary: pd.DataFrame,
-    forecast_df: pd.DataFrame,
-    id_column: str,
-    group_by_model: bool,
+        summary: pd.DataFrame,
+        forecast_df: pd.DataFrame,
+        id_column: str,
+        group_by_model: bool,
 ) -> list:
     if group_by_model:
         forecast_df_copy = forecast_df.copy()
@@ -437,7 +438,7 @@ def _get_available_ids_for_projection(
         (summary[ColumnNames.STOCK].notna())
         & (summary["ROP"].notna())
         & (summary[id_column].isin(forecast_ids))
-    ]
+        ]
     return sorted(valid_summary[id_column].unique())
 
 
@@ -468,7 +469,7 @@ def _render_stock_projection(
             with form_col1:
                 selected_id = st.text_input(input_label, placeholder=input_placeholder)
             with form_col2:
-                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", width='stretch')
 
     with col_months:
         projection_months = st.slider(t(Keys.PROJECTION_MONTHS), min_value=1, max_value=12, value=6, step=1)
@@ -669,7 +670,7 @@ def _render_yearly_sales_trend() -> None:
                     key="yearly_trend_input"
                 )
             with form_col2:
-                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
+                st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", width='stretch')
 
     st.caption(t(Keys.ITEMS_AVAILABLE_SHORT).format(count=len(available_ids)))
 
@@ -719,7 +720,7 @@ def _render_yearly_summary_table(
                         key="yearly_summary_filter"
                     )
                 with form_col2:
-                    st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", use_container_width=True)
+                    st.form_submit_button(t(Keys.BTN_SEARCH), type="primary", width='stretch')
 
         with col_sort:
             sort_options = [

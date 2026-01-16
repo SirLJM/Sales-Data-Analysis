@@ -23,8 +23,8 @@ def _mark_data_loaded() -> None:
 
 
 def load_all_data_with_progress(
-    include_forecast: bool = True,
-    include_metadata: bool = True,
+        include_forecast: bool = True,
+        include_metadata: bool = True,
 ) -> dict[str, Any]:
     if _is_data_loaded():
         return {
@@ -164,11 +164,24 @@ def load_unique_facilities() -> list[str]:
     metadata = load_model_metadata()
     if metadata is None or metadata.empty:
         return []
-    col_name = "SZWALNIA GŁÓWNA"
+    facilities_set: set[str] = set()
+    for col_name in ["SZWALNIA GŁÓWNA", "SZWALNIA DRUGA"]:
+        if col_name in metadata.columns:
+            values = metadata[col_name].dropna().astype(str).str.strip().unique()
+            facilities_set.update(v for v in values if v)
+    return sorted(facilities_set)
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_unique_materials() -> list[str]:
+    metadata = load_model_metadata()
+    if metadata is None or metadata.empty:
+        return []
+    col_name = "RODZAJ MATERIAŁU"
     if col_name not in metadata.columns:
         return []
-    facilities = metadata[col_name].dropna().unique().tolist()
-    return [f for f in facilities if f]
+    materials = metadata[col_name].dropna().astype(str).str.strip().unique()
+    return sorted({m for m in materials if m})
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -221,9 +234,9 @@ def _normalize_stock_df(stock_df: pd.DataFrame, stock_column: str) -> pd.DataFra
 
 
 def merge_stock_into_summary(
-    sku_summary: pd.DataFrame,
-    stock_df: pd.DataFrame | None,
-    stock_column: str = "STOCK",
+        sku_summary: pd.DataFrame,
+        stock_df: pd.DataFrame | None,
+        stock_column: str = "STOCK",
 ) -> pd.DataFrame:
     if stock_df is None or stock_df.empty:
         return _add_default_stock_columns(sku_summary, stock_column)

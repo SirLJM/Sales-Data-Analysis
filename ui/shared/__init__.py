@@ -12,6 +12,7 @@ from ui.shared.data_loaders import (
     load_stock,
     load_unique_categories,
     load_unique_facilities,
+    load_unique_materials,
 )
 from ui.shared.display_helpers import (
     create_download_button,
