@@ -38,25 +38,59 @@ initialize_session_state()
 load_all_data_with_progress()
 
 TAB_NAMES = get_tab_names()
-logger.info("Application configured with %d tabs: %s", len(TAB_NAMES), TAB_NAMES)
 
+def _get_active_tab_index() -> int:
+    params = st.query_params
+    try:
+        return int(params.get("tab", 0))
+    except (ValueError, TypeError):
+        return 0
+
+ACTIVE_TAB_INDEX = _get_active_tab_index()
 
 NAV_INJECT_JS = """
 <script>
 (function() {
-    if (window.parent.document.getElementById('nav-menu-injected')) return;
-
     var tabsContainer = window.parent.document.querySelector('div[data-testid="stTabs"]');
     if (!tabsContainer) return;
+
+    var activeTabIndex = """ + str(ACTIVE_TAB_INDEX) + """;
+
+    // Restore active tab from query params
+    if (!window.parent._tabRestored) {
+        window.parent._tabRestored = true;
+        var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+        if (allTabs[activeTabIndex] && activeTabIndex > 0) {
+            setTimeout(function() {
+                allTabs[activeTabIndex].click();
+            }, 50);
+        }
+    }
+
+    // Track tab clicks and update URL
+    if (!window.parent._tabTrackingSetup) {
+        window.parent._tabTrackingSetup = true;
+        var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+        allTabs.forEach(function(tab, idx) {
+            tab.addEventListener('click', function() {
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set('tab', idx);
+                window.parent.history.replaceState({}, '', url);
+            });
+        });
+    }
+
+    // Navigation menu
+    if (window.parent.document.getElementById('nav-menu-injected')) return;
 
     var navHtml = `
     <div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">
         <button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>
         <div id="nav-dropdown" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);min-width:220px;padding:4px;">
             """ + "".join([
-                f'<button class="nav-item" data-idx="{i}" style="display:block;width:100%;padding:6px 10px;border:none;background:transparent;text-align:left;cursor:pointer;font-size:12px;border-radius:3px;">{name}</button>'
-                for i, name in enumerate(TAB_NAMES)
-            ]) + """
+    f'<button class="nav-item" data-idx="{i}" style="display:block;width:100%;padding:6px 10px;border:none;background:transparent;text-align:left;cursor:pointer;font-size:12px;border-radius:3px;">{name}</button>'
+    for i, name in enumerate(TAB_NAMES)
+]) + """
         </div>
     </div>`;
 
@@ -78,7 +112,12 @@ NAV_INJECT_JS = """
         item.addEventListener('click', function() {
             var idx = parseInt(this.getAttribute('data-idx'));
             var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-            if (tabs[idx]) tabs[idx].click();
+            if (tabs[idx]) {
+                tabs[idx].click();
+                var url = new URL(window.parent.location.href);
+                url.searchParams.set('tab', idx);
+                window.parent.history.replaceState({}, '', url);
+            }
             dropdown.style.display = 'none';
         });
     });
@@ -93,6 +132,7 @@ NAV_INJECT_JS = """
 """
 
 import streamlit.components.v1 as components
+
 components.html(NAV_INJECT_JS, height=0)
 
 tabs = st.tabs(TAB_NAMES)
@@ -124,5 +164,3 @@ TAB_RENDERERS = [
 for i, (renderer, needs_context) in enumerate(TAB_RENDERERS):
     with tabs[i]:
         renderer(context) if needs_context else renderer()
-
-logger.info("Application render cycle completed")

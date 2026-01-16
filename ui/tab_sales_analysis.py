@@ -256,16 +256,16 @@ def _render_filters(
     with col1:
         search_label = t(Keys.SEARCH_MODEL) if group_by_model else t(Keys.SEARCH_SKU)
         search_placeholder = t(Keys.SEARCH_MODEL_PLACEHOLDER) if group_by_model else t(Keys.SEARCH_SKU_PLACEHOLDER)
-        search_term = st.text_input(search_label, placeholder=search_placeholder)
+        search_term = st.text_input(search_label, placeholder=search_placeholder, key="sales_analysis_search")
 
     with col2:
         st.write("")
-        show_only_below_rop = st.checkbox(t(Keys.SHOW_ONLY_BELOW_ROP), value=False) if stock_loaded else False
+        show_only_below_rop = st.checkbox(t(Keys.SHOW_ONLY_BELOW_ROP), value=False, key="show_below_rop") if stock_loaded else False
 
     with col3:
         if group_by_model:
             st.write("")
-            show_bestsellers = st.checkbox(t(Keys.BESTSELLERS), value=False)
+            show_bestsellers = st.checkbox(t(Keys.BESTSELLERS), value=False, key="show_bestsellers")
         else:
             show_bestsellers = False
 
@@ -274,6 +274,7 @@ def _render_filters(
             t(Keys.FILTER_BY_TYPE),
             options=["basic", "regular", "seasonal", "new"],
             default=[],
+            key="type_filter",
         )
 
     overstock_threshold = Config.DEFAULT_OVERSTOCK_THRESHOLD
@@ -283,11 +284,12 @@ def _render_filters(
         st.markdown(t(Keys.OVERSTOCKED_FILTER))
         col_over1, col_over2 = st.columns([1, 3])
         with col_over1:
-            show_overstocked = st.checkbox(t(Keys.SHOW_OVERSTOCKED), value=False)
+            show_overstocked = st.checkbox(t(Keys.SHOW_OVERSTOCKED), value=False, key="show_overstocked")
         with col_over2:
             if show_overstocked:
                 overstock_threshold = st.slider(
-                    t(Keys.OVERSTOCKED_BY_PCT), min_value=0, max_value=200, value=20, step=5
+                    t(Keys.OVERSTOCKED_BY_PCT), min_value=0, max_value=200, value=20, step=5,
+                    key="overstock_threshold",
                 )
 
     filtered = summary.copy()

@@ -59,17 +59,19 @@ def get_available_forecast_dates() -> list[datetime]:
     return []
 
 
+@st.cache_data(ttl=Config.CACHE_TTL)
 def get_date_range_from_sales() -> tuple[datetime | None, datetime | None]:
-    data_source = get_data_source()
+    from ui.shared.data_loaders import load_data
 
     try:
-        sales_df = data_source.load_sales_data()
+        sales_df = load_data()
     except ValueError:
         return None, None
 
     if sales_df is None or sales_df.empty:
         return None, None
 
+    sales_df = sales_df.copy()
     sales_df["data"] = pd.to_datetime(sales_df["data"])
     min_date = sales_df["data"].min().to_pydatetime()
     max_date = sales_df["data"].max().to_pydatetime()

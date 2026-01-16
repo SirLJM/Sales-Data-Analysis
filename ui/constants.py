@@ -30,6 +30,7 @@ class SessionKeys:
     TASKS: Final[str] = "tasks"
     TASK_FILTER_STATUS: Final[str] = "task_filter_status"
     TASK_FILTER_PRIORITY: Final[str] = "task_filter_priority"
+    PATTERN_RESULTS_CACHE: Final[str] = "pattern_results_cache"
 
 
 class ColumnNames:

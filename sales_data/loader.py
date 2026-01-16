@@ -319,6 +319,8 @@ class SalesDataLoader:
         return df
 
     def load_sales_file(self, file_path: Path) -> pd.DataFrame:
+        logger.info("Loading sales file: %s", file_path.name)
+
         sales_cols = ["order_id", "data", "sku", "ilosc", "cena", "razem"]
         dtype = get_optimal_sales_dtypes()
         dtype_without_date = {k: v for k, v in dtype.items() if k != "data"}
@@ -331,7 +333,10 @@ class SalesDataLoader:
         )
         df = self._validate_and_clean_sales_data(df)
         df = self._add_sales_metadata(df, file_path)
-        return optimize_dtypes(df)
+        df = optimize_dtypes(df)
+
+        logger.info("Loaded %d sales records from %s", len(df), file_path.name)
+        return df
 
     def _validate_and_filter_stock_data(self, df: pd.DataFrame) -> pd.DataFrame:
         is_valid, errors = self.validator.validate_stock_data(df)

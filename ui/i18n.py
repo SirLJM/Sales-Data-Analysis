@@ -1293,7 +1293,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_ZERO_STOCK_PRODUCTION: "Zero Stock Production (Color x Size)",
         Keys.COLOR_FILTER_ALL: "All colors",
         Keys.COLOR_FILTER_MODEL: "Model colors",
-        Keys.COLOR_FILTER_ACTIVE: "Active only",
+        Keys.COLOR_FILTER_ACTIVE: "Active only (pattern matched)",
         Keys.TITLE_FACILITY_CAPACITY: "🏭 Facility Capacity",
         Keys.TITLE_EDIT_CAPACITY: "⚙️ Edit Monthly Capacity",
 
@@ -2111,7 +2111,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_ZERO_STOCK_PRODUCTION: "Produkcja przy Zerowym Stanie (Kolor x Rozmiar)",
         Keys.COLOR_FILTER_ALL: "Wszystkie kolory",
         Keys.COLOR_FILTER_MODEL: "Kolory modelu",
-        Keys.COLOR_FILTER_ACTIVE: "Tylko aktywne",
+        Keys.COLOR_FILTER_ACTIVE: "Tylko aktywne (z wzorcami)",
         Keys.TITLE_FACILITY_CAPACITY: "🏭 Pojemność Zakładów",
         Keys.TITLE_EDIT_CAPACITY: "⚙️ Edycja Miesięcznej Pojemności",
 

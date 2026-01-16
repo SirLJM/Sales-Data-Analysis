@@ -237,6 +237,7 @@ def _build_selected_items(model_data: pd.DataFrame, model_code: str) -> list[dic
 
 def _save_order_to_session(selected_items: list[dict], model_data: pd.DataFrame) -> None:
     set_session_value(SessionKeys.SELECTED_ORDER_ITEMS, selected_items)
+    st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {}
 
     if "PRIORITY_SCORE" not in model_data.columns:
         model_data["PRIORITY_SCORE"] = 0
@@ -308,10 +309,7 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
 
     monthly_agg = _load_monthly_aggregations_cached()
 
-    pattern_results = {}
-    for color in all_colors:
-        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg)
-        pattern_results[color] = result
+    pattern_results = _get_cached_pattern_results(model, all_colors, pattern_set, monthly_agg)
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
 
@@ -405,6 +403,7 @@ def _render_order_actions(model: str, order_table: pd.DataFrame, pattern_results
     with col3:
         if st.button(f"{Icons.ERROR} {t(Keys.BTN_CANCEL)}"):
             st.session_state[SessionKeys.SELECTED_ORDER_ITEMS] = []
+            st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {}
             st.rerun()
 
 
@@ -618,6 +617,29 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
     except Exception as e:
         logger.warning("Could not load monthly aggregations: %s", e)
         return None
+
+
+def _get_cached_pattern_results(
+        model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
+) -> dict:
+    cache_key = f"{model}:{','.join(sorted(colors))}"
+    cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
+
+    if cache.get("key") == cache_key and cache.get("results"):
+        logger.debug("Using cached pattern results for model='%s'", model)
+        return cache["results"]
+
+    logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
+    pattern_results = {}
+    for color in colors:
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg)
+        pattern_results[color] = result
+
+    st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
+        "key": cache_key,
+        "results": pattern_results,
+    }
+    return pattern_results
 
 
 def _optimize_color_pattern(
@@ -937,6 +959,7 @@ def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_resul
             logger.info("Order saved: order_id='%s', model='%s'", order_id, model)
             st.success(f"{Icons.SUCCESS} {t(Keys.MSG_ORDER_SAVED).format(order_id=order_id)}")
             st.session_state[SessionKeys.SELECTED_ORDER_ITEMS] = []
+            st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {}
         else:
             logger.error("Failed to save order: order_id='%s', model='%s'", order_id, model)
             st.error(f"{Icons.ERROR} {t(Keys.MSG_ORDER_SAVE_FAILED)}")

@@ -597,6 +597,7 @@ def _process_selections(edited_df: pd.DataFrame) -> None:
     ]
 
     set_session_value(SessionKeys.SELECTED_ORDER_ITEMS, selected_items)
+    st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {}
 
 
 def _render_selected_items_actions() -> None:

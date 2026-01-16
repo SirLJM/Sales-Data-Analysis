@@ -361,8 +361,12 @@ def filter_and_pivot_sales(
         columns="YEAR_MONTH",
         values="TOTAL_QUANTITY",
         aggfunc="sum",
-        fill_value=0
+        fill_value=0,
+        observed=True
     )
+
+    valid_month_cols = [m for m in last_n_months if m in pivot_df.columns]
+    pivot_df = pivot_df[valid_month_cols]
 
     return pivot_df.reset_index()
 
