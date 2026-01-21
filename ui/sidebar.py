@@ -302,6 +302,19 @@ def _render_optimizer_section(settings: dict) -> None:
         settings["optimizer"] = {}
     settings["optimizer"]["algorithm_mode"] = algorithm_mode
 
+    global_default = settings.get("optimizer", {}).get("min_order_per_pattern", 5)
+    current_override = st.session_state.get(SessionKeys.MIN_ORDER_OVERRIDE)
+
+    min_order_override = st.sidebar.number_input(
+        t(Keys.MIN_ORDER_OVERRIDE_LABEL),
+        min_value=1,
+        max_value=100,
+        value=current_override if current_override is not None else global_default,
+        key="sidebar_min_order_override",
+        help=t(Keys.MIN_ORDER_OVERRIDE_HELP),
+    )
+    st.session_state[SessionKeys.MIN_ORDER_OVERRIDE] = min_order_override
+
 
 def _render_current_parameters_summary(settings: dict, params: dict) -> None:
     st.sidebar.markdown("---")

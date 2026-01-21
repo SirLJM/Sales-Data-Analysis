@@ -30,14 +30,23 @@ class PatternSet:
     name: str
     size_names: list[str]
     patterns: list[Pattern]
+    min_order_per_pattern: int | None = None
+
+    def get_min_order(self) -> int:
+        if self.min_order_per_pattern is not None:
+            return self.min_order_per_pattern
+        return get_min_order_per_pattern()
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "id": self.id,
             "name": self.name,
             "size_names": self.size_names,
             "patterns": [p.to_dict() for p in self.patterns],
         }
+        if self.min_order_per_pattern is not None:
+            result["min_order_per_pattern"] = self.min_order_per_pattern
+        return result
 
     @classmethod
     def from_dict(cls, data: dict) -> "PatternSet":
@@ -46,6 +55,7 @@ class PatternSet:
             name=data["name"],
             size_names=data.get("size_names", ["XL", "L", "M", "S", "XS"]),
             patterns=[Pattern.from_dict(p) for p in data["patterns"]],
+            min_order_per_pattern=data.get("min_order_per_pattern"),
         )
 
 

@@ -29,6 +29,16 @@ def render() -> None:
         st.error(f"{Icons.ERROR} {t(Keys.ERR_PATTERN_OPTIMIZER).format(error=str(e))}")
 
 
+def _get_effective_min_order(pattern_set: PatternSet | None) -> int:
+    if SessionKeys.MIN_ORDER_OVERRIDE in st.session_state:
+        override = st.session_state[SessionKeys.MIN_ORDER_OVERRIDE]
+        if override is not None:
+            return override
+    if pattern_set and pattern_set.min_order_per_pattern is not None:
+        return pattern_set.min_order_per_pattern
+    return get_min_order_per_pattern()
+
+
 def _render_content() -> None:
     st.title(t(Keys.TITLE_SIZE_PATTERN_OPTIMIZER))
 
@@ -36,13 +46,12 @@ def _render_content() -> None:
 
     st.markdown(PATTERN_SECTION_STYLE, unsafe_allow_html=True)
 
-    min_order_per_pattern = get_min_order_per_pattern()
+    active_set = _get_active_pattern_set()
+    effective_min = _get_effective_min_order(active_set)
     st.markdown(
-        f'<div class="info-box">{t(Keys.MIN_ORDER_PER_PATTERN).format(min=min_order_per_pattern)}</div>',
+        f'<div class="info-box">{t(Keys.MIN_ORDER_PER_PATTERN).format(min=effective_min)}</div>',
         unsafe_allow_html=True,
     )
-
-    active_set = _get_active_pattern_set()
     sizes = active_set.size_names if active_set else ["XL", "L", "M", "S", "XS"]
 
     col1, col2 = st.columns([1, 1])
@@ -52,7 +61,7 @@ def _render_content() -> None:
         _render_pattern_sets_section()
 
     with col2:
-        _render_optimization_section(quantities, sizes, min_order_per_pattern, sales_history)
+        _render_optimization_section(quantities, sizes, effective_min, sales_history)
 
 
 def _initialize_pattern_session_state() -> None:
@@ -317,6 +326,7 @@ def _render_active_set_details(active_set: PatternSet) -> None:
     st.write(f"**{active_set.name}**")
     st.write(f"{t(Keys.SIZES)}: {', '.join(active_set.size_names)}")
     st.write(f"{t(Keys.PATTERNS)}: {len(active_set.patterns)}")
+    st.write(f"{t(Keys.MIN_ORDER_FOR_SET_LABEL)}: {active_set.get_min_order()}")
 
     for pattern in active_set.patterns:
         sizes_str = " + ".join([f"{count} × {size}" for size, count in pattern.sizes.items()])
@@ -360,10 +370,20 @@ def _render_pattern_editor() -> None:
         key="set_name_input",
     )
 
+    default_min = get_min_order_per_pattern()
+    min_order_value = st.number_input(
+        t(Keys.MIN_ORDER_FOR_SET),
+        min_value=1,
+        max_value=100,
+        value=editing_set.min_order_per_pattern if editing_set and editing_set.min_order_per_pattern else default_min,
+        key="min_order_input",
+        help=t(Keys.MIN_ORDER_FOR_SET_HELP),
+    )
+
     size_names = _render_size_inputs(editing_set)
     patterns = _render_pattern_inputs(editing_set, size_names)
 
-    _render_editor_buttons(set_name, size_names, patterns, editing_set)
+    _render_editor_buttons(set_name, size_names, patterns, editing_set, min_order_value)
 
 
 def _on_num_sizes_change():
@@ -487,7 +507,8 @@ def _render_pattern_inputs(editing_set: PatternSet | None, size_names: list[str]
 
 
 def _render_editor_buttons(
-        set_name: str, size_names: list[str], patterns: list[Pattern], editing_set: PatternSet | None
+        set_name: str, size_names: list[str], patterns: list[Pattern], editing_set: PatternSet | None,
+        min_order_value: int | None = None
 ) -> None:
     num_sizes = st.session_state[SessionKeys.NUM_SIZES]
     num_patterns = st.session_state[SessionKeys.NUM_PATTERNS]
@@ -500,10 +521,11 @@ def _render_editor_buttons(
                     editing_set.name = set_name
                     editing_set.size_names = size_names
                     editing_set.patterns = patterns
+                    editing_set.min_order_per_pattern = min_order_value
                 else:
                     new_id = max([ps.id for ps in st.session_state[SessionKeys.PATTERN_SETS]], default=0) + 1
                     st.session_state[SessionKeys.PATTERN_SETS].append(
-                        PatternSet(new_id, set_name, size_names, patterns)
+                        PatternSet(new_id, set_name, size_names, patterns, min_order_value)
                     )
                     st.session_state[SessionKeys.ACTIVE_SET_ID] = new_id
 

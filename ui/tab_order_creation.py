@@ -20,7 +20,7 @@ from ui.shared.session_manager import get_data_source, get_session_value, get_se
 from ui.shared.sku_utils import extract_color, extract_model, extract_size, get_size_sort_key
 from ui.shared.styles import ROTATED_TABLE_STYLE
 from utils.logging_config import get_logger
-from utils.pattern_optimizer import PatternSet, get_min_order_per_pattern, load_pattern_sets
+from utils.pattern_optimizer import PatternSet, load_pattern_sets
 
 TOTAL_PATTERNS = "Total Patterns"
 _MSG_NO_RECOMMENDATIONS = "No recommendations data in session"
@@ -642,6 +642,14 @@ def _get_cached_pattern_results(
     return pattern_results
 
 
+def _get_effective_min_order_for_pattern_set(pattern_set: PatternSet) -> int:
+    if SessionKeys.MIN_ORDER_OVERRIDE in st.session_state:
+        override = st.session_state[SessionKeys.MIN_ORDER_OVERRIDE]
+        if override is not None:
+            return override
+    return pattern_set.get_min_order()
+
+
 def _optimize_color_pattern(
         model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
 ) -> dict:
@@ -653,7 +661,7 @@ def _optimize_color_pattern(
 
     priority_skus = recommendations_data["priority_skus"]
     size_aliases = load_size_aliases()
-    min_per_pattern = get_min_order_per_pattern()
+    min_per_pattern = _get_effective_min_order_for_pattern_set(pattern_set)
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 

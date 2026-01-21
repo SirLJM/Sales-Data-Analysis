@@ -297,6 +297,11 @@ class Keys:
     QUANTITIES_PER_SIZE: Final[str] = "quantities_per_size"
     SELECT_ACTIVE_PATTERN_SET: Final[str] = "select_active_pattern_set"
     MIN_ORDER_PER_PATTERN: Final[str] = "min_order_per_pattern"
+    MIN_ORDER_OVERRIDE_LABEL: Final[str] = "min_order_override_label"
+    MIN_ORDER_OVERRIDE_HELP: Final[str] = "min_order_override_help"
+    MIN_ORDER_FOR_SET: Final[str] = "min_order_for_set"
+    MIN_ORDER_FOR_SET_HELP: Final[str] = "min_order_for_set_help"
+    MIN_ORDER_FOR_SET_LABEL: Final[str] = "min_order_for_set_label"
     USING_SIZES_FROM: Final[str] = "using_sizes_from"
     ENTER_SALES_PER_SIZE: Final[str] = "enter_sales_per_size"
     NO_PATTERN_SETS: Final[str] = "no_pattern_sets"
@@ -1141,6 +1146,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.QUANTITIES_PER_SIZE: "Quantities per size",
         Keys.SELECT_ACTIVE_PATTERN_SET: "Select Active Pattern Set:",
         Keys.MIN_ORDER_PER_PATTERN: "Minimum order per pattern: {min} units",
+        Keys.MIN_ORDER_OVERRIDE_LABEL: "Min order per pattern",
+        Keys.MIN_ORDER_OVERRIDE_HELP: "Override minimum patterns per allocation (session only). Uses pattern set default if not changed.",
+        Keys.MIN_ORDER_FOR_SET: "Min order for this set",
+        Keys.MIN_ORDER_FOR_SET_HELP: "Default minimum patterns to allocate for this pattern set. Leave at default to use global setting.",
+        Keys.MIN_ORDER_FOR_SET_LABEL: "Min order",
         Keys.USING_SIZES_FROM: "Using sizes from: {name}",
         Keys.ENTER_SALES_PER_SIZE: "Enter total sales per size or load automatically. Sizes with < 3 sales will be excluded.",
         Keys.NO_PATTERN_SETS: "No pattern sets defined. Create a pattern set to get started!",
@@ -1980,6 +1990,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.QUANTITIES_PER_SIZE: "Ilości na rozmiar",
         Keys.SELECT_ACTIVE_PATTERN_SET: "Wybierz Aktywny Zestaw Wzorców:",
         Keys.MIN_ORDER_PER_PATTERN: "Minimalne zamówienie na wzorzec: {min} szt.",
+        Keys.MIN_ORDER_OVERRIDE_LABEL: "Min. zamówienie na wzorzec",
+        Keys.MIN_ORDER_OVERRIDE_HELP: "Tymczasowe nadpisanie minimalnej liczby wzorców (tylko sesja). Używa domyślnej wartości zestawu jeśli niezmienione.",
+        Keys.MIN_ORDER_FOR_SET: "Min. zamówienie dla zestawu",
+        Keys.MIN_ORDER_FOR_SET_HELP: "Domyślna minimalna liczba wzorców dla tego zestawu. Pozostaw domyślne, aby użyć ustawienia globalnego.",
+        Keys.MIN_ORDER_FOR_SET_LABEL: "Min. zamówienie",
         Keys.USING_SIZES_FROM: "Używane rozmiary z: {name}",
         Keys.ENTER_SALES_PER_SIZE: "Wprowadź całkowitą sprzedaż na rozmiar lub wczytaj automatycznie. Rozmiary ze sprzedażą < 3 będą wykluczone.",
         Keys.NO_PATTERN_SETS: "Brak zdefiniowanych zestawów wzorców. Utwórz zestaw wzorców, aby rozpocząć!",
