@@ -154,6 +154,12 @@ def load_color_aliases() -> dict[str, str]:
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
+def load_outlet_models() -> set[str]:
+    data_source = get_data_source()
+    return data_source.load_outlet_models()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
 def load_size_aliases_reverse() -> dict[str, str]:
     aliases = load_size_aliases()
     return {v: k for k, v in aliases.items()}

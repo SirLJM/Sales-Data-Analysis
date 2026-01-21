@@ -88,12 +88,14 @@ class SalesDataLoader:
             self._parse_path(lines[2], default_data_dir) if len(lines) > 2 else default_data_dir
         )
         self.model_metadata_path = self._parse_optional_path(lines[3]) if len(lines) > 3 else None
+        self.outlet_dir = self._parse_optional_path(lines[4]) if len(lines) > 4 else None
 
     def _set_default_paths(self, default_data_dir: Path) -> None:
         self.sales_dir = default_data_dir
         self.stock_dir = default_data_dir
         self.forecast_dir = default_data_dir
         self.model_metadata_path = None
+        self.outlet_dir = None
 
     @staticmethod
     def _parse_sales_filename(filename: str) -> tuple[datetime, datetime] | None:
@@ -136,6 +138,17 @@ class SalesDataLoader:
             try:
                 file_date = datetime(int(year), int(month), int(day))
                 return file_date
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _parse_outlet_filename(filename: str) -> int | None:
+        pattern = r"(?i)outlet[_\s]*(\d{4})\.(xlsx|xls)$"
+        match = re.search(pattern, filename)
+        if match:
+            try:
+                return int(match.group(1))
             except ValueError:
                 return None
         return None
@@ -279,6 +292,26 @@ class SalesDataLoader:
         if not forecast_files:
             return None
         return forecast_files[-1]
+
+    def find_outlet_files(self) -> list[tuple[Path, int]]:
+        if self.outlet_dir is None or not self.outlet_dir.exists():
+            return []
+
+        files_info = []
+        for file_path in self.outlet_dir.iterdir():
+            if file_path.suffix.lower() in (".xlsx", ".xls"):
+                year = self._parse_outlet_filename(file_path.name)
+                if year is not None:
+                    files_info.append((file_path, year))
+
+        files_info.sort(key=lambda x: x[1])
+        return files_info
+
+    def get_latest_outlet_file(self) -> Path | None:
+        outlet_files = self.find_outlet_files()
+        if not outlet_files:
+            return None
+        return outlet_files[-1][0]
 
     @staticmethod
     def _read_file(

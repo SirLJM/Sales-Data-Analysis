@@ -69,3 +69,7 @@ class DataSource(ABC):
     @abstractmethod
     def get_data_source_type(self) -> str:
         pass
+
+    @abstractmethod
+    def load_outlet_models(self) -> set[str]:
+        pass

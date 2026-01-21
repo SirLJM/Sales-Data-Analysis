@@ -7,7 +7,13 @@ from sales_data import SalesAnalyzer
 from sales_data.analysis import calculate_worst_models_12m, calculate_worst_rotating_models
 from ui.constants import Icons, MimeTypes, SessionKeys
 from ui.i18n import t, Keys
-from ui.shared.data_loaders import load_category_mappings, load_color_aliases, load_data, load_model_metadata
+from ui.shared.data_loaders import (
+    load_category_mappings,
+    load_color_aliases,
+    load_data,
+    load_model_metadata,
+    load_outlet_models,
+)
 from ui.shared.session_manager import get_session_value, set_session_value
 from utils.logging_config import get_logger
 
@@ -246,8 +252,11 @@ def _render_worst_models_12m_section() -> None:
         with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):
             sales_df = load_data()
             model_metadata_df = load_model_metadata()
+            outlet_models = load_outlet_models()
 
-            result = calculate_worst_models_12m(sales_df, model_metadata_df, top_n=20)
+            result = calculate_worst_models_12m(
+                sales_df, model_metadata_df, top_n=20, exclude_models=outlet_models
+            )
 
             set_session_value(SessionKeys.WORST_MODELS_12M, result)
             _compute_filter_options(result)
@@ -342,7 +351,10 @@ def _render_worst_rotating_section() -> None:
         # noinspection PyTypeChecker
         with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):
             sales_df = load_data()
-            result = calculate_worst_rotating_models(sales_df, top_n=20)
+            outlet_models = load_outlet_models()
+            result = calculate_worst_rotating_models(
+                sales_df, top_n=20, exclude_models=outlet_models
+            )
             set_session_value(SessionKeys.WORST_ROTATING_MODELS, result)
 
     result = get_session_value(SessionKeys.WORST_ROTATING_MODELS)

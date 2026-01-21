@@ -219,3 +219,27 @@ class FileSource(DataSource):
 
     def get_data_source_type(self) -> str:
         return "file"
+
+    def load_outlet_models(self) -> set[str]:
+        outlet_file = self.loader.get_latest_outlet_file()
+        if outlet_file is None:
+            logger.info("No outlet file found")
+            return set()
+
+        try:
+            df = pd.read_excel(outlet_file, sheet_name=0)
+            sku_col = next((c for c in df.columns if c.lower() == "sku"), None)
+            if sku_col is None:
+                logger.warning("No SKU column found in outlet file: %s", outlet_file)
+                return set()
+
+            if sku_col != "sku":
+                df = df.rename(columns={sku_col: "sku"})
+
+            models = set(df["sku"].astype(str).str[:5].unique())
+            logger.info("Loaded %d outlet models from %s", len(models), outlet_file)
+            return models
+
+        except Exception as e:
+            logger.error("Failed to load outlet file %s: %s", outlet_file, e)
+            return set()

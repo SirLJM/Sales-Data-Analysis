@@ -389,6 +389,7 @@ def calculate_worst_models_12m(
         model_metadata_df: pd.DataFrame | None = None,
         top_n: int = 20,
         reference_date: datetime | None = None,
+        exclude_models: set[str] | None = None,
 ) -> pd.DataFrame:
     if reference_date is None:
         reference_date = datetime.today()
@@ -403,6 +404,12 @@ def calculate_worst_models_12m(
         return pd.DataFrame()
 
     df["model"] = df["sku"].astype(str).str[:5]
+
+    if exclude_models:
+        df = df[~df["model"].isin(exclude_models)]
+        if df.empty:
+            return pd.DataFrame()
+
     df["color"] = df["sku"].astype(str).str[5:7]
     df["year_month"] = df["data"].dt.to_period("M")  # type: ignore
 
@@ -460,6 +467,7 @@ def calculate_worst_rotating_models(
         sales_df: pd.DataFrame,
         top_n: int = 20,
         reference_date: datetime | None = None,
+        exclude_models: set[str] | None = None,
 ) -> pd.DataFrame:
     if reference_date is None:
         reference_date = datetime.today()
@@ -467,6 +475,11 @@ def calculate_worst_rotating_models(
     df = sales_df.copy()
     df["data"] = pd.to_datetime(df["data"])
     df["model"] = df["sku"].astype(str).str[:5]
+
+    if exclude_models:
+        df = df[~df["model"].isin(exclude_models)]
+        if df.empty:
+            return pd.DataFrame()
 
     model_stats = df.groupby("model", observed=True).agg(
         total_sales=("ilosc", "sum"),

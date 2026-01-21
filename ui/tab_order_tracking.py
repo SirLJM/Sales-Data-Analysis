@@ -537,7 +537,7 @@ def _render_facility_capacity() -> None:
                 t(Keys.LABEL_UTILIZATION),
                 format="%.0f%%",
                 min_value=0,
-                max_value=100,
+                max_value=200
             ),
         },
     )

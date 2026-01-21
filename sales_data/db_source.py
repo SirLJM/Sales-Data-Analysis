@@ -459,6 +459,9 @@ class DatabaseSource(DataSource):
     def get_data_source_type(**kwargs) -> str:
         return "database"
 
+    def load_outlet_models(self) -> set[str]:
+        return set()
+
     def close(self) -> None:
         if self.engine:
             self.engine.dispose()

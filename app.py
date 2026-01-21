@@ -39,108 +39,130 @@ load_all_data_with_progress()
 
 TAB_NAMES = get_tab_names()
 
-def _get_active_tab_index() -> int:
-    params = st.query_params
-    try:
-        tab_idx = params.get("tab")
-        if tab_idx is not None:
-            return int(tab_idx)
-    except (ValueError, TypeError):
-        pass
-    return -1
-
-ACTIVE_TAB_INDEX = _get_active_tab_index()
-
 NAV_INJECT_JS = """
 <script>
 (function() {
-    var tabsContainer = window.parent.document.querySelector('div[data-testid="stTabs"]');
-    if (!tabsContainer) return;
-
-    var urlTabIndex = """ + str(ACTIVE_TAB_INDEX) + """;
     var storageKey = 'stockmonitor_active_tab';
+    var tabNames = """ + str(TAB_NAMES) + """;
 
-    // Get target tab: prefer URL param, fallback to sessionStorage
-    var targetTabIndex = urlTabIndex;
-    if (targetTabIndex < 0) {
-        var stored = window.parent.sessionStorage.getItem(storageKey);
-        if (stored !== null) {
-            targetTabIndex = parseInt(stored, 10);
-        }
+    function getTabsContainer() {
+        return window.parent.document.querySelector('div[data-testid="stTabs"]');
     }
 
-    // Restore active tab on every rerun
-    var allTabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-    if (allTabs[targetTabIndex] && targetTabIndex > 0) {
-        var currentActive = window.parent.document.querySelector('button[data-baseweb="tab"][aria-selected="true"]');
-        var currentIndex = Array.from(allTabs).indexOf(currentActive);
-        if (currentIndex !== targetTabIndex) {
-            setTimeout(function() {
-                allTabs[targetTabIndex].click();
-            }, 50);
-        }
+    function getAllTabs() {
+        return window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
     }
 
-    // Track tab clicks and update URL + sessionStorage
-    if (!window.parent._tabTrackingSetup) {
-        window.parent._tabTrackingSetup = true;
-        allTabs.forEach(function(tab, idx) {
-            tab.addEventListener('click', function() {
-                window.parent.sessionStorage.setItem(storageKey, idx);
-                var url = new URL(window.parent.location.href);
-                url.searchParams.set('tab', idx);
-                window.parent.history.replaceState({}, '', url);
+    function getCurrentTabIndex() {
+        var tabs = getAllTabs();
+        for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].getAttribute('aria-selected') === 'true') return i;
+        }
+        return 0;
+    }
+
+    function injectNavMenu() {
+        var tabsContainer = getTabsContainer();
+        if (!tabsContainer) return;
+
+        var existingNav = window.parent.document.getElementById('nav-menu-injected');
+        if (existingNav) return;
+
+        var navHtml = '<div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">' +
+            '<button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>' +
+            '<div id="nav-dropdown" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);min-width:220px;padding:4px;">';
+
+        for (var i = 0; i < tabNames.length; i++) {
+            navHtml += '<button class="nav-item" data-idx="' + i + '" style="display:block;width:100%;padding:6px 10px;border:none;background:transparent;text-align:left;cursor:pointer;font-size:12px;border-radius:3px;">' + tabNames[i] + '</button>';
+        }
+        navHtml += '</div></div>';
+
+        tabsContainer.style.position = 'relative';
+        tabsContainer.style.marginLeft = '45px';
+        tabsContainer.insertAdjacentHTML('afterbegin', navHtml);
+
+        var btn = window.parent.document.getElementById('nav-btn');
+        var dropdown = window.parent.document.getElementById('nav-dropdown');
+
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+        });
+
+        dropdown.querySelectorAll('.nav-item').forEach(function(item) {
+            item.addEventListener('mouseover', function() { this.style.background = '#f5f5f5'; });
+            item.addEventListener('mouseout', function() { this.style.background = 'transparent'; });
+            item.addEventListener('click', function() {
+                var idx = parseInt(this.getAttribute('data-idx'));
+                var tabs = getAllTabs();
+                if (tabs[idx]) {
+                    tabs[idx].click();
+                }
+                dropdown.style.display = 'none';
             });
         });
     }
 
-    // Navigation menu
-    if (window.parent.document.getElementById('nav-menu-injected')) return;
+    function setupTabTracking() {
+        if (window.parent._tabTrackingSetup) return;
+        window.parent._tabTrackingSetup = true;
 
-    var navHtml = `
-    <div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">
-        <button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>
-        <div id="nav-dropdown" style="display:none;position:absolute;top:100%;left:0;background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.15);min-width:220px;padding:4px;">
-            """ + "".join([
-    f'<button class="nav-item" data-idx="{i}" style="display:block;width:100%;padding:6px 10px;border:none;background:transparent;text-align:left;cursor:pointer;font-size:12px;border-radius:3px;">{name}</button>'
-    for i, name in enumerate(TAB_NAMES)
-]) + """
-        </div>
-    </div>`;
-
-    tabsContainer.style.position = 'relative';
-    tabsContainer.style.marginLeft = '45px';
-    tabsContainer.insertAdjacentHTML('afterbegin', navHtml);
-
-    var btn = window.parent.document.getElementById('nav-btn');
-    var dropdown = window.parent.document.getElementById('nav-dropdown');
-
-    btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
-    });
-
-    dropdown.querySelectorAll('.nav-item').forEach(function(item) {
-        item.addEventListener('mouseover', function() { this.style.background = '#f5f5f5'; });
-        item.addEventListener('mouseout', function() { this.style.background = 'transparent'; });
-        item.addEventListener('click', function() {
-            var idx = parseInt(this.getAttribute('data-idx'));
-            var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-            if (tabs[idx]) {
-                tabs[idx].click();
-                var url = new URL(window.parent.location.href);
-                url.searchParams.set('tab', idx);
-                window.parent.history.replaceState({}, '', url);
+        window.parent.document.addEventListener('click', function(e) {
+            var tab = e.target.closest('button[data-baseweb="tab"]');
+            if (tab) {
+                var tabs = getAllTabs();
+                var idx = Array.from(tabs).indexOf(tab);
+                if (idx >= 0) {
+                    window.parent.sessionStorage.setItem(storageKey, idx);
+                }
             }
-            dropdown.style.display = 'none';
-        });
-    });
 
-    window.parent.document.addEventListener('click', function(e) {
-        if (!e.target.closest('#nav-menu-injected')) {
-            dropdown.style.display = 'none';
+            var dropdown = window.parent.document.getElementById('nav-dropdown');
+            if (dropdown && !e.target.closest('#nav-menu-injected')) {
+                dropdown.style.display = 'none';
+            }
+        });
+    }
+
+    function restoreTab() {
+        var stored = window.parent.sessionStorage.getItem(storageKey);
+        if (stored === null) return;
+
+        var targetIdx = parseInt(stored, 10);
+        var currentIdx = getCurrentTabIndex();
+
+        if (targetIdx !== currentIdx && targetIdx > 0) {
+            var tabs = getAllTabs();
+            if (tabs[targetIdx]) {
+                tabs[targetIdx].click();
+            }
         }
-    });
+    }
+
+    function setupMutationObserver() {
+        if (window.parent._navObserverSetup) return;
+        window.parent._navObserverSetup = true;
+
+        var observer = new MutationObserver(function(mutations) {
+            var tabsContainer = getTabsContainer();
+            if (tabsContainer && !window.parent.document.getElementById('nav-menu-injected')) {
+                injectNavMenu();
+            }
+        });
+
+        observer.observe(window.parent.document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    // Initial setup with delay to ensure DOM is ready
+    setTimeout(function() {
+        injectNavMenu();
+        setupTabTracking();
+        restoreTab();
+        setupMutationObserver();
+    }, 100);
 })();
 </script>
 """

@@ -895,6 +895,9 @@ def _render_trend_metrics(
         sales_data: pd.DataFrame,
         forecast_data: pd.DataFrame,
 ) -> None:
+    from datetime import datetime
+    current_year = datetime.now().year
+
     col1, col2, col3, col4 = st.columns(4)
 
     first_year = int(sales_data["YEAR"].min()) if not sales_data.empty else None
@@ -913,8 +916,9 @@ def _render_trend_metrics(
         with col4:
             st.metric(t(Keys.METRIC_FORECAST_FUTURE), f"{forecast_qty:,}")
 
-    if len(sales_data) >= 2:
-        recent_years = sales_data.tail(2).reset_index(drop=True)
+    complete_years_data = sales_data[sales_data["YEAR"] < current_year]
+    if len(complete_years_data) >= 2:
+        recent_years = complete_years_data.tail(2).reset_index(drop=True)
         prev_year = int(recent_years.loc[0, "YEAR"])
         last_year = int(recent_years.loc[1, "YEAR"])
         if last_year - prev_year == 1:
