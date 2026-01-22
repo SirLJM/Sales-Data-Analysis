@@ -19,6 +19,7 @@ YO_Y_ = "YoY %"
 logger = get_logger("tab_sales_analysis")
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

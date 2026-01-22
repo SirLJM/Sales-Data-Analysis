@@ -13,6 +13,7 @@ from utils.logging_config import get_logger
 logger = get_logger("tab_order_recommendations")
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

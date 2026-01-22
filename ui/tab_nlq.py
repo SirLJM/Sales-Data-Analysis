@@ -27,6 +27,7 @@ EXAMPLE_QUERIES = [
 ]
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

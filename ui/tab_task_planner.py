@@ -53,6 +53,7 @@ STATUS_ICONS = {
 }
 
 
+@st.fragment
 def render(_context: dict | None = None) -> None:
     try:
         _render_content()

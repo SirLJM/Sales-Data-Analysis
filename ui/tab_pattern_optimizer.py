@@ -21,6 +21,7 @@ from utils.pattern_optimizer import (
 logger = get_logger("tab_pattern_optimizer")
 
 
+@st.fragment
 def render() -> None:
     try:
         _render_content()

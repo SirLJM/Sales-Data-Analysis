@@ -73,6 +73,7 @@ def _load_sales_data_cached() -> pd.DataFrame | None:
         return None
 
 
+@st.fragment
 def render() -> None:
     try:
         _render_content()

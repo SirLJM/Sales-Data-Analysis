@@ -17,6 +17,7 @@ from utils.logging_config import get_logger
 logger = get_logger("tab_weekly_analysis")
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

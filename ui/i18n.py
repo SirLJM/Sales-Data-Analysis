@@ -518,6 +518,15 @@ class Keys:
     LABEL_ORDERS: Final[str] = "label_orders"
     LABEL_TOTAL_QTY: Final[str] = "label_total_qty"
     LABEL_UTILIZATION: Final[str] = "label_utilization"
+    LABEL_WEEKS_AHEAD: Final[str] = "label_weeks_ahead"
+    LABEL_STATUS: Final[str] = "label_status"
+    HELP_WEEKS_AHEAD: Final[str] = "help_weeks_ahead"
+    CAPTION_CAPACITY_LEGEND: Final[str] = "caption_capacity_legend"
+    STATUS_2_PLUS_WEEKS: Final[str] = "status_2_plus_weeks"
+    STATUS_1_5_PLUS_WEEKS: Final[str] = "status_1_5_plus_weeks"
+    STATUS_1_PLUS_WEEK: Final[str] = "status_1_plus_week"
+    STATUS_OK: Final[str] = "status_ok"
+    STATUS_LOW: Final[str] = "status_low"
 
     PLACEHOLDER_MODEL_CODE: Final[str] = "placeholder_model_code"
     PLACEHOLDER_PRODUCT_NAME: Final[str] = "placeholder_product_name"
@@ -1367,6 +1376,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.LABEL_ORDERS: "Orders",
         Keys.LABEL_TOTAL_QTY: "Total Qty",
         Keys.LABEL_UTILIZATION: "Utilization",
+        Keys.LABEL_WEEKS_AHEAD: "Weeks Ahead",
+        Keys.LABEL_STATUS: "Status",
+        Keys.HELP_WEEKS_AHEAD: "How many weeks of capacity is currently ordered (based on monthly capacity / 4)",
+        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Low (<75%) | 🟢 OK (75-99%) | 🟡 1+ week (100-149%) | 🟠 1.5+ weeks (150-199%) | 🔴 2+ weeks (≥200%)",
+        Keys.STATUS_2_PLUS_WEEKS: "2+ weeks",
+        Keys.STATUS_1_5_PLUS_WEEKS: "1.5+ weeks",
+        Keys.STATUS_1_PLUS_WEEK: "1+ week",
+        Keys.STATUS_OK: "OK",
+        Keys.STATUS_LOW: "Low",
 
         Keys.PLACEHOLDER_MODEL_CODE: "e.g., ABC12",
         Keys.PLACEHOLDER_PRODUCT_NAME: "e.g., Bluza",
@@ -2211,6 +2229,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.LABEL_ORDERS: "Zamówienia",
         Keys.LABEL_TOTAL_QTY: "Łączna Ilość",
         Keys.LABEL_UTILIZATION: "Wykorzystanie",
+        Keys.LABEL_WEEKS_AHEAD: "Tygodni Wprzód",
+        Keys.LABEL_STATUS: "Status",
+        Keys.HELP_WEEKS_AHEAD: "Ile tygodni pojemności jest obecnie zamówionych (miesięczna pojemność / 4)",
+        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Niska (<75%) | 🟢 OK (75-99%) | 🟡 1+ tydzień (100-149%) | 🟠 1.5+ tygodnia (150-199%) | 🔴 2+ tygodnie (≥200%)",
+        Keys.STATUS_2_PLUS_WEEKS: "2+ tygodnie",
+        Keys.STATUS_1_5_PLUS_WEEKS: "1.5+ tygodnia",
+        Keys.STATUS_1_PLUS_WEEK: "1+ tydzień",
+        Keys.STATUS_OK: "OK",
+        Keys.STATUS_LOW: "Niska",
 
         Keys.PLACEHOLDER_MODEL_CODE: "np. ABC12",
         Keys.PLACEHOLDER_PRODUCT_NAME: "np. Bluza",

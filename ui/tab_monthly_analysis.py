@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 import pandas as pd
 import streamlit as st
 
@@ -20,6 +22,20 @@ from utils.logging_config import get_logger
 logger = get_logger("tab_monthly_analysis")
 
 
+def _get_new_models(sales_df: pd.DataFrame) -> set[str]:
+    df = sales_df.copy()
+    df["data"] = pd.to_datetime(df["data"])
+    df["model"] = df["sku"].astype(str).str[:5]
+
+    one_year_ago = datetime.today() - timedelta(days=365)
+    first_sales = df.groupby("model", observed=True)["data"].min().reset_index()
+    first_sales.columns = ["model", "first_sale"]
+
+    new_models = first_sales[first_sales["first_sale"] > one_year_ago]["model"]
+    return set(new_models)
+
+
+@st.fragment
 def render() -> None:
     try:
         _render_content()
@@ -253,9 +269,11 @@ def _render_worst_models_12m_section() -> None:
             sales_df = load_data()
             model_metadata_df = load_model_metadata()
             outlet_models = load_outlet_models()
+            new_models = _get_new_models(sales_df)
+            exclude_models = outlet_models | new_models
 
             result = calculate_worst_models_12m(
-                sales_df, model_metadata_df, top_n=20, exclude_models=outlet_models
+                sales_df, model_metadata_df, top_n=20, exclude_models=exclude_models
             )
 
             set_session_value(SessionKeys.WORST_MODELS_12M, result)
@@ -352,8 +370,10 @@ def _render_worst_rotating_section() -> None:
         with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):
             sales_df = load_data()
             outlet_models = load_outlet_models()
+            new_models = _get_new_models(sales_df)
+            exclude_models = outlet_models | new_models | {"SWWYS", "GIFT"}
             result = calculate_worst_rotating_models(
-                sales_df, top_n=20, exclude_models=outlet_models
+                sales_df, top_n=20, exclude_models=exclude_models
             )
             set_session_value(SessionKeys.WORST_ROTATING_MODELS, result)
 

@@ -63,10 +63,10 @@ NAV_INJECT_JS = """
 
     function injectNavMenu() {
         var tabsContainer = getTabsContainer();
-        if (!tabsContainer) return;
+        if (!tabsContainer) return false;
 
         var existingNav = window.parent.document.getElementById('nav-menu-injected');
-        if (existingNav) return;
+        if (existingNav) return true;
 
         var navHtml = '<div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">' +
             '<button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>' +
@@ -101,6 +101,7 @@ NAV_INJECT_JS = """
                 dropdown.style.display = 'none';
             });
         });
+        return true;
     }
 
     function setupTabTracking() {
@@ -124,24 +125,10 @@ NAV_INJECT_JS = """
         });
     }
 
-    function restoreTab() {
-        var stored = window.parent.sessionStorage.getItem(storageKey);
-        if (stored === null) return;
-
-        var targetIdx = parseInt(stored, 10);
-        var currentIdx = getCurrentTabIndex();
-
-        if (targetIdx !== currentIdx && targetIdx > 0) {
-            var tabs = getAllTabs();
-            if (tabs[targetIdx]) {
-                tabs[targetIdx].click();
-            }
-        }
-    }
-
     function setupMutationObserver() {
-        if (window.parent._navObserverSetup) return;
-        window.parent._navObserverSetup = true;
+        if (window.parent._navObserver) {
+            window.parent._navObserver.disconnect();
+        }
 
         var observer = new MutationObserver(function(mutations) {
             var tabsContainer = getTabsContainer();
@@ -154,14 +141,22 @@ NAV_INJECT_JS = """
             childList: true,
             subtree: true
         });
+
+        window.parent._navObserver = observer;
     }
 
-    // Initial setup with delay to ensure DOM is ready
+    function ensureNavExists() {
+        var navExists = window.parent.document.getElementById('nav-menu-injected');
+        if (!navExists) {
+            injectNavMenu();
+        }
+    }
+
     setTimeout(function() {
         injectNavMenu();
         setupTabTracking();
-        restoreTab();
         setupMutationObserver();
+        setInterval(ensureNavExists, 500);
     }, 100);
 })();
 </script>

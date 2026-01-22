@@ -294,11 +294,14 @@ class SalesDataLoader:
         return forecast_files[-1]
 
     def find_outlet_files(self) -> list[tuple[Path, int]]:
-        if self.outlet_dir is None or not self.outlet_dir.exists():
-            return []
+        search_dir = self.outlet_dir
+        if search_dir is None or not search_dir.exists():
+            search_dir = Path(__file__).parent.parent / "data"
+            if not search_dir.exists():
+                return []
 
         files_info = []
-        for file_path in self.outlet_dir.iterdir():
+        for file_path in search_dir.iterdir():
             if file_path.suffix.lower() in (".xlsx", ".xls"):
                 year = self._parse_outlet_filename(file_path.name)
                 if year is not None:

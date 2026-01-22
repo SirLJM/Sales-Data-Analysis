@@ -28,6 +28,7 @@ _MSG_NO_RECOMMENDATIONS = "No recommendations data in session"
 logger = get_logger("tab_order_creation")
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

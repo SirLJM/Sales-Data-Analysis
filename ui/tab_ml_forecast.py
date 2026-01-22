@@ -38,6 +38,7 @@ def _load_sku_statistics_cached(entity_type: str) -> pd.DataFrame | None:
         return None
 
 
+@st.fragment
 def render() -> None:
     try:
         _render_content()

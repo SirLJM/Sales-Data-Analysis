@@ -30,6 +30,7 @@ ACCURACY_DATA_KEY = "forecast_accuracy_data"
 ACCURACY_PARAMS_KEY = "forecast_accuracy_params"
 
 
+@st.fragment
 def render(context: dict) -> None:
     try:
         _render_content(context)

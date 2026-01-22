@@ -10,6 +10,8 @@ from ui.constants import ColumnNames, Config, Icons, SessionKeys
 from ui.i18n import Keys, t
 from utils.logging_config import get_logger
 
+UTILIZATION_ = "Utilization %"
+
 ORDER_COUNT = "Order Count"
 
 MONTHLY_CAPACITY = "Monthly Capacity"
@@ -21,6 +23,7 @@ OTHER_OPTION = "(Other)"
 logger = get_logger("tab_order_tracking")
 
 
+@st.fragment
 def render() -> None:
     try:
         _render_content()
@@ -519,11 +522,19 @@ def _render_facility_capacity() -> None:
     capacity_df[MONTHLY_CAPACITY] = capacity_df["Facility"].map(
         lambda f: facility_capacities.get(f, 0)
     )
-    capacity_df["Utilization %"] = capacity_df.apply(
+    capacity_df[UTILIZATION_] = capacity_df.apply(
         lambda row: _calculate_utilization(row[TOTAL_QUANTITY], row[MONTHLY_CAPACITY]),
         axis=1,
     )
+    capacity_df["Weeks Ahead"] = capacity_df.apply(
+        lambda row: _calculate_weeks_ahead(row[TOTAL_QUANTITY], row[MONTHLY_CAPACITY]),
+        axis=1,
+    )
+    capacity_df["Capacity Status"] = capacity_df[UTILIZATION_].apply(_get_capacity_status)
     capacity_df = capacity_df.sort_values(TOTAL_QUANTITY, ascending=False)
+
+    max_utilization = max(capacity_df[UTILIZATION_].max(), 100)
+    progress_max = max(int(max_utilization * 1.2), 200)
 
     st.dataframe(
         capacity_df,
@@ -533,17 +544,27 @@ def _render_facility_capacity() -> None:
             ORDER_COUNT: st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
             TOTAL_QUANTITY: st.column_config.NumberColumn(t(Keys.LABEL_TOTAL_QTY), format="%d"),
             MONTHLY_CAPACITY: st.column_config.NumberColumn(t(Keys.LABEL_CAPACITY), format="%d"),
-            "Utilization %": st.column_config.ProgressColumn(
+            UTILIZATION_: st.column_config.ProgressColumn(
                 t(Keys.LABEL_UTILIZATION),
                 format="%.0f%%",
                 min_value=0,
-                max_value=200
+                max_value=progress_max,
+            ),
+            "Weeks Ahead": st.column_config.NumberColumn(
+                t(Keys.LABEL_WEEKS_AHEAD),
+                format="%.1f",
+                help=t(Keys.HELP_WEEKS_AHEAD),
+            ),
+            "Capacity Status": st.column_config.TextColumn(
+                t(Keys.LABEL_STATUS),
+                width="small",
             ),
         },
     )
 
     total_qty = capacity_df[TOTAL_QUANTITY].sum()
     st.caption(t(Keys.CAPTION_TOTAL_QTY_FACILITIES).format(total=total_qty))
+    st.caption(t(Keys.CAPTION_CAPACITY_LEGEND))
 
     _render_capacity_editor(capacity_df["Facility"].tolist(), facility_capacities)
 
@@ -585,7 +606,26 @@ def _save_facility_capacities(capacities: dict[str, int]) -> None:
 
 
 def _calculate_utilization(total_qty: int, capacity: int) -> float:
-    return min((total_qty / capacity) * 100, 100.0) if capacity > 0 else 0.0
+    return (total_qty / capacity) * 100 if capacity > 0 else 0.0
+
+
+def _calculate_weeks_ahead(total_qty: int, capacity: int) -> float:
+    if capacity <= 0:
+        return 0.0
+    weekly_capacity = capacity / 4.0
+    return total_qty / weekly_capacity if weekly_capacity > 0 else 0.0
+
+
+def _get_capacity_status(utilization: float) -> str:
+    if utilization >= 200:
+        return f"🔴 {t(Keys.STATUS_2_PLUS_WEEKS)}"
+    if utilization >= 150:
+        return f"🟠 {t(Keys.STATUS_1_5_PLUS_WEEKS)}"
+    if utilization >= 100:
+        return f"🟡 {t(Keys.STATUS_1_PLUS_WEEK)}"
+    if utilization >= 75:
+        return f"🟢 {t(Keys.STATUS_OK)}"
+    return f"⚪ {t(Keys.STATUS_LOW)}"
 
 
 @st.fragment
