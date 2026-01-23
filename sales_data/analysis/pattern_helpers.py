@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import pandas as pd
 
+from utils.logging_config import get_logger
 from .order_priority import get_size_quantities_for_model_color
 from .utils import find_column
+
+logger = get_logger(__name__)
 
 
 def calculate_size_priorities(
@@ -161,6 +164,15 @@ def optimize_pattern_with_aliases(
     for size_code, quantity in size_quantities.items():
         alias = size_aliases.get(size_code, size_code)
         size_quantities_with_aliases[alias] = size_quantities_with_aliases.get(alias, 0) + quantity
+
+    pattern_sizes = set()
+    for p in pattern_set.patterns:
+        pattern_sizes.update(p.sizes.keys())
+
+    logger.info(
+        "Model=%s, color=%s: size_quantities=%s, size_quantities_with_aliases=%s, pattern_sizes=%s",
+        model, color, size_quantities, size_quantities_with_aliases, pattern_sizes
+    )
 
     size_priorities = calculate_size_priorities(priority_skus, model, size_aliases)
 
