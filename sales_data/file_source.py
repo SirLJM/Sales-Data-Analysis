@@ -231,15 +231,12 @@ class FileSource(DataSource):
 
         try:
             df = pd.read_excel(outlet_file, sheet_name=0)
-            sku_col = next((c for c in df.columns if c.lower() == "sku"), None)
-            if sku_col is None:
-                logger.warning("No SKU column found in outlet file: %s", outlet_file)
+            model_col = next((c for c in df.columns if c.lower() == "model"), None)
+            if model_col is None:
+                logger.warning("No model column found in outlet file: %s", outlet_file)
                 return set()
 
-            if sku_col != "sku":
-                df = df.rename(columns={sku_col: "sku"})
-
-            models = set(df["sku"].astype(str).str[:5].unique())
+            models = set(df[model_col].astype(str).str[:5].unique())
             logger.info("Loaded %d outlet models from %s", len(models), outlet_file)
             return models
 
