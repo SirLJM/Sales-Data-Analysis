@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from sales_data.analysis.utils import find_column
 from ui.constants import AlgorithmModes, Config, Icons, SessionKeys
 from ui.i18n import Keys, t
 from ui.shared.data_loaders import load_size_aliases, load_size_aliases_reverse
@@ -181,7 +182,7 @@ def _calculate_model_size_sales_history(
 ) -> dict[str, int]:
     df = monthly_agg.copy()
 
-    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    sku_col = find_column(df, ["sku", "SKU", "entity_id"])
     if sku_col is None:
         return {}
 
@@ -192,8 +193,8 @@ def _calculate_model_size_sales_history(
     if filtered.empty:
         return {}
 
-    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
-    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+    month_col = find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
 
     if month_col is None or qty_col is None:
         return {}
@@ -211,10 +212,6 @@ def _calculate_model_size_sales_history(
         return aliased
 
     return {str(k): int(v) for k, v in size_sales.items()}
-
-
-def _find_column(df, candidates: list[str]) -> str | None:
-    return next((col for col in candidates if col in df.columns), None)
 
 
 def _build_size_aliases(active_set: PatternSet | None) -> dict[str, str]:
@@ -247,7 +244,7 @@ def _clear_editor_form_state() -> None:
 
     keys_to_delete = [
         key for key in st.session_state.keys()
-        if key.startswith(prefixes) or key in direct_keys or (key.startswith("p") and "_" in key)
+        if isinstance(key, str) and (key.startswith(prefixes) or key in direct_keys or (key.startswith("p") and "_" in key))
     ]
     for key in keys_to_delete:
         del st.session_state[key]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -52,7 +53,7 @@ def import_category_mappings():
         "Nazwa": "nazwa"
     })
 
-    records = db_df.to_dict('records')
+    records = cast(list[dict[str, Any]], db_df.to_dict('records'))
     print(f"   ✓ Prepared {len(records)} records")
 
     print("\n4. Inserting into database...")

@@ -17,6 +17,8 @@ from sales_data.analysis.ml_model_selection import (
 )
 from utils.logging_config import get_logger
 
+from .utils import find_column
+
 logger = get_logger("ml_forecast")
 
 ML_MIN_MONTHS = 12
@@ -157,6 +159,10 @@ def train_ml_model(
 
     if model_type and model_type != "auto":
         return _train_specific_ml_model(model_type, x, y, result, product_type, cv)
+
+    if series is None:
+        result["error"] = f"Could not prepare series for entity {entity_id}"
+        return result
 
     return _train_auto_selected_model(
         x, y, series, result, product_type, cv,
@@ -354,8 +360,9 @@ def _generate_ml_predictions(
 
     lower, upper = calculate_prediction_intervals(model, x_future, predictions)
 
-    last_period = series.index[-1]
-    future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
+    last_period = pd.Period(series.index[-1], freq="M")
+    next_period = last_period + 1  # type: ignore[operator]
+    future_periods = pd.period_range(start=next_period, periods=horizon, freq="M")
 
     return pd.DataFrame({
         "period": future_periods,
@@ -403,13 +410,6 @@ def _get_feature_importance(model: Any, feature_names: pd.Index) -> dict[str, fl
     return None
 
 
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None
-
-
 def _get_entity_stats_from_df(
         sku_stats: pd.DataFrame | None,
         entity_id: str,
@@ -420,7 +420,7 @@ def _get_entity_stats_from_df(
 
     id_col = "MODEL" if entity_type == "model" else "SKU"
     if id_col not in sku_stats.columns:
-        id_col = _find_column(sku_stats, ["MODEL", "SKU", "model", "sku", "entity_id"])
+        id_col = find_column(sku_stats, ["MODEL", "SKU", "model", "sku", "entity_id"])
         if id_col is None:
             return None, None
 
@@ -430,10 +430,10 @@ def _get_entity_stats_from_df(
 
     row = entity_stats.iloc[0]
 
-    type_col = _find_column(sku_stats, ["TYPE", "type", "product_type"])
+    type_col = find_column(sku_stats, ["TYPE", "type", "product_type"])
     product_type = row[type_col] if type_col else None
 
-    cv_col = _find_column(sku_stats, ["CV", "cv"])
+    cv_col = find_column(sku_stats, ["CV", "cv"])
     cv = row[cv_col] if cv_col else None
 
     return product_type, cv

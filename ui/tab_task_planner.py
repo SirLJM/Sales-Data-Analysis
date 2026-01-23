@@ -53,6 +53,14 @@ STATUS_ICONS = {
 }
 
 
+def _format_priority(i: int) -> str:
+    return f"{PRIORITY_ICONS[ALL_PRIORITIES[i]]} {t(PRIORITY_LABELS[ALL_PRIORITIES[i]])}"
+
+
+def _format_status(i: int) -> str:
+    return f"{STATUS_ICONS[ALL_STATUSES[i]]} {t(STATUS_LABELS[ALL_STATUSES[i]])}"
+
+
 @st.fragment
 def render(_context: dict | None = None) -> None:
     try:
@@ -253,12 +261,11 @@ def _render_task_edit_form(task: Task, tasks: list[Task]) -> None:
         new_due = st.date_input(t(Keys.TASK_DUE_DATE), value=current_due, key=f"edit_due_{task.id}")
 
     with col3:
-        priority_fmt = lambda i: f"{PRIORITY_ICONS[ALL_PRIORITIES[i]]} {t(PRIORITY_LABELS[ALL_PRIORITIES[i]])}"
         new_priority_idx = st.selectbox(
             t(Keys.TASK_PRIORITY),
             options=range(len(ALL_PRIORITIES)),
             index=_get_index_safe(ALL_PRIORITIES, task.priority, 1),
-            format_func=priority_fmt,
+            format_func=_format_priority,
             key=f"edit_priority_{task.id}",
         )
 
@@ -270,12 +277,11 @@ def _render_task_edit_form(task: Task, tasks: list[Task]) -> None:
     col_status, col_save, col_delete = st.columns([2, 1, 1])
 
     with col_status:
-        status_fmt = lambda i: f"{STATUS_ICONS[ALL_STATUSES[i]]} {t(STATUS_LABELS[ALL_STATUSES[i]])}"
         new_status_idx = st.selectbox(
             "Status",
             options=range(len(ALL_STATUSES)),
             index=_get_index_safe(ALL_STATUSES, task.status, 0),
-            format_func=status_fmt,
+            format_func=_format_status,
             key=f"edit_status_{task.id}",
         )
 

@@ -4,6 +4,7 @@ import json
 import os
 import uuid
 from abc import ABC, abstractmethod
+from typing import Any
 from datetime import datetime
 from pathlib import Path
 
@@ -164,6 +165,12 @@ class FileInternalForecastRepository(InternalForecastRepository):
         return False
 
 
+def _safe_float(value: Any) -> float | None:
+    if value is None or not bool(pd.notna(value)):
+        return None
+    return float(value)
+
+
 class DatabaseInternalForecastRepository(InternalForecastRepository):
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -173,6 +180,32 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
         if self._engine is None:
             self._engine = create_engine(self.database_url, pool_pre_ping=True)
         return self._engine
+
+    @staticmethod
+    def _build_forecast_records(
+            forecasts_df: pd.DataFrame,
+            batch_id: str,
+            generated_at: datetime,
+            entity_type: str,
+            horizon_months: int,
+    ) -> list[dict]:
+        records = []
+        for _, row in forecasts_df.iterrows():
+            records.append({
+                "forecast_batch_id": batch_id,
+                "generated_at": generated_at,
+                "entity_id": str(row.get("entity_id", "")),
+                "entity_type": str(row.get("entity_type", entity_type)),
+                "forecast_method": str(row.get("method", "unknown")),
+                "forecast_period": str(row.get("period", "")),
+                "forecast_value": float(row.get("forecast", 0) or 0),
+                "lower_ci": _safe_float(row.get("lower_ci")),
+                "upper_ci": _safe_float(row.get("upper_ci")),
+                "horizon_months": horizon_months,
+                "product_type": row.get("product_type"),
+                "cv": _safe_float(row.get("cv")),
+            })
+        return records
 
     def save_forecast_batch(
             self,
@@ -188,8 +221,7 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
         engine = self.get_engine()
 
         try:
-            # noinspection PyTypeChecker
-            with engine.begin() as conn:
+            with engine.begin() as conn:  # type: ignore[attr-defined]
                 conn.execute(
                     text("""
                          INSERT INTO internal_forecast_batches
@@ -215,22 +247,9 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
                 )
 
                 if not forecasts_df.empty:
-                    forecast_records = []
-                    for _, row in forecasts_df.iterrows():
-                        forecast_records.append({
-                            "forecast_batch_id": batch_id,
-                            "generated_at": generated_at,
-                            "entity_id": str(row.get("entity_id", "")),
-                            "entity_type": str(row.get("entity_type", entity_type)),
-                            "forecast_method": str(row.get("method", "unknown")),
-                            "forecast_period": str(row.get("period", "")),
-                            "forecast_value": float(row.get("forecast", 0)),
-                            "lower_ci": float(row.get("lower_ci", 0)) if pd.notna(row.get("lower_ci")) else None,
-                            "upper_ci": float(row.get("upper_ci", 0)) if pd.notna(row.get("upper_ci")) else None,
-                            "horizon_months": horizon_months,
-                            "product_type": row.get("product_type"),
-                            "cv": float(row.get("cv")) if pd.notna(row.get("cv")) else None,
-                        })
+                    forecast_records = DatabaseInternalForecastRepository._build_forecast_records(
+                        forecasts_df, batch_id, generated_at, entity_type, horizon_months
+                    )
 
                     conn.execute(
                         text("""
@@ -269,16 +288,15 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
                 FROM internal_forecast_batches \
                 """
 
-        params = {"limit": limit}
+        params: dict[str, int | str] = {"limit": limit}
         if entity_type:
             query += " WHERE entity_type = :entity_type"
-            # noinspection PyTypeChecker
             params["entity_type"] = entity_type
 
         query += " ORDER BY generated_at DESC LIMIT :limit"
 
         try:
-            with engine.connect() as conn:
+            with engine.connect() as conn:  # type: ignore[attr-defined]
                 result = conn.execute(text(query), params)
                 batches = []
                 for row in result:
@@ -305,7 +323,7 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
         engine = self.get_engine()
 
         try:
-            with engine.connect() as conn:
+            with engine.connect() as conn:  # type: ignore[attr-defined]
                 result = conn.execute(
                     text("""
                          SELECT entity_id,
@@ -328,8 +346,7 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
                 if not rows:
                     return None
 
-                columns = result.keys()
-                # noinspection PyTypeChecker
+                columns = pd.Index(list(result.keys()))
                 return pd.DataFrame(rows, columns=columns)
 
         except Exception as e:
@@ -340,8 +357,7 @@ class DatabaseInternalForecastRepository(InternalForecastRepository):
         engine = self.get_engine()
 
         try:
-            # noinspection PyTypeChecker
-            with engine.begin() as conn:
+            with engine.begin() as conn:  # type: ignore[attr-defined]
                 conn.execute(
                     text("DELETE FROM internal_forecasts WHERE forecast_batch_id = :batch_id"),
                     {"batch_id": batch_id},

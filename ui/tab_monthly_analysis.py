@@ -61,8 +61,7 @@ def _render_content() -> None:
 
 def _render_generate_button(category_df: pd.DataFrame) -> None:
     if st.button(t(Keys.BTN_GENERATE_MONTHLY_YOY), type="primary"):
-        # noinspection PyTypeChecker
-        with st.spinner(t(Keys.CALCULATING_YOY)):
+        with st.spinner(t(Keys.CALCULATING_YOY)):  # type: ignore[attr-defined]
             try:
                 sales_df = load_data()
                 if sales_df is None or sales_df.empty:
@@ -165,17 +164,17 @@ def _get_trend_indicator(pct_change: float) -> str:
 def _render_category_breakdown(podgrupa_summary: pd.DataFrame, kategoria_details: pd.DataFrame) -> None:
     st.subheader(t(Keys.SALES_BY_AGE_GROUP))
 
-    for _, row in podgrupa_summary.iterrows():
-        podgrupa = row["Podgrupa"]
+    for row in podgrupa_summary.to_dict("records"):
+        podgrupa: str | None = row["Podgrupa"]
         current_qty = int(row["current_qty"])
-        pct_change = row["percent_change"]
+        pct_change: float = float(row["percent_change"])
 
-        display_name = f"{Icons.WARNING} {t(Keys.METRIC_UNCATEGORIZED)}" if pd.isna(podgrupa) else podgrupa
+        display_name = f"{Icons.WARNING} {t(Keys.METRIC_UNCATEGORIZED)}" if podgrupa is None or pd.isna(podgrupa) else podgrupa
         indicator = _get_trend_indicator(pct_change)
         title = f"{indicator} **{display_name}** | {current_qty:,} units ({pct_change:+.1f}% YoY)"
 
         with st.expander(title, expanded=False):
-            _render_kategoria_table(podgrupa, kategoria_details)
+            _render_kategoria_table(str(podgrupa) if podgrupa else "", kategoria_details)
 
 
 def _render_kategoria_table(podgrupa: str, kategoria_details: pd.DataFrame) -> None:
@@ -191,8 +190,8 @@ def _render_kategoria_table(podgrupa: str, kategoria_details: pd.DataFrame) -> N
         return
 
     display_df = podgrupa_categories.copy()
-    display_df["Kategoria"] = display_df["Kategoria"].fillna(t(Keys.UNKNOWN))
-    display_df = display_df.rename(columns={
+    display_df["Kategoria"] = pd.Series(display_df["Kategoria"]).fillna(t(Keys.UNKNOWN))
+    display_df = pd.DataFrame(display_df).rename(columns={
         "Kategoria": t(Keys.CLOTHING_CATEGORY),
         "current_qty": t(Keys.CURRENT_SALES),
         "prior_qty": t(Keys.PRIOR_YEAR_SALES),
@@ -264,8 +263,7 @@ def _render_worst_models_12m_section() -> None:
     st.caption(t(Keys.WORST_MODELS_CAPTION))
 
     if st.button(t(Keys.BTN_GENERATE_WORST_MODELS), key="btn_worst_12m"):
-        # noinspection PyTypeChecker
-        with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):
+        with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):  # type: ignore[attr-defined]
             sales_df = load_data()
             model_metadata_df = load_model_metadata()
             outlet_models = load_outlet_models()
@@ -334,13 +332,13 @@ def _render_worst_models_12m_filters_and_table(result: pd.DataFrame) -> None:
 
     filtered = result.copy()
     if selected_material != t(Keys.ALL_MATERIALS):
-        filtered = filtered[filtered["MATERIAL_TYPE"] == selected_material]
+        filtered = pd.DataFrame(filtered[filtered["MATERIAL_TYPE"] == selected_material])
     if selected_color_name != t(Keys.ALL_COLORS):
         selected_code = name_to_code.get(selected_color_name, selected_color_name)
-        filtered = filtered[filtered["COLOR"] == selected_code]
+        filtered = pd.DataFrame(filtered[filtered["COLOR"] == selected_code])
 
-    _display_worst_models_table(filtered, color_aliases)
-    _render_worst_models_download(filtered, t(Keys.DOWNLOAD_WORST_MODELS_12M), "worst_models_12m.csv")
+    _display_worst_models_table(pd.DataFrame(filtered), color_aliases)
+    _render_worst_models_download(pd.DataFrame(filtered), t(Keys.DOWNLOAD_WORST_MODELS_12M), "worst_models_12m.csv")
 
 
 def _display_worst_models_table(df: pd.DataFrame, color_aliases: dict[str, str]) -> None:
@@ -366,8 +364,7 @@ def _render_worst_rotating_section() -> None:
     st.caption(t(Keys.WORST_ROTATING_CAPTION))
 
     if st.button(t(Keys.BTN_GENERATE_WORST_ROTATING), key="btn_worst_rotating"):
-        # noinspection PyTypeChecker
-        with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):
+        with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):  # type: ignore[attr-defined]
             sales_df = load_data()
             outlet_models = load_outlet_models()
             new_models = _get_new_models(sales_df)

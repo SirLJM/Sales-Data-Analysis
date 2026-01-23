@@ -75,7 +75,7 @@ def render_dataframe_with_aggrid(
     )
 
     for col in df.columns:
-        width = _calculate_column_width(df[col])
+        width = _calculate_column_width(pd.Series(df[col]))
         gb.configure_column(col, width=width, maxWidth=max(width, 200))
 
     if pinned_columns:
@@ -112,7 +112,7 @@ def render_dataframe_with_aggrid(
     return AgGrid(
         df,
         gridOptions=grid_options,
-        height=actual_height,
+        height=actual_height if actual_height is not None else 400,
         fit_columns_on_grid_load=fit_columns_on_grid_load,
         update_mode=GridUpdateMode.MODEL_CHANGED,
         allow_unsafe_jscode=True,

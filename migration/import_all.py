@@ -19,178 +19,146 @@ from migration.individual.import_size_aliases import import_size_aliases
 from migration.individual.import_color_aliases import import_color_aliases
 from migration.individual.import_stock import import_stock_data
 from initial_populate import populate_archival_sales
+from utils.import_utils import log_info, log_error, log_header
 
 
-def refresh_materialized_views(connection_string: str):
-    print("\n" + "=" * 60)
-    print("Refreshing materialized views...")
-    print("=" * 60)
+def _fetch_single_row(conn, query: str) -> tuple:
+    return conn.execute(text(query)).fetchone()
+
+
+def refresh_materialized_views(connection_string: str) -> None:
+    log_header("Refreshing materialized views...")
 
     engine = create_engine(connection_string)
 
     try:
         with engine.connect() as conn:
-            result = conn.execute(
-                text(
-                    """
-                    SELECT matviewname
-                    FROM pg_matviews
-                    WHERE schemaname = 'public'
-                    ORDER BY matviewname
-                    """
-                )
-            )
+            result = conn.execute(text("""
+                SELECT matviewname FROM pg_matviews
+                WHERE schemaname = 'public' ORDER BY matviewname
+            """))
             views = [row[0] for row in result]
 
             if not views:
-                print("  No materialized views found (this is normal if not created yet)")
+                log_info("  No materialized views found (this is normal if not created yet)")
                 engine.dispose()
                 return
 
             for view in views:
-                print(f"Refreshing {view}...")
+                log_info(f"Refreshing {view}...")
                 try:
                     conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {view}"))
                     conn.commit()
-                    print("  OK")
+                    log_info("  OK")
                 except Exception as e:
-                    print(f"  Skipped ({str(e)[:50]}...)")
+                    log_info(f"  Skipped ({str(e)[:50]}...)")
 
-        print("Materialized views refresh complete")
+        log_info("Materialized views refresh complete")
     except Exception as e:
-        print(f"Error refreshing views: {str(e)[:100]}")
+        log_error(f"Error refreshing views: {str(e)[:100]}")
 
     engine.dispose()
 
 
-def print_import_summary(connection_string: str):
-    print("\n" + "=" * 60)
-    print("DATABASE IMPORT SUMMARY")
-    print("=" * 60)
+def _print_sales_summary(conn) -> None:
+    row = _fetch_single_row(conn, """
+        SELECT COUNT(*) as total, MIN(sale_date), MAX(sale_date),
+               COUNT(DISTINCT sku), COUNT(DISTINCT order_id), SUM(total_amount)
+        FROM raw_sales_transactions
+    """)
+    log_info("\nSales Transactions:")
+    log_info(f"  Total transactions:  {row[0]:,}")
+    log_info(f"  Date range:          {row[1].date()} to {row[2].date()}")
+    log_info(f"  Unique SKUs:         {row[3]:,}")
+    log_info(f"  Unique orders:       {row[4]:,}")
+    revenue = f"${row[5]:,.2f}" if row[5] else "$0.00"
+    log_info(f"  Total revenue:       {revenue}")
+
+
+def _print_stock_summary(conn) -> None:
+    row = _fetch_single_row(conn, """
+        SELECT COUNT(*), COUNT(DISTINCT snapshot_date) FROM stock_snapshots
+    """)
+    log_info("\nStock Snapshots:")
+    log_info(f"  Total records:       {row[0]:,}")
+    log_info(f"  Unique dates:        {row[1]}")
+
+
+def _print_forecast_summary(conn) -> None:
+    row = _fetch_single_row(conn, """
+        SELECT COUNT(*), COUNT(DISTINCT sku), COUNT(DISTINCT generated_date)
+        FROM forecast_data
+    """)
+    log_info("\nForecast Data:")
+    log_info(f"  Total records:       {row[0]:,}")
+    log_info(f"  Unique SKUs:         {row[1]:,}")
+    log_info(f"  Forecast versions:   {row[2]}")
+
+
+def _print_file_imports_summary(conn) -> None:
+    result = conn.execute(text("""
+        SELECT file_type, COUNT(*), import_status
+        FROM file_imports
+        GROUP BY file_type, import_status
+        ORDER BY file_type, import_status
+    """))
+    log_info("\nFile Imports:")
+    for row in result:
+        log_info(f"  {row[0]:20s} {row[2]:10s} {row[1]:3d} files")
+
+
+def print_import_summary(connection_string: str) -> None:
+    log_header("DATABASE IMPORT SUMMARY")
 
     engine = create_engine(connection_string)
 
     with engine.connect() as conn:
-        result = conn.execute(
-            text(
-                """
-                SELECT COUNT(*)                 as total_transactions,
-                       MIN(sale_date)           as earliest_sale,
-                       MAX(sale_date)           as latest_sale,
-                       COUNT(DISTINCT sku)      as unique_skus,
-                       COUNT(DISTINCT order_id) as unique_orders,
-                       SUM(total_amount)        as total_revenue
-                FROM raw_sales_transactions
-                """
-            )
-        )
-        row = result.fetchone()
-
-        print("\nSales Transactions:")
-        print(f"  Total transactions:  {row[0]:,}")
-        print(f"  Date range:          {row[1].date()} to {row[2].date()}")
-        print(f"  Unique SKUs:         {row[3]:,}")
-        print(f"  Unique orders:       {row[4]:,}")
-        print(
-            f"  Total revenue:       ${row[5]:,.2f}" if row[5] else "  Total revenue:       $0.00"
-        )
-
-        result = conn.execute(
-            text(
-                """
-                SELECT COUNT(*) as total_records, COUNT(DISTINCT snapshot_date) as unique_dates
-                FROM stock_snapshots
-                """
-            )
-        )
-        row = result.fetchone()
-        print("\nStock Snapshots:")
-        print(f"  Total records:       {row[0]:,}")
-        print(f"  Unique dates:        {row[1]}")
-
-        result = conn.execute(
-            text(
-                """
-                SELECT COUNT(*)                       as total_records,
-                       COUNT(DISTINCT sku)            as unique_skus,
-                       COUNT(DISTINCT generated_date) as unique_generations
-                FROM forecast_data
-                """
-            )
-        )
-        row = result.fetchone()
-        print("\nForecast Data:")
-        print(f"  Total records:       {row[0]:,}")
-        print(f"  Unique SKUs:         {row[1]:,}")
-        print(f"  Forecast versions:   {row[2]}")
-
-        result = conn.execute(
-            text(
-                """
-                SELECT file_type, COUNT(*) as count, import_status
-                FROM file_imports
-                GROUP BY file_type, import_status
-                ORDER BY file_type, import_status
-                """
-            )
-        )
-        print("\nFile Imports:")
-        for row in result:
-            print(f"  {row[0]:20s} {row[2]:10s} {row[1]:3d} files")
+        _print_sales_summary(conn)
+        _print_stock_summary(conn)
+        _print_forecast_summary(conn)
+        _print_file_imports_summary(conn)
 
     engine.dispose()
-    print("=" * 60)
+    log_info("=" * 60)
 
 
-def main():
+def main() -> None:
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        print("Error: DATABASE_URL not set")
-        print("Please check your .env file")
+        log_error("Error: DATABASE_URL not set")
+        log_error("Please check your .env file")
         sys.exit(1)
 
-    print("=" * 60)
-    print("COMPLETE DATABASE IMPORT")
-    print("=" * 60)
-    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print()
+    log_header("COMPLETE DATABASE IMPORT")
+    log_info(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     start_time = datetime.now()
 
-    print("\nStep 1: Importing archival sales data...")
-    populate_archival_sales(db_url)
+    import_steps = [
+        ("Importing archival sales data", populate_archival_sales),
+        ("Importing current year sales data", import_current_sales),
+        ("Importing stock data", import_stock_data),
+        ("Importing forecast data", import_forecast_data),
+        ("Importing model metadata", import_model_metadata),
+        ("Importing size aliases", import_size_aliases),
+        ("Importing color aliases", import_color_aliases),
+        ("Refreshing materialized views", refresh_materialized_views),
+    ]
 
-    print("\nStep 2: Importing current year sales data...")
-    import_current_sales(db_url)
-
-    print("\nStep 3: Importing stock data...")
-    import_stock_data(db_url)
-
-    print("\nStep 4: Importing forecast data...")
-    import_forecast_data(db_url)
-
-    print("\nStep 5: Importing model metadata...")
-    import_model_metadata(db_url)
-
-    print("\nStep 6: Importing size aliases...")
-    import_size_aliases(db_url)
-
-    print("\nStep 7: Importing color aliases...")
-    import_color_aliases(db_url)
-
-    print("\nStep 8: Refreshing materialized views...")
-    refresh_materialized_views(db_url)
+    for i, (description, func) in enumerate(import_steps, 1):
+        log_info(f"\nStep {i}: {description}...")
+        func(db_url)
 
     elapsed = (datetime.now() - start_time).total_seconds()
 
     print_import_summary(db_url)
 
-    print(f"\nComplete import finished in {elapsed:.1f} seconds")
-    print("\nNext steps:")
-    print("  1. Populate cache: python src/migration/populate_cache.py")
-    print("  2. Update .env: Set DATA_SOURCE_MODE=database")
-    print("  3. Run app: cd src && py -3.13 -m streamlit run app.py")
-    print()
+    log_info(f"\nComplete import finished in {elapsed:.1f} seconds")
+    log_info("\nNext steps:")
+    log_info("  1. Populate cache: python src/migration/populate_cache.py")
+    log_info("  2. Update .env: Set DATA_SOURCE_MODE=database")
+    log_info("  3. Run app: cd src && py -3.13 -m streamlit run app.py")
+    log_info("")
 
 
 if __name__ == "__main__":

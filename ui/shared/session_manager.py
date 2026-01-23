@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
 from ui.constants import Config, SessionKeys
+
+if TYPE_CHECKING:
+    from sales_data.data_source import DataSource
+    from utils.pattern_optimizer import PatternSet
 
 
 def initialize_session_state() -> None:
@@ -49,7 +53,7 @@ def get_settings() -> dict:
     return st.session_state[SessionKeys.SETTINGS]
 
 
-def get_data_source():
+def get_data_source() -> DataSource:
     return st.session_state[SessionKeys.DATA_SOURCE]
 
 
@@ -61,11 +65,11 @@ def set_session_value(key: str, value: Any) -> None:
     st.session_state[key] = value
 
 
-def get_pattern_sets() -> list:
+def get_pattern_sets() -> list[PatternSet]:
     return st.session_state.get(SessionKeys.PATTERN_SETS, [])
 
 
-def get_active_pattern_set():
+def get_active_pattern_set() -> PatternSet | None:
     active_id = st.session_state.get(SessionKeys.ACTIVE_SET_ID)
     if active_id is None:
         return None

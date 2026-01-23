@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import logging
-
 import pandas as pd
+
+from utils.logging_config import get_logger
 
 from .inventory_metrics import calculate_forecast_date_range
 
-logger = logging.getLogger(__name__)
+logger = get_logger("order_priority")
 
 
 def calculate_order_priority(
@@ -119,7 +119,7 @@ def _calculate_revenue_impact(df: pd.DataFrame) -> pd.DataFrame:
 def _apply_type_multipliers(df: pd.DataFrame, type_multipliers: dict) -> pd.DataFrame:
     default_type_mult = {"new": 1.2, "seasonal": 1.3, "regular": 1.0, "basic": 0.9}
     type_mult = {k: type_multipliers.get(k, v) for k, v in default_type_mult.items()}
-    df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_mult).fillna(1.0)
+    df["TYPE_MULTIPLIER"] = df["TYPE"].map(type_mult).fillna(1.0)  # type: ignore[arg-type]
     return df
 
 
@@ -168,11 +168,8 @@ def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
     if "REVENUE_AT_RISK" in priority_df.columns:
         agg_dict["REVENUE_AT_RISK"] = "sum"
 
-    grouped = (
-        priority_df.groupby(["MODEL", "COLOR"], as_index=False, observed=True)
-        .agg(agg_dict)
-        .sort_values("PRIORITY_SCORE", ascending=False)
-    )
+    grouped_agg = pd.DataFrame(priority_df.groupby(["MODEL", "COLOR"], as_index=False, observed=True).agg(agg_dict))
+    grouped = pd.DataFrame(grouped_agg.sort_values(by="PRIORITY_SCORE", ascending=False))
 
     grouped["COVERAGE_GAP"] = grouped["FORECAST_LEADTIME"] - grouped["STOCK"]
     grouped["COVERAGE_GAP"] = grouped["COVERAGE_GAP"].clip(lower=0)
@@ -182,7 +179,10 @@ def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
 
 def _safe_get_numeric(row: pd.Series, key: str) -> float:
     value = row.get(key, 0)
-    return 0 if pd.isna(value) else float(value)
+    if value is None:
+        return 0.0
+    is_na = bool(pd.isna(value))
+    return 0.0 if is_na else float(value)
 
 
 def get_size_quantities_for_model_color(
@@ -192,11 +192,11 @@ def get_size_quantities_for_model_color(
 
     size_quantities = {}
     for _, row in filtered.iterrows():
-        size = row["SIZE"]
+        size = str(row["SIZE"])
         if not size:
             continue
-        deficit = _safe_get_numeric(row, "DEFICIT")
-        forecast = _safe_get_numeric(row, "FORECAST_LEADTIME")
+        deficit = _safe_get_numeric(pd.Series(row), "DEFICIT")
+        forecast = _safe_get_numeric(pd.Series(row), "FORECAST_LEADTIME")
         size_quantities[size] = int(max(deficit, forecast))
 
     return size_quantities
@@ -219,8 +219,8 @@ def generate_order_recommendations(
 
     top_recommendations = []
     for _, row in top_model_colors.iterrows():
-        model = row["MODEL"]
-        color = row["COLOR"]
+        model = str(row["MODEL"])
+        color = str(row["COLOR"])
         size_breakdown = get_size_quantities_for_model_color(priority_df, model, color)
 
         top_recommendations.append(

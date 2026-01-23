@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 from pandas import DataFrame
@@ -33,10 +32,10 @@ ANY_CSV_RECURSIVE = "**/*.csv"
 
 def load_size_aliases_from_excel(sizes_file_path: Path) -> dict[str, str]:
     df = pd.read_excel(sizes_file_path)
-    df = df[["size", "metric"]].copy()
-    df.columns = ["size_code", "size_alias"]
-    df["size_code"] = df["size_code"].astype(str).str.zfill(2)
-    df["size_alias"] = df["size_alias"].astype(str)
+    df = pd.DataFrame(df[["size", "metric"]].copy())
+    df.columns = pd.Index(["size_code", "size_alias"])
+    df["size_code"] = pd.Series(df["size_code"]).astype(str).str.zfill(2)
+    df["size_alias"] = pd.Series(df["size_alias"]).astype(str)
     return dict(zip(df["size_code"], df["size_alias"]))
 
 
@@ -156,8 +155,8 @@ class SalesDataLoader:
     @staticmethod
     def _get_unique_files_from_directory(directory: Path) -> list[Path]:
         all_files = (
-            list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)) +
-            list(directory.glob(ANY_CSV_RECURSIVE)) + list(directory.glob(ANY_XLSX_RECURSIVE))
+                list(directory.glob(ANY_CSV)) + list(directory.glob(ANY_XLSX)) +
+                list(directory.glob(ANY_CSV_RECURSIVE)) + list(directory.glob(ANY_XLSX_RECURSIVE))
         )
         seen_paths: set[Path] = set()
         unique_files = []
@@ -179,7 +178,7 @@ class SalesDataLoader:
 
     @staticmethod
     def _select_best_file_per_year(
-        files: list[tuple[Path, datetime, datetime]]
+            files: list[tuple[Path, datetime, datetime]]
     ) -> list[tuple[Path, datetime, datetime]]:
         by_year: dict[int, list[tuple[Path, datetime, datetime]]] = {}
         for file_info in files:
@@ -322,17 +321,20 @@ class SalesDataLoader:
             find_sheet_method=None,
             usecols: list[str] | None = None,
             dtype: dict | None = None,
-    ) -> DataFrame | dict[Any, DataFrame]:
+    ) -> DataFrame:
         if file_path.suffix == CSV:
-            return pd.read_csv(file_path, usecols=usecols, dtype=dtype)
+            return pd.DataFrame(pd.read_csv(file_path, usecols=usecols, dtype=dtype))  # type: ignore[arg-type]
         elif file_path.suffix == XLSX:
             sheet_name = find_sheet_method(file_path) if find_sheet_method else None
-            return pd.read_excel(
+            result = pd.read_excel(
                 file_path,
                 sheet_name=sheet_name or "Sheet1",
                 usecols=usecols,
                 dtype=dtype,
             )
+            if isinstance(result, dict):
+                raise ValueError(f"Unexpected dict result from read_excel for {file_path}")
+            return pd.DataFrame(result)
         else:
             raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
@@ -343,7 +345,7 @@ class SalesDataLoader:
             raise ValueError(f"Invalid sales data: {errors}")
 
         df["data"] = pd.to_datetime(df["data"])
-        df = df.dropna(how="all")
+        df = pd.DataFrame(df.dropna(how="all"))
         return df
 
     def _add_sales_metadata(self, df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
@@ -380,8 +382,8 @@ class SalesDataLoader:
             logger.error("Stock data validation failed: %s", errors)
             raise ValueError(f"Invalid stock data: {errors}")
 
-        df = df[df["aktywny"] == 1]
-        return df[["sku", "nazwa", "cena_netto", "available_stock"]].copy()
+        df = pd.DataFrame(df[df["aktywny"] == 1])
+        return pd.DataFrame(df[["sku", "nazwa", "cena_netto", "available_stock"]].copy())
 
     def load_stock_file(self, file_path: Path) -> pd.DataFrame:
         logger.info("Loading stock file: %s", file_path.name)
@@ -403,7 +405,7 @@ class SalesDataLoader:
         if "model" in df.columns:
             required_cols.append("model")
 
-        df = df[required_cols].copy()
+        df = pd.DataFrame(df[required_cols].copy())
 
         if "data" in df.columns:
             df["data"] = pd.to_datetime(df["data"])
@@ -488,8 +490,8 @@ class SalesDataLoader:
             "RODZAJ MATERIAŁU",
             "GRAMATURA",
         ]
-        df = df[required_cols].copy()
-        df = df.dropna(subset=["Model"])
+        df = pd.DataFrame(df[required_cols].copy())
+        df = pd.DataFrame(df.dropna(subset=["Model"]))
         return df
 
     def load_model_metadata(self) -> pd.DataFrame | None:
@@ -529,8 +531,8 @@ class SalesDataLoader:
 
         try:
             df = pd.read_excel(file_path, sheet_name='kolory', engine='openpyxl')
-            df = df[["NUMER", "KOLOR"]].copy()
-            df = df.dropna(subset=["NUMER", "KOLOR"])
+            df = pd.DataFrame(df[["NUMER", "KOLOR"]].copy())
+            df = pd.DataFrame(df.dropna(subset=["NUMER", "KOLOR"]))
             df["NUMER"] = df["NUMER"].astype(str).str.replace('*', '', regex=False).str[:2].str.zfill(2).str.upper()
             df["KOLOR"] = df["KOLOR"].astype(str)
             return dict(zip(df["NUMER"], df["KOLOR"]))
@@ -568,10 +570,10 @@ class SalesDataLoader:
             wb.close()
 
             df = pd.read_excel(file_path, sheet_name=sheet_name)
-            df = df[list(self.validator.CATEGORY_COLUMNS)]  # type: ignore[index]
-            df = df.dropna(subset=["Model"])
-            df["Model"] = df["Model"].astype(str).str.strip().str.upper()
-            df = df.drop_duplicates(subset=["Model"], keep="first")
+            df = pd.DataFrame(df[list(self.validator.CATEGORY_COLUMNS)])  # type: ignore[index]
+            df = pd.DataFrame(df.dropna(subset=["Model"]))
+            df["Model"] = pd.Series(df["Model"]).astype(str).str.strip().str.upper()
+            df = pd.DataFrame(df.drop_duplicates(subset=["Model"], keep="first"))
 
             self.validator.validate_category_data(df)
             return df

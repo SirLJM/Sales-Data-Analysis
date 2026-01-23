@@ -455,8 +455,7 @@ class DatabaseSource(DataSource):
     def is_available(self) -> bool:
         return self._is_available
 
-    @staticmethod
-    def get_data_source_type(**kwargs) -> str:
+    def get_data_source_type(self) -> str:
         return "database"
 
     def load_outlet_models(self) -> set[str]:

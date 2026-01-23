@@ -8,7 +8,7 @@ PROJECTION_COLUMNS = ["date", "projected_stock", "rop_reached", "zero_reached"]
 
 
 def _empty_projection() -> pd.DataFrame:
-    return pd.DataFrame(columns=PROJECTION_COLUMNS)
+    return pd.DataFrame(columns=pd.Index(PROJECTION_COLUMNS))
 
 
 def build_projection_from_forecast(
@@ -74,7 +74,7 @@ def calculate_stock_projection(
     if forecast_df.empty:
         return _empty_projection()
 
-    sku_forecast = forecast_df[forecast_df["sku"] == sku]
+    sku_forecast = pd.DataFrame(forecast_df[forecast_df["sku"] == sku])
     if sku_forecast.empty:
         return _empty_projection()
 
@@ -97,12 +97,12 @@ def calculate_model_stock_projection(
     df = forecast_df.copy()
     df["model"] = df["sku"].astype(str).str[:5]
 
-    model_forecast = df[df["model"] == model]
+    model_forecast = pd.DataFrame(df[df["model"] == model])
     if model_forecast.empty:
         return _empty_projection()
 
     model_forecast = filter_and_prepare_forecast(model_forecast, start_date, projection_months)
-    model_forecast_aggregated = model_forecast.groupby("data", as_index=False, observed=True).agg({"forecast": "sum"})
+    model_forecast_aggregated = pd.DataFrame(model_forecast.groupby("data", as_index=False, observed=True).agg({"forecast": "sum"}))
 
     return build_projection_from_forecast(
         model_forecast_aggregated, current_stock, rop, safety_stock, start_date

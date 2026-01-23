@@ -144,8 +144,7 @@ def _render_parameter_controls() -> dict | None:
 
 
 def _generate_accuracy_report(params: dict, context: dict) -> None:
-    # noinspection PyTypeChecker
-    with st.spinner(t(Keys.LOADING_ACCURACY_METRICS)):
+    with st.spinner(t(Keys.LOADING_ACCURACY_METRICS)):  # type: ignore[attr-defined]
         sales_df = load_sales_for_accuracy(params["analysis_start"], params["analysis_end"])
         if sales_df is None or sales_df.empty:
             st.error(f"{Icons.ERROR} {t(Keys.ERR_NO_SALES_FOR_PERIOD)}")
@@ -327,17 +326,18 @@ def _render_accuracy_table(accuracy_df: pd.DataFrame, entity_type: str) -> None:
             display_df[id_col].astype(str).str.contains(search_term, case=False, na=False)
         ]
 
-    if sort_by in display_df.columns:
-        ascending = sort_by not in ["MISSED_OPPORTUNITY", "ACTUAL_TOTAL"]
-        display_df = display_df.sort_values(sort_by, ascending=ascending, na_position="last")
+    if sort_by is not None and sort_by in display_df.columns:
+        sort_col = str(sort_by)
+        ascending = sort_col not in ["MISSED_OPPORTUNITY", "ACTUAL_TOTAL"]
+        display_df = pd.DataFrame(display_df).sort_values(by=sort_col, ascending=ascending)
 
-    display_df["MAPE_COLOR"] = display_df["MAPE"].apply(_get_mape_color)
+    display_df["MAPE_COLOR"] = pd.Series(display_df["MAPE"]).apply(_get_mape_color)
 
     st.write(t(Keys.SHOWING_N_OF_M_ITEMS).format(n=len(display_df), m=len(accuracy_df)))
 
     from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
     render_dataframe_with_aggrid(
-        display_df,
+        pd.DataFrame(display_df),
         height=min(Config.DATAFRAME_HEIGHT, len(display_df) * 35 + 38),
         pinned_columns=[id_col],
     )
@@ -378,7 +378,7 @@ def _render_type_comparison(type_summary: pd.DataFrame) -> None:
     with col2:
         from ui.shared.aggrid_helpers import render_dataframe_with_aggrid
         render_dataframe_with_aggrid(
-            type_summary[["TYPE", "COUNT", "MAPE", "BIAS", "MISSED_OPPORTUNITY"]],
+            pd.DataFrame(type_summary[["TYPE", "COUNT", "MAPE", "BIAS", "MISSED_OPPORTUNITY"]]),
             max_height=300,
             pinned_columns=["TYPE"],
         )

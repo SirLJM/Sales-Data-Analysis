@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -32,20 +33,20 @@ def import_size_aliases(connection_string: str) -> None:
 
     try:
         size_mapping = load_size_aliases_from_excel(sizes_file)
-        df = pd.DataFrame(list(size_mapping.items()), columns=["size_code", "size_alias"])
+        df = pd.DataFrame(list(size_mapping.items()), columns=pd.Index(["size_code", "size_alias"]))
         df = df.dropna()
 
         print(f"Loaded {len(df)} size mappings from file")
 
         with engine.connect() as conn:
             result = conn.execute(text("SELECT COUNT(*) FROM size_aliases"))
-            existing_count = result.fetchone()[0]
+            row = result.fetchone()
+            existing_count = row[0] if row else 0
             print(f"Current database has {existing_count} size aliases")
 
-        batch_data = df.to_dict("records")
+        batch_data = cast(list[dict[str, Any]], df.to_dict("records"))
 
         with engine.connect() as conn:
-            # noinspection PyTypeChecker
             conn.execute(
                 text("""
                      INSERT INTO size_aliases (size_code, size_alias)
@@ -58,7 +59,8 @@ def import_size_aliases(connection_string: str) -> None:
 
         with engine.connect() as conn:
             result = conn.execute(text("SELECT COUNT(*) FROM size_aliases"))
-            new_count = result.fetchone()[0]
+            row = result.fetchone()
+            new_count = row[0] if row else 0
             print(f"  OK Database now has {new_count} size aliases")
 
         print("\nSample mappings:")

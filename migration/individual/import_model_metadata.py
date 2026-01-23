@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -32,7 +33,7 @@ def _safe_strip(value) -> str:
     return str(value).strip() if pd.notna(value) else ""
 
 
-def _row_to_metadata(row: dict) -> dict:
+def _row_to_metadata(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "model": str(row["Model"]).strip(),
         "primary_production": _safe_strip(row["SZWALNIA GŁÓWNA"]),
@@ -45,7 +46,8 @@ def _row_to_metadata(row: dict) -> dict:
 def _get_model_count(engine: Engine) -> int:
     with engine.connect() as conn:
         result = conn.execute(text("SELECT COUNT(*) FROM model_metadata"))
-        return result.fetchone()[0]
+        row = result.fetchone()
+        return int(row[0]) if row else 0
 
 
 def import_model_metadata(connection_string: str) -> None:
@@ -73,7 +75,7 @@ def import_model_metadata(connection_string: str) -> None:
         print(f"Loaded {len(df)} models from file")
         print(f"Current database has {_get_model_count(engine)} models")
 
-        batch_data = [_row_to_metadata(row) for row in df.to_dict('records')]
+        batch_data = [_row_to_metadata(row) for row in cast(list[dict[str, Any]], df.to_dict('records'))]
 
         with engine.connect() as conn:
             conn.execute(text(UPSERT_SQL), batch_data)

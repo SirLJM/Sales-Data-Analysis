@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 from dataclasses import asdict, dataclass
 
+from utils.logging_config import get_logger
 from utils.settings_manager import load_settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger("pattern_optimizer")
 
 
 @dataclass

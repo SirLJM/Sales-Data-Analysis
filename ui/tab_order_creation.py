@@ -79,11 +79,10 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
         st.error(f"{Icons.ERROR} {t(Keys.MODEL_NOT_FOUND).format(model=model_code)}")
         return
 
-    # noinspection PyTypeChecker
-    with st.spinner(t(Keys.LOADING_DATA_FOR_MODEL).format(model=model_code)):
+    with st.spinner(t(Keys.LOADING_DATA_FOR_MODEL).format(model=model_code)):  # type: ignore[attr-defined]
         sku_summary = _prepare_sku_summary(analyzer, context, settings)
         sku_summary = _add_sku_components(sku_summary)
-        model_data = sku_summary[sku_summary["MODEL"] == model_code].copy()
+        model_data = pd.DataFrame(sku_summary[sku_summary["MODEL"] == model_code]).copy()
 
         if model_data.empty:
             logger.warning("No data found for model '%s' after filtering", model_code)
@@ -174,8 +173,7 @@ def _add_forecast_data(sku_summary: pd.DataFrame, forecast_df: pd.DataFrame, lea
     forecast_window = forecast_df[
         (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
         ]
-    forecast_agg = forecast_window.groupby("sku", as_index=False, observed=True)["forecast"].sum()
-    # noinspection PyArgumentList
+    forecast_agg = pd.DataFrame(forecast_window.groupby("sku", as_index=False, observed=True)["forecast"].sum())
     forecast_agg = forecast_agg.rename(columns={"sku": "SKU", "forecast": "FORECAST_LEADTIME"})
     sku_summary = sku_summary.merge(forecast_agg, on="SKU", how="left")
     sku_summary["FORECAST_LEADTIME"] = sku_summary["FORECAST_LEADTIME"].fillna(0)
@@ -183,19 +181,20 @@ def _add_forecast_data(sku_summary: pd.DataFrame, forecast_df: pd.DataFrame, lea
 
 
 def _add_sku_components(sku_summary: pd.DataFrame) -> pd.DataFrame:
-    sku_summary["MODEL"] = extract_model(sku_summary["SKU"])
-    sku_summary["COLOR"] = extract_color(sku_summary["SKU"])
-    sku_summary["SIZE"] = extract_size(sku_summary["SKU"])
+    sku_col = pd.Series(sku_summary["SKU"])
+    sku_summary["MODEL"] = extract_model(sku_col)
+    sku_summary["COLOR"] = extract_color(sku_col)
+    sku_summary["SIZE"] = extract_size(sku_col)
     sku_summary["DEFICIT"] = (sku_summary["ROP"] - sku_summary[ColumnNames.STOCK]).clip(lower=0)
     return sku_summary
 
 
 def _calculate_order_qty_for_row(row: pd.Series) -> tuple[str, int]:
-    size_code = row["SIZE"]
+    size_code = str(row["SIZE"])
     forecast_qty = int(row.get("FORECAST_LEADTIME", 0) or 0)
     stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
     rop_value = row.get("ROP", 0)
-    rop = 0 if pd.isna(rop_value) else int(rop_value)
+    rop = 0 if rop_value is None or (isinstance(rop_value, float) and pd.isna(rop_value)) else int(rop_value)
     deficit = max(0, rop - stock_qty)
     order_qty = max(forecast_qty, deficit)
     return size_code, order_qty
@@ -227,11 +226,10 @@ def _create_color_item(color_data: pd.DataFrame, model_code: str, color: str, si
 def _build_selected_items(model_data: pd.DataFrame, model_code: str) -> list[dict]:
     selected_items = []
     for color in model_data["COLOR"].unique():
-        # noinspection PyTypeChecker
-        color_data: pd.DataFrame = model_data[model_data["COLOR"] == color]
+        color_data = pd.DataFrame(model_data[model_data["COLOR"] == color])
         size_quantities = _build_size_quantities(color_data)
         if size_quantities:
-            item = _create_color_item(color_data, model_code, color, size_quantities)
+            item = _create_color_item(color_data, model_code, str(color), size_quantities)
             selected_items.append(item)
     return selected_items
 
@@ -253,7 +251,7 @@ def _save_order_to_session(selected_items: list[dict], model_data: pd.DataFrame)
     if "URGENT" not in priority_skus.columns:
         priority_skus["URGENT"] = (priority_skus[ColumnNames.STOCK] == 0) & (priority_skus["FORECAST_LEADTIME"] > 0)
 
-    model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_skus)
+    model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(pd.DataFrame(priority_skus))
 
     set_session_value(SessionKeys.RECOMMENDATIONS_DATA, {
         "priority_skus": priority_skus,
@@ -531,11 +529,14 @@ def _get_stock_by_color_size(model: str) -> dict[tuple[str, str], int]:
         return {}
 
     size_aliases = load_size_aliases()
-    return {
-        (row.get("COLOR", ""), size_aliases.get(row.get("SIZE", ""), row.get("SIZE", ""))):
-            int(row.get(ColumnNames.STOCK, 0) or 0)
-        for _, row in model_skus.iterrows()
-    }
+    result: dict[tuple[str, str], int] = {}
+    for _, row in model_skus.iterrows():
+        color = str(row.get("COLOR") or "")
+        size_code = str(row.get("SIZE") or "")
+        size = size_aliases.get(size_code, size_code)
+        stock = int(row.get(ColumnNames.STOCK, 0) or 0)
+        result[(color, size)] = stock
+    return result
 
 
 def _get_cell_style(
@@ -565,9 +566,9 @@ def _build_body_row(
     color_name_to_code: dict,
     stock_by_color_size: dict[tuple[str, str], int],
 ) -> str:
-    size = row.get("Size", "")
+    size = str(row.get("Size", ""))
     cells = [
-        f'<td{_get_cell_style(col, size, row[col], color_name_to_code, stock_by_color_size)}>{row[col]}</td>'
+        f'<td{_get_cell_style(str(col), size, str(row[col]), color_name_to_code, stock_by_color_size)}>{row[col]}</td>'
         for col in columns
     ]
     return f'<tr>{"".join(cells)}</tr>'

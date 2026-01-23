@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 
 @dataclass
@@ -10,7 +10,7 @@ class Pattern:
     name: str
     keywords: list[str]
     regex: str | None = None
-    extractor: Callable[[re.Match], any] | None = None
+    extractor: Callable[[re.Match[str]], Any] | None = None
     priority: int = 1
 
 

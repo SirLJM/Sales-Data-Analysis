@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -52,7 +53,7 @@ def _populate_entity_type(conn, entity_type: str) -> bool:
     conn.commit()
 
     print("  Inserting into cache_monthly_aggregations...")
-    records = df.to_dict('records')
+    records = cast(list[dict[str, Any]], df.to_dict('records'))
     conn.execute(
         text("""
              INSERT INTO cache_monthly_aggregations (entity_type, entity_id, year_month,
@@ -96,7 +97,8 @@ def populate_monthly_aggregations_cache():
             conn.commit()
 
             result = conn.execute(text("SELECT COUNT(*) FROM mv_valid_monthly_aggs"))
-            count = result.fetchone()[0]
+            row = result.fetchone()
+            count = row[0] if row else 0
             print(f"  [OK] mv_valid_monthly_aggs: {count:,} rows")
 
         print("\n" + "=" * 60)

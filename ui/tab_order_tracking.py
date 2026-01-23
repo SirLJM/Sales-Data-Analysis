@@ -10,15 +10,20 @@ from ui.constants import ColumnNames, Config, Icons, SessionKeys
 from ui.i18n import Keys, t
 from utils.logging_config import get_logger
 
-UTILIZATION_ = "Utilization %"
+WEEKS_AHEAD = "Weeks Ahead"
 
-ORDER_COUNT = "Order Count"
-
-MONTHLY_CAPACITY = "Monthly Capacity"
-
-TOTAL_QUANTITY = "Total Quantity"
-
+COL_UTILIZATION = "Utilization %"
+COL_ORDER_COUNT = "Order Count"
+COL_MONTHLY_CAPACITY = "Monthly Capacity"
+COL_TOTAL_QUANTITY = "Total Quantity"
 OTHER_OPTION = "(Other)"
+
+CAPACITY_THRESHOLDS = [
+    (200, "🔴", Keys.STATUS_2_PLUS_WEEKS),
+    (150, "🟠", Keys.STATUS_1_5_PLUS_WEEKS),
+    (100, "🟡", Keys.STATUS_1_PLUS_WEEK),
+    (75, "🟢", Keys.STATUS_OK),
+]
 
 logger = get_logger("tab_order_tracking")
 
@@ -203,28 +208,26 @@ def _render_form_buttons() -> tuple[bool, bool]:
     return submitted, cancelled
 
 
+def _resolve_other_field(selected: str, other_value: str) -> str | None:
+    if selected == OTHER_OPTION:
+        return other_value or None
+    return selected or None
+
+
 def _handle_pdf_order_submit(form_values: dict) -> None:
     from utils.order_manager import add_manual_order
 
-    final_facility = (
-        form_values["facility_other"]
-        if form_values["facility"] == OTHER_OPTION
-        else form_values["facility"]
-    )
-    final_material = (
-        form_values["material_other"]
-        if form_values["material"] == OTHER_OPTION
-        else form_values["material"]
-    )
+    final_facility = _resolve_other_field(form_values["facility"], form_values["facility_other"])
+    final_material = _resolve_other_field(form_values["material"], form_values["material_other"])
 
     final_order_data = {
         "order_date": form_values["order_date"],
         "model": form_values["model"].upper() if form_values["model"] else None,
         "product_name": form_values["product_name"] or None,
         "total_quantity": form_values["quantity"],
-        "facility": final_facility or None,
+        "facility": final_facility,
         "operation": form_values["operation"] or None,
-        "material": final_material or None,
+        "material": final_material,
     }
 
     if st.session_state.get("parsed_pdf_bytes"):
@@ -365,16 +368,8 @@ def _handle_manual_order_submit(form_values: dict) -> None:
         st.warning(f"{Icons.WARNING} {t(Keys.MSG_ENTER_MODEL_CODE)}")
         return
 
-    final_facility = (
-        form_values["facility_other"]
-        if form_values["facility"] == OTHER_OPTION
-        else form_values["facility"]
-    )
-    final_material = (
-        form_values["material_other"]
-        if form_values["material"] == OTHER_OPTION
-        else form_values["material"]
-    )
+    final_facility = _resolve_other_field(form_values["facility"], form_values["facility_other"])
+    final_material = _resolve_other_field(form_values["material"], form_values["material_other"])
 
     order_id = f"ORD_{form_values['model'].upper()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     order_data = {
@@ -382,9 +377,9 @@ def _handle_manual_order_submit(form_values: dict) -> None:
         "model": form_values["model"].upper(),
         "product_name": form_values["product_name"] or None,
         "total_quantity": form_values["quantity"],
-        "facility": final_facility or None,
+        "facility": final_facility,
         "operation": form_values["operation"] or None,
-        "material": final_material or None,
+        "material": final_material,
     }
     if add_manual_order(order_id, order_data):
         st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ADDED).format(order_id=order_id)}")
@@ -424,7 +419,7 @@ def _render_active_orders() -> None:
     header_height = 40
     table_height = min(header_height + len(orders_df) * row_height, 400)
 
-    selected_indices = []
+    selected_indices: list[int] = []
     with st.container():
         event = st.dataframe(
             orders_df,
@@ -435,8 +430,12 @@ def _render_active_orders() -> None:
             on_select="rerun",
             key="active_orders_df",
         )
-        if event and event.selection and event.selection.rows:
-            selected_indices = event.selection.rows
+        if event:
+            selection = getattr(event, "selection", None)
+            if selection:
+                rows = getattr(selection, "rows", None)
+                if rows:
+                    selected_indices = list(rows)
 
     if selected_indices:
         selected_df: pd.DataFrame = orders_df.iloc[selected_indices]  # type: ignore[assignment]
@@ -492,7 +491,7 @@ def _handle_dataframe_archive_selection(selected_df: pd.DataFrame) -> None:
 
     if st.button(t(Keys.BTN_ARCHIVE_N_ORDERS).format(count=len(selected_df)), type="secondary"):
         for _, row in selected_df.iterrows():
-            order_id = row[ColumnNames.ORDER_ID]
+            order_id = str(row[ColumnNames.ORDER_ID])
             if archive_order(order_id):
                 st.success(f"{Icons.SUCCESS} {t(Keys.ORDER_ARCHIVED).format(order_id=order_id)}")
             else:
@@ -519,21 +518,17 @@ def _render_facility_capacity() -> None:
     facility_capacities = _get_facility_capacities()
 
     capacity_df = pd.DataFrame(capacity_data)
-    capacity_df[MONTHLY_CAPACITY] = capacity_df["Facility"].map(
-        lambda f: facility_capacities.get(f, 0)
-    )
-    capacity_df[UTILIZATION_] = capacity_df.apply(
-        lambda row: _calculate_utilization(row[TOTAL_QUANTITY], row[MONTHLY_CAPACITY]),
+    capacity_df[COL_MONTHLY_CAPACITY] = capacity_df["Facility"].map(lambda x: facility_capacities.get(x, 0)).fillna(0).astype(int)
+    capacity_df[COL_UTILIZATION] = capacity_df.apply(
+        lambda row: _calculate_utilization(row[COL_TOTAL_QUANTITY], row[COL_MONTHLY_CAPACITY]),
         axis=1,
     )
-    capacity_df["Weeks Ahead"] = capacity_df.apply(
-        lambda row: _calculate_weeks_ahead(row[TOTAL_QUANTITY], row[MONTHLY_CAPACITY]),
-        axis=1,
-    )
-    capacity_df["Capacity Status"] = capacity_df[UTILIZATION_].apply(_get_capacity_status)
-    capacity_df = capacity_df.sort_values(TOTAL_QUANTITY, ascending=False)
+    capacity_df[WEEKS_AHEAD] = capacity_df[COL_TOTAL_QUANTITY] / (capacity_df[COL_MONTHLY_CAPACITY] / 4.0)
+    capacity_df[WEEKS_AHEAD] = capacity_df[WEEKS_AHEAD].replace([float("inf"), float("-inf")], 0).fillna(0)
+    capacity_df["Capacity Status"] = capacity_df[COL_UTILIZATION].apply(_get_capacity_status)
+    capacity_df = capacity_df.sort_values(COL_TOTAL_QUANTITY, ascending=False)
 
-    max_utilization = max(capacity_df[UTILIZATION_].max(), 100)
+    max_utilization = max(capacity_df[COL_UTILIZATION].max(), 100)
     progress_max = max(int(max_utilization * 1.2), 200)
 
     st.dataframe(
@@ -541,16 +536,16 @@ def _render_facility_capacity() -> None:
         hide_index=True,
         column_config={
             "Facility": st.column_config.TextColumn(t(Keys.FACILITY), width="medium"),
-            ORDER_COUNT: st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
-            TOTAL_QUANTITY: st.column_config.NumberColumn(t(Keys.LABEL_TOTAL_QTY), format="%d"),
-            MONTHLY_CAPACITY: st.column_config.NumberColumn(t(Keys.LABEL_CAPACITY), format="%d"),
-            UTILIZATION_: st.column_config.ProgressColumn(
+            COL_ORDER_COUNT: st.column_config.NumberColumn(t(Keys.LABEL_ORDERS), format="%d"),
+            COL_TOTAL_QUANTITY: st.column_config.NumberColumn(t(Keys.LABEL_TOTAL_QTY), format="%d"),
+            COL_MONTHLY_CAPACITY: st.column_config.NumberColumn(t(Keys.LABEL_CAPACITY), format="%d"),
+            COL_UTILIZATION: st.column_config.ProgressColumn(
                 t(Keys.LABEL_UTILIZATION),
                 format="%.0f%%",
                 min_value=0,
                 max_value=progress_max,
             ),
-            "Weeks Ahead": st.column_config.NumberColumn(
+            WEEKS_AHEAD: st.column_config.NumberColumn(
                 t(Keys.LABEL_WEEKS_AHEAD),
                 format="%.1f",
                 help=t(Keys.HELP_WEEKS_AHEAD),
@@ -562,7 +557,7 @@ def _render_facility_capacity() -> None:
         },
     )
 
-    total_qty = capacity_df[TOTAL_QUANTITY].sum()
+    total_qty = capacity_df[COL_TOTAL_QUANTITY].sum()
     st.caption(t(Keys.CAPTION_TOTAL_QTY_FACILITIES).format(total=total_qty))
     st.caption(t(Keys.CAPTION_CAPACITY_LEGEND))
 
@@ -577,10 +572,10 @@ def _calculate_facility_capacity(active_orders: list[dict]) -> list[dict]:
         quantity = order.get("total_quantity") or 0
 
         if facility not in facility_totals:
-            facility_totals[facility] = {ORDER_COUNT: 0, TOTAL_QUANTITY: 0}
+            facility_totals[facility] = {COL_ORDER_COUNT: 0, COL_TOTAL_QUANTITY: 0}
 
-        facility_totals[facility][ORDER_COUNT] += 1
-        facility_totals[facility][TOTAL_QUANTITY] += quantity
+        facility_totals[facility][COL_ORDER_COUNT] += 1
+        facility_totals[facility][COL_TOTAL_QUANTITY] += quantity
 
     return [{"Facility": facility, **data} for facility, data in facility_totals.items()]
 
@@ -609,22 +604,10 @@ def _calculate_utilization(total_qty: int, capacity: int) -> float:
     return (total_qty / capacity) * 100 if capacity > 0 else 0.0
 
 
-def _calculate_weeks_ahead(total_qty: int, capacity: int) -> float:
-    if capacity <= 0:
-        return 0.0
-    weekly_capacity = capacity / 4.0
-    return total_qty / weekly_capacity if weekly_capacity > 0 else 0.0
-
-
 def _get_capacity_status(utilization: float) -> str:
-    if utilization >= 200:
-        return f"🔴 {t(Keys.STATUS_2_PLUS_WEEKS)}"
-    if utilization >= 150:
-        return f"🟠 {t(Keys.STATUS_1_5_PLUS_WEEKS)}"
-    if utilization >= 100:
-        return f"🟡 {t(Keys.STATUS_1_PLUS_WEEK)}"
-    if utilization >= 75:
-        return f"🟢 {t(Keys.STATUS_OK)}"
+    for threshold, icon, key in CAPACITY_THRESHOLDS:
+        if utilization >= threshold:
+            return f"{icon} {t(key)}"
     return f"⚪ {t(Keys.STATUS_LOW)}"
 
 

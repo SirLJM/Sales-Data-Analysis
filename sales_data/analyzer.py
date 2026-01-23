@@ -86,7 +86,7 @@ class SalesAnalyzer:
 
     @staticmethod
     def calculate_forecast_metrics(
-            forecast_df: pd.DataFrame, forecast_time_months: float = None
+            forecast_df: pd.DataFrame, forecast_time_months: float | None = None
     ) -> pd.DataFrame:
         return calculate_forecast_metrics(forecast_df, forecast_time_months)
 
@@ -238,7 +238,7 @@ class SalesAnalyzer:
     def calculate_monthly_yoy_by_category(
             sales_df: pd.DataFrame,
             category_df: pd.DataFrame,
-            reference_date: datetime = None
+            reference_date: datetime | None = None
     ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         return calculate_monthly_yoy_by_category(sales_df, category_df, reference_date)
 

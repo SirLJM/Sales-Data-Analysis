@@ -131,8 +131,8 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
 
         if stock_df is not None:
             stock_df_copy = stock_df.copy()
-            stock_df_copy["model"] = extract_model(stock_df_copy["sku"])
-            stock_df_copy["color"] = extract_color(stock_df_copy["sku"])
+            stock_df_copy["model"] = extract_model(pd.Series(stock_df_copy["sku"]))
+            stock_df_copy["color"] = extract_color(pd.Series(stock_df_copy["sku"]))
             descriptions = stock_df_copy.groupby(["model", "color"], observed=True)["nazwa"].first().reset_index()
             top_products_df = top_products_df.merge(descriptions, on=["model", "color"], how="left")
             top_products_df["nazwa"] = top_products_df["nazwa"].astype(str).replace("nan", "")
@@ -140,7 +140,7 @@ def _display_top_5(column, type_name: str, emoji: str, df_top: pd.DataFrame, sto
             col_names = {"nazwa": "DESCRIPTION", "sales": "SALES"}
 
         st.dataframe(
-            top_products_df[final_cols].rename(columns=col_names),
+            pd.DataFrame(top_products_df[final_cols]).rename(columns=col_names),
             hide_index=True,
             width='stretch'
         )
@@ -153,8 +153,7 @@ def _render_new_products_monitoring(df: pd.DataFrame, stock_df: pd.DataFrame | N
     settings = get_settings()
     lookback_days = settings.get("weekly_analysis", {}).get("lookback_days", Config.WEEKLY_LOOKBACK_DAYS)
 
-    # noinspection PyTypeChecker
-    with st.spinner(t(Keys.GENERATING_WEEKLY)):
+    with st.spinner(t(Keys.GENERATING_WEEKLY)):  # type: ignore[attr-defined]
         try:
             weekly_df = SalesAnalyzer.generate_weekly_new_products_analysis(
                 sales_df=df,

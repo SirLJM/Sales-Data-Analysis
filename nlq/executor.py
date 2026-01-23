@@ -115,7 +115,7 @@ class QueryExecutor:
             if field == COL_TYPE and self.sku_summary_df is not None:
                 skus_of_type = self._get_skus_by_type(value)
                 if COL_SKU in df.columns:
-                    df = df[df[COL_SKU].isin(skus_of_type)]
+                    df = pd.DataFrame(df[df[COL_SKU].isin(skus_of_type)])
         return df
 
     def _apply_stock_filters(self, df: pd.DataFrame, filters: list) -> pd.DataFrame:
@@ -139,7 +139,7 @@ class QueryExecutor:
         if field == COL_TYPE and self.sku_summary_df is not None:
             skus_of_type = self._get_skus_by_type(value)
             if COL_SKU in df.columns:
-                return df[df[COL_SKU].isin(skus_of_type)]
+                return pd.DataFrame(df[df[COL_SKU].isin(skus_of_type)])
         if field == "facility":
             return _filter_by_facility(df, value)
         return df
@@ -151,7 +151,7 @@ class QueryExecutor:
         if COL_SKU in df.columns:
             merged = df.merge(summary, on=COL_SKU, how="left")
             if COL_AVAILABLE_STOCK in merged.columns:
-                return merged[merged[COL_AVAILABLE_STOCK] < merged[COL_ROP]].drop(columns=[COL_ROP])
+                return pd.DataFrame(merged[merged[COL_AVAILABLE_STOCK] < merged[COL_ROP]].drop(columns=[COL_ROP]))
         return df
 
     def _filter_overstock(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -165,9 +165,9 @@ class QueryExecutor:
         if COL_SKU in df.columns:
             merged = df.merge(summary, on=COL_SKU, how="left")
             if COL_AVAILABLE_STOCK in merged.columns:
-                return merged[merged[COL_AVAILABLE_STOCK] > merged["overstock_threshold"]].drop(
+                return pd.DataFrame(merged[merged[COL_AVAILABLE_STOCK] > merged["overstock_threshold"]].drop(
                     columns=["overstock_threshold"]
-                )
+                ))
         return df
 
     def _get_skus_by_type(self, product_type: object) -> list:
@@ -205,9 +205,9 @@ def _apply_identifier_filters(df: pd.DataFrame, identifiers: dict) -> pd.DataFra
     if not identifiers:
         return df
     if COL_MODEL in identifiers and COL_MODEL in df.columns:
-        df = df[df[COL_MODEL].str.upper() == identifiers[COL_MODEL].upper()]
+        df = pd.DataFrame(df[df[COL_MODEL].str.upper() == identifiers[COL_MODEL].upper()])
     if COL_SKU in identifiers and COL_SKU in df.columns:
-        df = df[df[COL_SKU].str.upper() == identifiers[COL_SKU].upper()]
+        df = pd.DataFrame(df[df[COL_SKU].str.upper() == identifiers[COL_SKU].upper()])
     if COL_COLOR in identifiers:
         df = _filter_by_color(df, identifiers[COL_COLOR])
     return df
@@ -215,9 +215,9 @@ def _apply_identifier_filters(df: pd.DataFrame, identifiers: dict) -> pd.DataFra
 
 def _filter_by_color(df: pd.DataFrame, color: str) -> pd.DataFrame:
     if COL_COLOR in df.columns:
-        return df[df[COL_COLOR].str.upper() == color.upper()]
+        return pd.DataFrame(df[df[COL_COLOR].str.upper() == color.upper()])
     if COL_SKU in df.columns:
-        return df[df[COL_SKU].str[5:7].str.upper() == color.upper()]
+        return pd.DataFrame(df[df[COL_SKU].str[5:7].str.upper() == color.upper()])
     return df
 
 
@@ -246,7 +246,7 @@ def _apply_relative_time_filter(
     num: int = time_value[0] if isinstance(time_value, tuple) else time_value
     end_date = datetime.now()
     start_date = _calculate_start_date(num, time_unit)
-    return df[(df[date_col] >= start_date) & (df[date_col] <= end_date)]
+    return pd.DataFrame(df[(df[date_col] >= start_date) & (df[date_col] <= end_date)])
 
 
 def _calculate_start_date(num: int, unit: str) -> datetime:
@@ -271,13 +271,13 @@ def _apply_numeric_filter(
     ops = {">": col > value, "<": col < value, ">=": col >= value,
            "<=": col <= value, "=": col == value}
     if op in ops:
-        return df[ops[op]]
+        return pd.DataFrame(df[ops[op]])
     return df
 
 
 def _filter_by_facility(df: pd.DataFrame, facility: object) -> pd.DataFrame:
     if COL_FACILITY in df.columns:
-        return df[df[COL_FACILITY].str.contains(str(facility), case=False, na=False)]
+        return pd.DataFrame(df[df[COL_FACILITY].str.contains(str(facility), case=False, na=False)])
     return df
 
 
@@ -287,17 +287,17 @@ def _aggregate_sales(df: pd.DataFrame, agg: str, metric: str) -> pd.DataFrame:
     df = df.copy()
     value_col = COL_ILOSC if metric == "quantity" else COL_RAZEM
     if value_col not in df.columns:
-        value_col = COL_ILOSC if COL_ILOSC in df.columns else df.columns[-1]
+        value_col = COL_ILOSC if COL_ILOSC in df.columns else str(df.columns[-1])
     if agg == "month":
-        return _aggregate_by_period(df, COL_DATA, value_col, "M", "period", "total")
+        return _aggregate_by_period(df, COL_DATA, str(value_col), "M", "period", "total")
     if agg == "year":
-        return _aggregate_by_year(df, COL_DATA, value_col)
+        return _aggregate_by_year(df, COL_DATA, str(value_col))
     if agg == COL_MODEL:
-        return _aggregate_by_column(df, COL_MODEL, value_col, "total")
+        return _aggregate_by_column(df, COL_MODEL, str(value_col), "total")
     if agg == COL_COLOR:
-        return _aggregate_sales_by_color(df, value_col)
+        return _aggregate_sales_by_color(df, str(value_col))
     if agg == COL_SIZE:
-        return _aggregate_sales_by_size(df, value_col)
+        return _aggregate_sales_by_size(df, str(value_col))
     return df
 
 
@@ -305,14 +305,14 @@ def _aggregate_by_period(
     df: pd.DataFrame, date_col: str, value_col: str, freq: str, period_name: str, total_name: str
 ) -> pd.DataFrame:
     df[period_name] = df[date_col].dt.to_period(freq)  # type: ignore[union-attr]
-    grouped = df.groupby(period_name)[value_col].sum().reset_index()
+    grouped = pd.DataFrame(df.groupby(period_name)[value_col].sum().reset_index())
     grouped.columns = pd.Index([period_name, total_name])
     return grouped
 
 
 def _aggregate_by_year(df: pd.DataFrame, date_col: str, value_col: str) -> pd.DataFrame:
     df["year"] = df[date_col].dt.year  # type: ignore[union-attr]
-    grouped = df.groupby("year")[value_col].sum().reset_index()
+    grouped = pd.DataFrame(df.groupby("year")[value_col].sum().reset_index())
     grouped.columns = pd.Index(["year", "total"])
     return grouped
 
@@ -320,9 +320,9 @@ def _aggregate_by_year(df: pd.DataFrame, date_col: str, value_col: str) -> pd.Da
 def _aggregate_by_column(
     df: pd.DataFrame, group_col: str, value_col: str, total_name: str
 ) -> pd.DataFrame:
-    grouped = df.groupby(group_col)[value_col].sum().reset_index()
+    grouped = pd.DataFrame(df.groupby(group_col)[value_col].sum().reset_index())
     grouped.columns = pd.Index([group_col, total_name])
-    return grouped.sort_values(total_name, ascending=False)
+    return pd.DataFrame(grouped.sort_values(total_name, ascending=False))
 
 
 def _aggregate_sales_by_color(df: pd.DataFrame, value_col: str) -> pd.DataFrame:
@@ -346,17 +346,17 @@ def _aggregate_stock(df: pd.DataFrame, agg: str) -> pd.DataFrame:
     if stock_col not in df.columns:
         return df
     if agg == COL_MODEL:
-        grouped = df.groupby(COL_MODEL)[stock_col].sum().reset_index()
+        grouped = pd.DataFrame(df.groupby(COL_MODEL)[stock_col].sum().reset_index())
         grouped.columns = pd.Index([COL_MODEL, "total_stock"])
-        return grouped.sort_values("total_stock", ascending=False)
+        return pd.DataFrame(grouped.sort_values("total_stock", ascending=False))
     if agg == COL_COLOR:
         if COL_COLOR not in df.columns and COL_SKU in df.columns:
             df = df.copy()
             df[COL_COLOR] = df[COL_SKU].str[5:7]
         if COL_COLOR in df.columns:
-            grouped = df.groupby(COL_COLOR)[stock_col].sum().reset_index()
+            grouped = pd.DataFrame(df.groupby(COL_COLOR)[stock_col].sum().reset_index())
             grouped.columns = pd.Index([COL_COLOR, "total_stock"])
-            return grouped.sort_values("total_stock", ascending=False)
+            return pd.DataFrame(grouped.sort_values("total_stock", ascending=False))
     return df
 
 
@@ -368,13 +368,13 @@ def _aggregate_forecast(df: pd.DataFrame, agg: str) -> pd.DataFrame:
     if agg == "month" and date_col in df.columns:
         df = df.copy()
         df["period"] = pd.to_datetime(df[date_col]).dt.to_period("M")  # type: ignore[union-attr]
-        grouped = df.groupby("period")[forecast_col].sum().reset_index()
+        grouped = pd.DataFrame(df.groupby("period")[forecast_col].sum().reset_index())
         grouped.columns = pd.Index(["period", "total_forecast"])
         return grouped
     if agg == COL_MODEL:
-        grouped = df.groupby(COL_MODEL)[forecast_col].sum().reset_index()
+        grouped = pd.DataFrame(df.groupby(COL_MODEL)[forecast_col].sum().reset_index())
         grouped.columns = pd.Index([COL_MODEL, "total_forecast"])
-        return grouped.sort_values("total_forecast", ascending=False)
+        return pd.DataFrame(grouped.sort_values("total_forecast", ascending=False))
     return df
 
 

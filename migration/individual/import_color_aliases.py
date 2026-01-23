@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -29,20 +30,20 @@ def import_color_aliases(connection_string: str) -> None:
         print("ERROR: No color aliases found")
         return
 
-    df = pd.DataFrame(list(color_mapping.items()), columns=["color_code", "color_name"])
+    df = pd.DataFrame(list(color_mapping.items()), columns=pd.Index(["color_code", "color_name"]))
     df = df.dropna()
 
     print(f"Loaded {len(df)} color mappings from file")
 
     with engine.connect() as conn:
         result = conn.execute(text("SELECT COUNT(*) FROM color_aliases"))
-        existing_count = result.fetchone()[0]
+        row = result.fetchone()
+        existing_count = row[0] if row else 0
         print(f"Current database has {existing_count} color aliases")
 
-    batch_data = df.to_dict("records")
+    batch_data = cast(list[dict[str, Any]], df.to_dict("records"))
 
     with engine.connect() as conn:
-        # noinspection PyTypeChecker
         conn.execute(
             text("""
                  INSERT INTO color_aliases (color_code, color_name)
@@ -56,7 +57,8 @@ def import_color_aliases(connection_string: str) -> None:
 
     with engine.connect() as conn:
         result = conn.execute(text("SELECT COUNT(*) FROM color_aliases"))
-        new_count = result.fetchone()[0]
+        row = result.fetchone()
+        new_count = row[0] if row else 0
         print(f"  OK Database now has {new_count} color aliases")
 
     print("\nSample mappings:")

@@ -35,12 +35,13 @@ def generate_weekly_new_products_analysis(
 
     new_products["monitoring_end_date"] = new_products["first_sale_date"] + timedelta(days=lookback_days)
 
-    df_new = df[df["model"].isin(new_products["model"])].copy()
+    df_new = df[df["model"].isin(pd.Series(new_products["model"]))].copy()
 
     df_new = df_new.merge(
-        new_products[["model", "first_sale_date", "monitoring_end_date"]],
+        pd.DataFrame(new_products[["model", "first_sale_date", "monitoring_end_date"]]),
         on="model",
         how="left",
+        validate="many_to_one",
     )
 
     df_new = df_new[
@@ -48,15 +49,15 @@ def generate_weekly_new_products_analysis(
         & (df_new["data"] <= df_new["monitoring_end_date"])
         ]
 
-    df_new["week_start"] = df_new["data"].apply(get_week_start_wednesday)
+    df_new["week_start"] = pd.Series(df_new["data"]).apply(get_week_start_wednesday)
 
     weekly_sales = df_new.groupby(["model", "week_start"], as_index=False, observed=True)["ilosc"].sum()
 
-    model_week_ranges = []
-    for _, row in new_products.iterrows():
-        model = row["model"]
-        first_sale = row["first_sale_date"]
-        monitoring_end = row["monitoring_end_date"]
+    model_week_ranges: list[dict[str, object]] = []
+    for row_dict in new_products.to_dict(orient="records"):  # type: ignore[call-overload]
+        model = row_dict["model"]
+        first_sale = pd.Timestamp(row_dict["first_sale_date"]).to_pydatetime()
+        monitoring_end = pd.Timestamp(row_dict["monitoring_end_date"]).to_pydatetime()
 
         first_week = get_week_start_wednesday(first_sale)
         last_week = get_week_start_wednesday(min(monitoring_end, reference_date))
@@ -68,7 +69,7 @@ def generate_weekly_new_products_analysis(
 
     full_combinations = pd.DataFrame(model_week_ranges)
 
-    weekly_complete = full_combinations.merge(weekly_sales, on=["model", "week_start"], how="left",
+    weekly_complete = full_combinations.merge(pd.DataFrame(weekly_sales), on=["model", "week_start"], how="left",
                                               validate="many_to_many")
     weekly_complete["ilosc"] = weekly_complete["ilosc"].fillna(0).astype(int)
 
@@ -77,18 +78,20 @@ def generate_weekly_new_products_analysis(
     pivot_df.columns = [col.strftime("%Y-%m-%d") for col in pivot_df.columns]
     pivot_df = pivot_df.reset_index()
 
-    result = new_products[["model", "first_sale_date"]].merge(pivot_df, on="model", how="left")
+    result = pd.DataFrame(new_products[["model", "first_sale_date"]]).merge(
+        pivot_df, on="model", how="left", validate="many_to_one"
+    )
 
     result["first_sale_date"] = result["first_sale_date"].dt.strftime("%d-%m-%Y")
 
     result = result.rename(columns={"first_sale_date": "SALES_START_DATE", "model": "MODEL"})
 
     if stock_df is not None:
-        stock_df = stock_df.copy()
-        stock_df["model"] = stock_df["sku"].astype(str).str[:5]
-        descriptions = stock_df.groupby("model", observed=True)["nazwa"].first().reset_index()
+        stock_copy = stock_df.copy()
+        stock_copy["model"] = stock_copy["sku"].astype(str).str[:5]
+        descriptions = stock_copy.groupby("model", observed=True)["nazwa"].first().reset_index()
         descriptions.columns = ["MODEL", "DESCRIPTION"]
-        result = result.merge(descriptions, on="MODEL", how="left")
+        result = result.merge(descriptions, on="MODEL", how="left", validate="many_to_one")
 
     week_cols = [col for col in result.columns if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
     week_cols.sort()
@@ -99,7 +102,7 @@ def generate_weekly_new_products_analysis(
 
     result = result[base_cols + week_cols]
 
-    result = result.sort_values("SALES_START_DATE", ascending=False)
+    result = pd.DataFrame(result).sort_values(by="SALES_START_DATE", ascending=False)
 
     return result
 
@@ -132,7 +135,9 @@ def calculate_top_sales_report(
     )
     prev_year_sales.columns = ["model", "prev_year_sales"]
 
-    comparison = last_week_sales.merge(prev_year_sales, on="model", how="outer")
+    comparison = last_week_sales.merge(
+        pd.DataFrame(prev_year_sales), on="model", how="outer", validate="one_to_one"
+    )
     comparison["current_week_sales"] = comparison["current_week_sales"].fillna(0)
     comparison["prev_year_sales"] = comparison["prev_year_sales"].fillna(0)
 
@@ -147,8 +152,8 @@ def calculate_top_sales_report(
 
     comparison.loc[~mask & (comparison["current_week_sales"] > 0), "percent_change"] = 999.0
 
-    rising = comparison[comparison["difference"] > 0].sort_values("difference", ascending=False)
-    falling = comparison[comparison["difference"] < 0].sort_values("difference", ascending=True)
+    rising = pd.DataFrame(comparison[comparison["difference"] > 0]).sort_values(by="difference", ascending=False)
+    falling = pd.DataFrame(comparison[comparison["difference"] < 0]).sort_values(by="difference", ascending=True)
 
     rising_star = rising.iloc[0] if not rising.empty else None
     falling_star = falling.iloc[0] if not falling.empty else None
@@ -187,12 +192,12 @@ def calculate_top_products_by_type(
     monthly_sales["month"] = monthly_sales["data"].dt.to_period("M")  # type: ignore[attr-defined]
     monthly_agg = monthly_sales.groupby(["model", "month"], as_index=False, observed=True)["ilosc"].sum()
 
-    stats = monthly_agg.groupby("model", as_index=False, observed=True).agg(
+    stats = pd.DataFrame(monthly_agg.groupby("model", as_index=False, observed=True).agg(
         avg_sales=("ilosc", "mean"),
         sd_sales=("ilosc", "std"),
         months_with_sales=("month", "nunique"),
-    )
-    stats["sd_sales"] = stats["sd_sales"].fillna(0)
+    ))
+    stats["sd_sales"] = pd.Series(stats["sd_sales"]).fillna(0)
     stats["cv"] = 0.0
     mask = stats["avg_sales"] > 0
     stats.loc[mask, "cv"] = stats.loc[mask, "sd_sales"] / stats.loc[mask, "avg_sales"]
@@ -200,7 +205,7 @@ def calculate_top_products_by_type(
     first_sales = df.groupby("model", observed=True)["data"].min().reset_index()
     first_sales.columns = ["model", "first_sale"]
 
-    stats = stats.merge(first_sales, on="model", how="left")
+    stats = stats.merge(first_sales, on="model", how="left", validate="many_to_one")
 
     one_year_ago = reference_date - timedelta(days=365)
     stats["type"] = "regular"
@@ -208,11 +213,13 @@ def calculate_top_products_by_type(
     stats.loc[(stats["type"] != "new") & (stats["cv"] < cv_basic), "type"] = "basic"
     stats.loc[(stats["type"] != "new") & (stats["cv"] > cv_seasonal), "type"] = "seasonal"
 
-    model_color_sales = model_color_sales.merge(stats[["model", "type"]], on="model", how="left")
+    model_color_sales = model_color_sales.merge(
+        stats[["model", "type"]], on="model", how="left", validate="many_to_one"
+    )
 
-    top_by_type = {}
+    top_by_type: dict[str, pd.DataFrame] = {}
     for product_type in ["new", "seasonal", "regular", "basic"]:
-        type_products = model_color_sales[model_color_sales["type"] == product_type]
+        type_products = pd.DataFrame(model_color_sales[model_color_sales["type"] == product_type])
         top_5 = type_products.nlargest(5, "sales")
         top_by_type[product_type] = top_5
 
@@ -232,7 +239,7 @@ def _calculate_percent_change(current: float, prior: float) -> float:
 def calculate_monthly_yoy_by_category(
         sales_df: pd.DataFrame,
         category_df: pd.DataFrame,
-        reference_date: datetime = None
+        reference_date: datetime | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     if reference_date is None:
         reference_date = datetime.now()
@@ -255,18 +262,22 @@ def calculate_monthly_yoy_by_category(
     current_sales = sales_df[(sales_df["data"] >= current_start) & (sales_df["data"] <= current_end)].copy()
     prior_sales = sales_df[(sales_df["data"] >= prior_start) & (sales_df["data"] <= prior_end)].copy()
 
-    current_sales["model"] = current_sales["sku"].str[:5]
-    prior_sales["model"] = prior_sales["sku"].str[:5]
+    current_sales["model"] = pd.Series(current_sales["sku"]).str[:5]
+    prior_sales["model"] = pd.Series(prior_sales["sku"]).str[:5]
 
-    category_lookup = category_df[["Model", "Podgrupa", "Kategoria", "Nazwa"]].copy()
-    category_lookup["model"] = category_lookup["Model"].str.upper()
+    category_lookup = pd.DataFrame(category_df[["Model", "Podgrupa", "Kategoria", "Nazwa"]]).copy()
+    category_lookup["model"] = pd.Series(category_lookup["Model"]).str.upper()
     category_lookup = category_lookup[["model", "Podgrupa", "Kategoria", "Nazwa"]]
 
-    current_with_cat = current_sales.merge(category_lookup, on="model", how="left")
-    prior_with_cat = prior_sales.merge(category_lookup, on="model", how="left")
+    current_with_cat = current_sales.merge(
+        pd.DataFrame(category_lookup), on="model", how="left", validate="many_to_one"
+    )
+    prior_with_cat = prior_sales.merge(
+        pd.DataFrame(category_lookup), on="model", how="left", validate="many_to_one"
+    )
 
     uncategorized_current = current_with_cat[current_with_cat["Podgrupa"].isna()]
-    uncategorized_count = uncategorized_current["model"].nunique()
+    uncategorized_count = pd.Series(uncategorized_current["model"]).nunique()
     uncategorized_sales = uncategorized_current["ilosc"].sum()
 
     current_agg = current_with_cat.groupby(
@@ -278,7 +289,7 @@ def calculate_monthly_yoy_by_category(
     )["ilosc"].sum().rename(columns={"ilosc": "prior_qty"})  # type: ignore[union-attr]
 
     kategoria_details = current_agg.merge(
-        prior_agg, on=["Podgrupa", "Kategoria"], how="outer"
+        prior_agg, on=["Podgrupa", "Kategoria"], how="outer", validate="one_to_one"
     ).fillna({"current_qty": 0, "prior_qty": 0})
 
     kategoria_details["difference"] = kategoria_details["current_qty"] - kategoria_details["prior_qty"]
@@ -290,18 +301,18 @@ def calculate_monthly_yoy_by_category(
 
     kategoria_details = kategoria_details.sort_values(["Podgrupa", "current_qty"], ascending=[True, False])
 
-    podgrupa_summary = kategoria_details.groupby("Podgrupa", as_index=False, observed=True).agg({
+    podgrupa_summary = pd.DataFrame(kategoria_details.groupby("Podgrupa", as_index=False, observed=True).agg({
         "current_qty": "sum",
         "prior_qty": "sum",
         "difference": "sum"
-    })
+    }))
 
     podgrupa_summary["percent_change"] = podgrupa_summary.apply(
         lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"]),
         axis=1
     )
 
-    podgrupa_summary = podgrupa_summary.sort_values("current_qty", ascending=False)
+    podgrupa_summary = pd.DataFrame(podgrupa_summary).sort_values(by="current_qty", ascending=False)
 
     rising_count = len(kategoria_details[kategoria_details["difference"] > 0])
     falling_count = len(kategoria_details[kategoria_details["difference"] < 0])
@@ -403,20 +414,21 @@ def calculate_worst_models_12m(
     if df.empty:
         return pd.DataFrame()
 
-    df["model"] = df["sku"].astype(str).str[:5]
+    df["model"] = pd.Series(df["sku"]).astype(str).str[:5]
 
     if exclude_models:
-        df = df[~df["model"].isin(exclude_models)]
-        if df.empty:
+        filtered = pd.DataFrame(df[~pd.Series(df["model"]).isin(list(exclude_models))])
+        if filtered.empty:
             return pd.DataFrame()
+        df = filtered
 
-    df["color"] = df["sku"].astype(str).str[5:7]
+    df["color"] = pd.Series(df["sku"]).astype(str).str[5:7]
     df["year_month"] = df["data"].dt.to_period("M")  # type: ignore
 
-    model_color_stats = df.groupby(["model", "color"], observed=True).agg(
+    model_color_stats = pd.DataFrame(df.groupby(["model", "color"], observed=True).agg(
         total_sales=("ilosc", "sum"),
         months_active=("year_month", "nunique")
-    ).reset_index()
+    ).reset_index())
 
     model_color_stats["monthly_velocity"] = (
             model_color_stats["total_sales"] / model_color_stats["months_active"]
@@ -424,15 +436,16 @@ def calculate_worst_models_12m(
 
     model_color_stats = _join_material_type(model_color_stats, model_metadata_df)
 
-    result = model_color_stats.nsmallest(top_n, "monthly_velocity")
+    result = pd.DataFrame(model_color_stats.nsmallest(top_n, "monthly_velocity"))
 
-    return result.rename(columns={
+    renamed = pd.DataFrame(result.rename(columns={
         "model": "MODEL",
         "color": "COLOR",
         "material_type": "MATERIAL_TYPE",
         "monthly_velocity": "MONTHLY_VELOCITY",
         "total_sales": "TOTAL_SALES_12M"
-    })[["MODEL", "COLOR", "MATERIAL_TYPE", "MONTHLY_VELOCITY", "TOTAL_SALES_12M"]]
+    }))
+    return pd.DataFrame(renamed[["MODEL", "COLOR", "MATERIAL_TYPE", "MONTHLY_VELOCITY", "TOTAL_SALES_12M"]])
 
 
 def _join_material_type(
@@ -455,7 +468,8 @@ def _join_material_type(
     stats_df = stats_df.merge(
         metadata_cols[["model", material_col]],
         on="model",
-        how="left"
+        how="left",
+        validate="many_to_one",
     )
     stats_df["material_type"] = stats_df[material_col].fillna("Unknown")
     stats_df = stats_df.drop(columns=[material_col])
@@ -477,35 +491,36 @@ def calculate_worst_rotating_models(
     df["model"] = df["sku"].astype(str).str[:5]
 
     if exclude_models:
-        df = df[~df["model"].isin(exclude_models)]
-        if df.empty:
+        filtered = pd.DataFrame(df[~pd.Series(df["model"]).isin(list(exclude_models))])
+        if filtered.empty:
             return pd.DataFrame()
+        df = filtered
 
-    model_stats = df.groupby("model", observed=True).agg(
+    model_stats = pd.DataFrame(df.groupby("model", observed=True).agg(
         total_sales=("ilosc", "sum"),
         first_sale=("data", "min")
-    ).reset_index()
+    ).reset_index())
 
     timedelta_series = reference_date - model_stats["first_sale"]
     days_since_first: pd.Series = timedelta_series.dt.days  # type: ignore[assignment]
     model_stats["months_active"] = (days_since_first / 30.44).round(1)
 
-    model_stats = model_stats[model_stats["months_active"] > 0]
+    model_stats = pd.DataFrame(model_stats[model_stats["months_active"] > 0])
 
     model_stats["monthly_velocity"] = (
             model_stats["total_sales"] / model_stats["months_active"]
     ).round(2)
 
-    result = model_stats.nsmallest(top_n, "monthly_velocity")
+    result = pd.DataFrame(model_stats.nsmallest(top_n, "monthly_velocity"))
 
-    result = result.rename(columns={
+    result = pd.DataFrame(result.rename(columns={
         "model": "MODEL",
         "first_sale": "FIRST_SALE_DATE",
         "months_active": "MONTHS_ACTIVE",
         "total_sales": "TOTAL_SALES",
         "monthly_velocity": "MONTHLY_VELOCITY"
-    })
+    }))
 
     result["FIRST_SALE_DATE"] = result["FIRST_SALE_DATE"].dt.strftime("%Y-%m-%d")
 
-    return result[["MODEL", "FIRST_SALE_DATE", "MONTHS_ACTIVE", "TOTAL_SALES", "MONTHLY_VELOCITY"]]
+    return pd.DataFrame(result[["MODEL", "FIRST_SALE_DATE", "MONTHS_ACTIVE", "TOTAL_SALES", "MONTHLY_VELOCITY"]])

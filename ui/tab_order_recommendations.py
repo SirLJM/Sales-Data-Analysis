@@ -291,8 +291,8 @@ def _render_results(context: dict) -> None:
 
 def _generate_recommendations(context: dict) -> None:
     logger.info("Starting recommendation generation")
-    analyzer = context["analyzer"]
-    seasonal_data = context["seasonal_data"]
+    analyzer: SalesAnalyzer = context["analyzer"]
+    seasonal_data: pd.DataFrame = context["seasonal_data"]
     stock_df = context.get("stock_df")
     forecast_df = context.get("forecast_df")
     settings = get_settings()
@@ -300,8 +300,7 @@ def _generate_recommendations(context: dict) -> None:
     forecast_source = st.session_state.get("forecast_source", "External")
     use_ml = forecast_source.startswith("ML")
 
-    # noinspection PyTypeChecker
-    with st.spinner(t(Keys.CALCULATING_PRIORITIES)):
+    with st.spinner(t(Keys.CALCULATING_PRIORITIES)):  # type: ignore[attr-defined]
         try:
             sku_summary = _build_sku_summary(analyzer, seasonal_data, stock_df, settings)
 
@@ -313,6 +312,10 @@ def _generate_recommendations(context: dict) -> None:
                     st.error(t(Keys.NO_ML_FORECASTS))
                     return
                 logger.info("ML forecast loaded: %d rows", len(forecast_df))
+
+            if forecast_df is None:
+                st.error(t(Keys.LOAD_STOCK_AND_FORECAST))
+                return
 
             forecast_time = settings["lead_time"]
             recommendations = SalesAnalyzer.generate_order_recommendations(
@@ -340,7 +343,7 @@ def _generate_recommendations(context: dict) -> None:
             st.error(t(Keys.ERR_GENERATING_RECOMMENDATIONS).format(error=e))
 
 
-def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: pd.DataFrame | None,
+def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: pd.DataFrame, stock_df: pd.DataFrame | None,
                        settings: dict) -> pd.DataFrame:
     sku_summary = analyzer.aggregate_by_sku()
     sku_summary = analyzer.classify_sku_type(
@@ -348,7 +351,6 @@ def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: p
         cv_basic=settings["cv_thresholds"]["basic"],
         cv_seasonal=settings["cv_thresholds"]["seasonal"],
     )
-    # noinspection PyTypeChecker
     sku_summary = analyzer.calculate_safety_stock_and_rop(
         sku_summary,
         seasonal_data,
@@ -369,7 +371,8 @@ def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: dict, stock_df: p
 
 def _period_to_timestamp(p) -> pd.Timestamp:
     if hasattr(p, "to_timestamp"):
-        return p.to_timestamp()
+        result = p.to_timestamp()
+        return pd.Timestamp(result) if not pd.isna(result) else pd.Timestamp.now()
     return pd.Timestamp(str(p))
 
 
@@ -494,14 +497,14 @@ def _apply_facility_filters(recommendations: dict) -> dict:
 
 
 def _build_order_item(
-    idx: int,
-    row: pd.Series,
-    recommendations: dict,
-    color_aliases: dict,
-    model_metadata_df: pd.DataFrame | None,
+        idx: int,
+        row: pd.Series,
+        recommendations: dict,
+        color_aliases: dict,
+        model_metadata_df: pd.DataFrame | None,
 ) -> dict:
-    model = row["MODEL"]
-    color = row["COLOR"]
+    model = str(row["MODEL"])
+    color = str(row["COLOR"])
 
     size_quantities = SalesAnalyzer.get_size_quantities_for_model_color(
         recommendations["priority_skus"], model, color
@@ -520,7 +523,7 @@ def _build_order_item(
         "Color Name": color_aliases.get(color, color),
         "Priority": f"{row['PRIORITY_SCORE']:.1f}",
         "Deficit": int(row["DEFICIT"]),
-        "Forecast": int(row.get("FORECAST_LEADTIME", 0)),
+        "Forecast": int(row.get("FORECAST_LEADTIME") or 0),
         ColumnNames.SIZE_QTY: sizes_str,
     }
 
@@ -533,9 +536,9 @@ def _build_order_item(
 
 
 def _render_order_selection_table(
-    top_model_colors: pd.DataFrame,
-    recommendations: dict,
-    model_metadata_df: pd.DataFrame | None,
+        top_model_colors: pd.DataFrame,
+        recommendations: dict,
+        model_metadata_df: pd.DataFrame | None,
 ) -> None:
     color_aliases = load_color_aliases()
 
@@ -580,7 +583,7 @@ def _parse_size_quantities(sizes_str: str) -> dict[str, int]:
 
 
 def _process_selections(edited_df: pd.DataFrame) -> None:
-    selected_rows = edited_df[edited_df["Select"] == True]
+    selected_rows = edited_df[edited_df["Select"].fillna(False)]
 
     if selected_rows.empty:
         return
@@ -592,7 +595,7 @@ def _process_selections(edited_df: pd.DataFrame) -> None:
             "priority_score": float(row["Priority"]),
             "deficit": int(row["Deficit"]),
             "forecast": int(row["Forecast"]),
-            "sizes": _parse_size_quantities(row[ColumnNames.SIZE_QTY]),
+            "sizes": _parse_size_quantities(str(row[ColumnNames.SIZE_QTY])),
         }
         for _, row in selected_rows.iterrows()
     ]

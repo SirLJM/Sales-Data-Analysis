@@ -23,7 +23,8 @@ def create_color_aliases_table(connection_string: str) -> None:
             result = conn.execute(
                 text("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'color_aliases')")
             )
-            table_exists = result.fetchone()[0]
+            row = result.fetchone()
+            table_exists = row[0] if row else False
 
             if table_exists:
                 print("Table 'color_aliases' already exists")

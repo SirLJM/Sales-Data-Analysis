@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
 
 from utils.logging_config import get_logger
+from .utils import find_column
 
 logger = get_logger("forecast_comparison")
 
@@ -27,22 +29,24 @@ def align_forecasts(
         external = _aggregate_external_to_sku_monthly(external_forecast_df)
         actual = _aggregate_actual_to_sku_monthly(actual_sales_df)
 
-    internal_agg = internal.groupby(["entity_id", "year_month"], as_index=False, observed=True).agg({
+    internal_agg = pd.DataFrame(internal.groupby(["entity_id", "year_month"], as_index=False, observed=True).agg({
         "forecast": "sum",
         "method": "first",
-    })
-    internal_agg = internal_agg.rename(columns={"forecast": "internal_forecast"})
+    }))
+    internal_agg: DataFrame = pd.DataFrame(internal_agg.rename(columns={"forecast": "internal_forecast"}))
 
     comparison = internal_agg.merge(
         external,
         on=["entity_id", "year_month"],
         how="left",
+        validate="many_to_one",
     )
 
     comparison = comparison.merge(
         actual,
         on=["entity_id", "year_month"],
         how="left",
+        validate="many_to_one",
     )
 
     with pd.option_context("future.no_silent_downcasting", True):
@@ -60,15 +64,15 @@ def _aggregate_to_monthly(
         output_col: str,
         use_model: bool = False,
 ) -> pd.DataFrame:
-    empty_result = pd.DataFrame(columns=["entity_id", "year_month", output_col])
+    empty_result = pd.DataFrame(columns=pd.Index(["entity_id", "year_month", output_col]))
 
     if df is None or df.empty:
         return empty_result
 
     df = df.copy()
-    date_col = _find_column(df, date_candidates)
-    sku_col = _find_column(df, sku_candidates)
-    value_col = _find_column(df, value_candidates)
+    date_col = find_column(df, date_candidates)
+    sku_col = find_column(df, sku_candidates)
+    value_col = find_column(df, value_candidates)
 
     if date_col is None or sku_col is None or value_col is None:
         return empty_result
@@ -76,8 +80,8 @@ def _aggregate_to_monthly(
     df["entity_id"] = df[sku_col].astype(str).str[:5] if use_model else df[sku_col].astype(str)
     df["year_month"] = pd.to_datetime(df[date_col]).dt.to_period("M").astype(str)  # type: ignore
 
-    monthly = df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[value_col]].sum()
-    return monthly.rename(columns={value_col: output_col})
+    monthly = pd.DataFrame(df.groupby(["entity_id", "year_month"], as_index=False, observed=True)[[value_col]].sum())
+    return pd.DataFrame(monthly.rename(columns={value_col: output_col}))
 
 
 def _aggregate_external_to_model_monthly(forecast_df: pd.DataFrame) -> pd.DataFrame:
@@ -143,12 +147,12 @@ def _determine_winner(internal_mape: float, external_mape: float) -> tuple[str, 
 
 
 def _compute_entity_metrics(entity_id: str, group: pd.DataFrame) -> dict | None:
-    valid = group[group["actual"] > 0]
+    valid = pd.DataFrame(group[group["actual"] > 0])
     if valid.empty:
         return None
 
-    internal = _calculate_forecast_metrics(valid["internal_forecast"], valid["actual"])
-    external = _calculate_forecast_metrics(valid["external_forecast"], valid["actual"])
+    internal = _calculate_forecast_metrics(pd.Series(valid["internal_forecast"]), pd.Series(valid["actual"]))
+    external = _calculate_forecast_metrics(pd.Series(valid["external_forecast"]), pd.Series(valid["actual"]))
     winner, improvement = _determine_winner(internal["mape"], external["mape"])
 
     return {
@@ -175,7 +179,7 @@ def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
 
     results = []
     for entity_id, group in comparison_df.groupby("entity_id", observed=True):
-        metrics = _compute_entity_metrics(entity_id, group)
+        metrics = _compute_entity_metrics(str(entity_id), pd.DataFrame(group))
         if metrics:
             results.append(metrics)
 
@@ -183,8 +187,8 @@ def calculate_comparison_metrics(comparison_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _build_type_map(entity_metadata: pd.DataFrame) -> dict | None:
-    id_col = _find_column(entity_metadata, ["entity_id", "SKU", "sku", "MODEL", "model"])
-    type_col = _find_column(entity_metadata, ["TYPE", "type", "product_type"])
+    id_col = find_column(entity_metadata, ["entity_id", "SKU", "sku", "MODEL", "model"])
+    type_col = find_column(entity_metadata, ["TYPE", "type", "product_type"])
 
     if not id_col or not type_col:
         return None
@@ -207,7 +211,7 @@ def _add_product_type_column(metrics_df: pd.DataFrame, entity_metadata: pd.DataF
     if type_map is None:
         df["product_type"] = "unknown"
     else:
-        df["product_type"] = df["entity_id"].map(type_map).fillna("unknown")
+        df["product_type"] = df["entity_id"].map(type_map).fillna("unknown")  # type: ignore[arg-type]
 
     return df
 
@@ -240,7 +244,8 @@ def aggregate_comparison_by_type(
         return pd.DataFrame()
 
     metrics_df = _add_product_type_column(metrics_df, entity_metadata)
-    summary = [_summarize_group(ptype, group) for ptype, group in metrics_df.groupby("product_type", observed=True)]
+    summary = [_summarize_group(str(ptype), pd.DataFrame(group)) for ptype, group in
+               metrics_df.groupby("product_type", observed=True)]
 
     return pd.DataFrame(summary)
 
@@ -267,10 +272,3 @@ def calculate_overall_summary(metrics_df: pd.DataFrame) -> dict:
         "avg_external_bias": metrics_df["external_bias"].mean(),
         "median_improvement": metrics_df["improvement_pct"].median(),
     }
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None

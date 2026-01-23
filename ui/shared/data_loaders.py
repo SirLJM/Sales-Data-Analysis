@@ -107,9 +107,19 @@ def _parse_forecast_date(forecast_df: pd.DataFrame) -> pd.Timestamp | None:
     if "generated_date" not in forecast_df.columns:
         return None
     loaded_date = forecast_df["generated_date"].iloc[0]
-    if loaded_date is None:
+    if loaded_date is None or bool(pd.isnull(loaded_date)):
         return None
-    return loaded_date if isinstance(loaded_date, pd.Timestamp) else pd.Timestamp(loaded_date)
+    if isinstance(loaded_date, pd.Timestamp):
+        return loaded_date
+    try:
+        result = pd.Timestamp(loaded_date)
+        if bool(pd.isnull(result)):
+            return None
+        if isinstance(result, pd.Timestamp):
+            return result
+        return None
+    except (ValueError, TypeError):
+        return None
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)

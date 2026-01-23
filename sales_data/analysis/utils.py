@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pandas as pd
+
 
 def get_week_start_monday(date: datetime) -> datetime:
     days_since_mon = date.weekday()
@@ -35,3 +37,7 @@ def parse_sku_components(sku: str) -> dict[str, str]:
         "color": sku_str[5:7] if len(sku_str) >= 7 else "",
         "size": sku_str[7:9] if len(sku_str) >= 9 else "",
     }
+
+
+def find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    return next((col for col in candidates if col in df.columns), None)

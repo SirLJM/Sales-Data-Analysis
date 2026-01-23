@@ -5,6 +5,8 @@ import pandas as pd
 
 from utils.logging_config import get_logger
 
+from .utils import find_column
+
 logger = get_logger("ml_feature_engineering")
 
 PRODUCT_TYPE_ENCODING = {
@@ -19,10 +21,12 @@ def create_time_features(df: pd.DataFrame, date_col: str = "period") -> pd.DataF
     result = df.copy()
     periods = pd.PeriodIndex(result[date_col])
 
-    result["month"] = periods.month
-    result["quarter"] = periods.quarter
-    result["month_sin"] = np.sin(2 * np.pi * periods.month / 12)
-    result["month_cos"] = np.cos(2 * np.pi * periods.month / 12)
+    month_array = np.array([p.month for p in periods])
+    quarter_array = np.array([p.quarter for p in periods])
+    result["month"] = month_array
+    result["quarter"] = quarter_array
+    result["month_sin"] = np.sin(2 * np.pi * month_array / 12)
+    result["month_cos"] = np.cos(2 * np.pi * month_array / 12)
 
     return result
 
@@ -123,8 +127,9 @@ def prepare_ml_features_for_prediction(
     if rolling_windows is None:
         rolling_windows = [3, 6, 12]
 
-    last_period = series.index[-1]
-    future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
+    last_period = pd.Period(series.index[-1], freq="M")
+    next_period = last_period + 1  # type: ignore[operator]
+    future_periods = pd.period_range(start=next_period, periods=horizon, freq="M")
 
     extended_series = series.copy()
     all_future_features = []
@@ -197,9 +202,9 @@ def _prepare_series(
     if monthly_agg is None or monthly_agg.empty:
         return None
 
-    id_col = _find_column(monthly_agg, ["entity_id", "sku", "SKU", "model", "MODEL"])
-    month_col = _find_column(monthly_agg, ["year_month", "month", "MONTH"])
-    qty_col = _find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+    id_col = find_column(monthly_agg, ["entity_id", "sku", "SKU", "model", "MODEL"])
+    month_col = find_column(monthly_agg, ["year_month", "month", "MONTH"])
+    qty_col = find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
 
     if id_col is None or month_col is None or qty_col is None:
         return None
@@ -212,10 +217,11 @@ def _prepare_series(
     else:
         entity_data = monthly_agg[monthly_agg[id_col] == entity_id]
 
+    entity_data = pd.DataFrame(entity_data)
     if entity_data.empty:
         return None
 
-    entity_data = entity_data.sort_values(month_col)
+    entity_data = pd.DataFrame(entity_data.sort_values(by=str(month_col)))
     series = pd.Series(
         entity_data[qty_col].values,
         index=pd.PeriodIndex(entity_data[month_col], freq="M"),
@@ -246,7 +252,7 @@ def _get_entity_stats(
 
     id_col = "MODEL" if entity_type == "model" else "SKU"
     if id_col not in sku_stats.columns:
-        id_col = _find_column(sku_stats, ["MODEL", "SKU", "model", "sku", "entity_id"])
+        id_col = find_column(sku_stats, ["MODEL", "SKU", "model", "sku", "entity_id"])
 
     if id_col is None:
         return None, None
@@ -257,8 +263,8 @@ def _get_entity_stats(
 
     row = entity_stats.iloc[0]
 
-    type_col = _find_column(sku_stats, ["TYPE", "type", "product_type"])
-    cv_col = _find_column(sku_stats, ["CV", "cv"])
+    type_col = find_column(sku_stats, ["TYPE", "type", "product_type"])
+    cv_col = find_column(sku_stats, ["CV", "cv"])
 
     product_type = row[type_col] if type_col else None
     cv = row[cv_col] if cv_col else None
@@ -292,10 +298,3 @@ def _build_feature_dataframe(
     ], axis=1)
 
     return features_df
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None

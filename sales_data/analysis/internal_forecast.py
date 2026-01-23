@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
+if TYPE_CHECKING:
+    from statsmodels.tsa.statespace.sarimax import SARIMAXResultsWrapper
+
 from utils.logging_config import get_logger
+
+from .utils import find_column
 
 logger = get_logger("internal_forecast")
 
@@ -49,9 +55,9 @@ def prepare_monthly_series(
     if monthly_agg is None or monthly_agg.empty:
         return None
 
-    id_col = _find_column(monthly_agg, ["entity_id", "sku", "SKU", "model", "MODEL"])
-    month_col = _find_column(monthly_agg, ["year_month", "month", "MONTH"])
-    qty_col = _find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+    id_col = find_column(monthly_agg, ["entity_id", "sku", "SKU", "model", "MODEL"])
+    month_col = find_column(monthly_agg, ["year_month", "month", "MONTH"])
+    qty_col = find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
 
     if id_col is None or month_col is None or qty_col is None:
         return None
@@ -67,7 +73,7 @@ def prepare_monthly_series(
     if entity_data.empty or len(entity_data) < MIN_MONTHS_FOR_FORECAST:
         return None
 
-    entity_data = entity_data.sort_values(month_col)
+    entity_data = pd.DataFrame(entity_data).sort_values(by=month_col)
     series = pd.Series(
         entity_data[qty_col].values,
         index=pd.PeriodIndex(entity_data[month_col], freq="M"),
@@ -124,14 +130,14 @@ def generate_forecast_moving_avg(
     weights = np.array([0.5, 0.3, 0.2])[:window]
     weights = weights / weights.sum()
 
-    recent = series.tail(window).values
+    recent = np.asarray(series.tail(window).values)
     if len(recent) < window:
         weights = weights[-len(recent):]
         weights = weights / weights.sum()
 
-    forecast_value = np.dot(recent, weights)
+    forecast_value = float(np.dot(recent, weights))
 
-    last_period = series.index[-1]
+    last_period = cast(pd.Period, series.index[-1])
     future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
     return pd.DataFrame({
@@ -168,10 +174,10 @@ def generate_forecast_exp_smoothing(
         fitted = model.fit(optimized=True)
         forecast = fitted.forecast(horizon)
 
-        last_period = series.index[-1]
+        last_period = cast(pd.Period, series.index[-1])
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
-        std_resid = np.std(fitted.resid) if hasattr(fitted, "resid") else forecast.mean() * 0.2
+        std_resid = float(np.std(fitted.resid)) if hasattr(fitted, "resid") else float(forecast.mean() * 0.2)
 
         return pd.DataFrame({
             "period": future_periods,
@@ -211,10 +217,10 @@ def generate_forecast_holt_winters(
         fitted = model.fit(optimized=True)
         forecast = fitted.forecast(horizon)
 
-        last_period = series.index[-1]
+        last_period = cast(pd.Period, series.index[-1])
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
-        std_resid = np.std(fitted.resid) if hasattr(fitted, "resid") else forecast.mean() * 0.2
+        std_resid = float(np.std(fitted.resid)) if hasattr(fitted, "resid") else float(forecast.mean() * 0.2)
 
         return pd.DataFrame({
             "period": future_periods,
@@ -243,12 +249,12 @@ def generate_forecast_sarima(
             enforce_invertibility=False,
         )
 
-        fitted = model.fit(disp=False, maxiter=100)
-        forecast_result = fitted.get_forecast(steps=horizon)
+        fitted_model = cast("SARIMAXResultsWrapper", model.fit(disp=False, maxiter=100))
+        forecast_result = fitted_model.get_forecast(steps=horizon)
         forecast = forecast_result.predicted_mean
         conf_int = forecast_result.conf_int(alpha=0.05)
 
-        last_period = series.index[-1]
+        last_period = cast(pd.Period, series.index[-1])
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
         return pd.DataFrame({
@@ -269,7 +275,7 @@ def generate_forecast_auto_arima(
         seasonal: bool = True,
         sp: int = 12,
 ) -> pd.DataFrame:
-    if not SKTIME_AVAILABLE:
+    if not SKTIME_AVAILABLE or AutoARIMA is None:
         logger.warning("sktime not available, falling back to SARIMA")
         return generate_forecast_sarima(series, horizon)
 
@@ -293,21 +299,26 @@ def generate_forecast_auto_arima(
 
         model.fit(y)
         fh = list(range(1, horizon + 1))
-        forecast = model.predict(fh=fh)
-        conf_int = model.predict_interval(fh=fh, coverage=0.95)
+        forecast_series = pd.Series(model.predict(fh=fh))
+        conf_int_df = pd.DataFrame(model.predict_interval(fh=fh, coverage=0.95))
 
-        last_period = series.index[-1]
+        last_period = cast(pd.Period, series.index[-1])
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
-        lower_col = conf_int.columns[0] if len(conf_int.columns) >= 1 else None
-        upper_col = conf_int.columns[1] if len(conf_int.columns) >= 2 else None
+        forecast_vals: NDArray[Any] = np.asarray(forecast_series.values)
+        lower_vals: NDArray[Any]
+        upper_vals: NDArray[Any]
 
-        lower_vals = conf_int[lower_col].values if lower_col else forecast.values * 0.8
-        upper_vals = conf_int[upper_col].values if upper_col else forecast.values * 1.2
+        if len(conf_int_df.columns) >= 2:
+            lower_vals = np.asarray(conf_int_df.iloc[:, 0].values)
+            upper_vals = np.asarray(conf_int_df.iloc[:, 1].values)
+        else:
+            lower_vals = forecast_vals * 0.8
+            upper_vals = forecast_vals * 1.2
 
         return pd.DataFrame({
             "period": future_periods,
-            "forecast": forecast.values,
+            "forecast": forecast_vals,
             "lower_ci": lower_vals,
             "upper_ci": upper_vals,
         })
@@ -423,10 +434,3 @@ def batch_generate_forecasts(
         combined_df = pd.DataFrame()
 
     return combined_df, stats
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None

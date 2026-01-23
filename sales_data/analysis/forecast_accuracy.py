@@ -20,7 +20,7 @@ def _ensure_entity_col(df: pd.DataFrame, entity_col: str) -> pd.DataFrame:
 
 
 def _filter_date_range(df: pd.DataFrame, start: datetime, end: datetime) -> pd.DataFrame:
-    return df[(df["date"] >= start.date()) & (df["date"] <= end.date())]
+    return pd.DataFrame(df[(df["date"] >= start.date()) & (df["date"] <= end.date())])
 
 
 def prepare_daily_comparison(
@@ -61,7 +61,7 @@ def _aggregate_daily_sales(
     df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore
     df = _ensure_entity_col(df, entity_col)
     df = _filter_date_range(df, start, end)
-    return df.groupby([entity_col, "date"], as_index=False, observed=True).agg(actual=("ilosc", "sum"))
+    return pd.DataFrame(df.groupby([entity_col, "date"], as_index=False, observed=True).agg(actual=("ilosc", "sum")))
 
 
 def _prepare_daily_forecast(
@@ -70,7 +70,7 @@ def _prepare_daily_forecast(
     df = forecast_df.copy()
     df["date"] = pd.to_datetime(df["data"]).dt.date  # type: ignore
     df = _ensure_entity_col(df, entity_col)
-    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(forecast=("forecast", "sum"))
+    daily = pd.DataFrame(df.groupby([entity_col, "date"], as_index=False, observed=True).agg(forecast=("forecast", "sum")))
     return _filter_date_range(daily, start, end)
 
 
@@ -83,9 +83,9 @@ def _prepare_daily_stock(
     df = stock_df.copy()
     df["date"] = pd.to_datetime(df["snapshot_date"]).dt.date  # type: ignore
     df = _ensure_entity_col(df, entity_col)
-    daily = df.groupby([entity_col, "date"], as_index=False, observed=True).agg(
+    daily = pd.DataFrame(df.groupby([entity_col, "date"], as_index=False, observed=True).agg(
         stock_level=("available_stock", "sum")
-    )
+    ))
     return _filter_date_range(daily, start, end)
 
 
@@ -94,8 +94,8 @@ def calculate_accuracy_metrics(comparison_df: pd.DataFrame, entity_col: str) -> 
         return pd.DataFrame()
 
     def compute_entity_metrics(group: pd.DataFrame) -> pd.Series:
-        g_with_stock = group[group["had_stock"]]
-        g_without_stock = group[~group["had_stock"]]
+        g_with_stock = pd.DataFrame(group[group["had_stock"]])
+        g_without_stock = pd.DataFrame(group[~group["had_stock"]])
 
         forecast_total = g_with_stock["forecast"].sum() if not g_with_stock.empty else 0
         actual_total = g_with_stock["actual"].sum() if not g_with_stock.empty else 0
@@ -235,14 +235,12 @@ def calculate_accuracy_trend(
     comparison["date"] = pd.to_datetime(comparison["date"])
 
     if period == "week":
-        # noinspection PyUnresolvedReferences
-        comparison["period"] = comparison["date"].dt.to_period("W").apply(lambda x: x.start_time)
+        comparison["period"] = comparison["date"].dt.to_period("W").apply(lambda x: x.start_time)  # type: ignore[union-attr]
     else:
-        # noinspection PyUnresolvedReferences
-        comparison["period"] = comparison["date"].dt.to_period("M").apply(lambda x: x.start_time)
+        comparison["period"] = comparison["date"].dt.to_period("M").apply(lambda x: x.start_time)  # type: ignore[union-attr]
 
     def compute_period_metrics(group: pd.DataFrame) -> pd.Series:
-        g_with_stock = group[group["had_stock"]]
+        g_with_stock = pd.DataFrame(group[group["had_stock"]])
         mape = _calculate_mape(g_with_stock)
         bias = _calculate_bias(g_with_stock)
         return pd.Series({"MAPE": mape, "BIAS": bias})
@@ -291,8 +289,8 @@ def get_overall_metrics(accuracy_df: pd.DataFrame) -> dict:
             "total_days_stockout": 0,
         }
 
-    valid_mape = accuracy_df[accuracy_df["MAPE"].notna()]["MAPE"]
-    valid_bias = accuracy_df[accuracy_df["BIAS"].notna()]["BIAS"]
+    valid_mape = pd.Series(accuracy_df[accuracy_df["MAPE"].notna()]["MAPE"])
+    valid_bias = pd.Series(accuracy_df[accuracy_df["BIAS"].notna()]["BIAS"])
 
     result = {
         "mape": round(valid_mape.mean(), 2) if not valid_mape.empty else None,

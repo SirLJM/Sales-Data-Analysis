@@ -60,7 +60,8 @@ def main():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT version()"))
-            version = result.fetchone()[0]
+            row = result.fetchone()
+            version = str(row[0]) if row else "Unknown"
             print("   Connected successfully!")
             print(f"   PostgreSQL version: {version.split(',')[0]}")
     except Exception as e:
@@ -129,7 +130,8 @@ def main():
                     """
                 )
             )
-            trigger_count = result.fetchone()[0]
+            trigger_row = result.fetchone()
+            trigger_count = trigger_row[0] if trigger_row else 0
             print(f"\n   Found {trigger_count} triggers")
 
     except Exception as e:

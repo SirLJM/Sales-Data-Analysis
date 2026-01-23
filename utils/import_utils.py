@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,35 @@ from typing import Any
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
+
+_migration_logger: logging.Logger | None = None
+
+
+def get_migration_logger() -> logging.Logger:
+    global _migration_logger
+    if _migration_logger is None:
+        _migration_logger = logging.getLogger("migration")
+        if not _migration_logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            _migration_logger.addHandler(handler)
+            _migration_logger.setLevel(logging.INFO)
+    return _migration_logger
+
+
+def log_info(message: str) -> None:
+    print(message)
+    get_migration_logger().info(message)
+
+
+def log_error(message: str) -> None:
+    print(message)
+    get_migration_logger().error(message)
+
+
+def log_header(title: str) -> None:
+    header = "\n" + "=" * 60 + "\n" + title + "\n" + "=" * 60
+    log_info(header)
 
 
 def compute_file_hash(file_path: Path) -> str:
@@ -35,7 +65,7 @@ def is_file_imported(engine: Engine, file_hash: str, file_type: str) -> bool:
         return bool(row[0] > 0)
 
 
-def insert_sales_batch(engine: Engine, batch_data: list[dict]) -> int:
+def insert_sales_batch(engine: Engine, batch_data: list[dict[str, Any]]) -> int:
     with engine.connect() as conn:
         conn.execute(
             text(
@@ -75,7 +105,7 @@ def build_sales_record(
     end_date: datetime,
     batch_id: str,
     data_source: str = "current",
-) -> dict:
+) -> dict[str, Any]:
     sku = row["sku"]
     sale_date = row["data"]
     model, color, size = parse_sku_components(sku)
@@ -101,7 +131,7 @@ def build_sales_record(
 
 def build_forecast_record(
     row: Any, generation_date: datetime, file_path: Path, batch_id: str
-) -> dict:
+) -> dict[str, Any]:
     sku = row["sku"]
     forecast_date = row["data"]
     model, _, _ = parse_sku_components(sku)
@@ -117,7 +147,7 @@ def build_forecast_record(
     }
 
 
-def build_stock_record(row: Any, snapshot_date: datetime, file_path: Path, batch_id: str) -> dict:
+def build_stock_record(row: Any, snapshot_date: datetime, file_path: Path, batch_id: str) -> dict[str, Any]:
     sku = row["sku"]
     model, _, _ = parse_sku_components(sku)
 
@@ -190,7 +220,7 @@ def process_sales_file_in_batches(
     batch_size: int = 1000,
 ) -> int:
     records_imported = 0
-    batch_data = []
+    batch_data: list[dict[str, Any]] = []
 
     for _, row in df.iterrows():
         batch_data.append(

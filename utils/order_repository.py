@@ -5,6 +5,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -21,7 +22,7 @@ ORDER_FIELDS = ["order_id", "order_date", "model", "product_name", "total_quanti
 PDF_FIELDS = ["pdf_data", "pdf_filename"]
 
 
-def _extract_order_fields(order_data: dict, include_pdf: bool = False) -> dict:
+def _extract_order_fields(order_data: dict[str, Any], include_pdf: bool = False) -> dict[str, Any]:
     result = {
         "order_id": order_data.get("order_id"),
         "order_date": order_data.get("order_date"),
@@ -50,11 +51,11 @@ def _parse_order_date(order_date) -> datetime:
 
 class OrderRepository(ABC):
     @abstractmethod
-    def save(self, order_data: dict) -> bool:
+    def save(self, order_data: dict[str, Any]) -> bool:
         pass
 
     @abstractmethod
-    def get_active(self) -> list[dict]:
+    def get_active(self) -> list[dict[str, Any]]:
         pass
 
     @abstractmethod
@@ -62,7 +63,7 @@ class OrderRepository(ABC):
         pass
 
     @abstractmethod
-    def add_manual(self, order_id: str, order_data: dict) -> bool:
+    def add_manual(self, order_id: str, order_data: dict[str, Any]) -> bool:
         pass
 
 
@@ -73,17 +74,17 @@ class FileOrderRepository(OrderRepository):
     def _get_order_path(self, order_id: str) -> str:
         return f"{self.orders_dir}/{order_id}.json"
 
-    def _read_order_file(self, filename: str) -> dict | None:
+    def _read_order_file(self, filename: str) -> dict[str, Any] | None:
         if not os.path.exists(filename):
             return None
         with open(filename, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def _write_order_file(self, filename: str, order_data: dict) -> None:
+    def _write_order_file(self, filename: str, order_data: dict[str, Any]) -> None:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(order_data, f, indent=2, default=str)
 
-    def save(self, order_data: dict) -> bool:
+    def save(self, order_data: dict[str, Any]) -> bool:
         try:
             os.makedirs(self.orders_dir, exist_ok=True)
             logger.info("Saving order to: %s", self.orders_dir)
@@ -100,12 +101,12 @@ class FileOrderRepository(OrderRepository):
             logger.exception("File save error: %s", e)
             raise OrderError(f"Failed to save order: {e}") from e
 
-    def get_active(self) -> list[dict]:
+    def get_active(self) -> list[dict[str, Any]]:
         try:
             if not os.path.exists(self.orders_dir):
                 return []
 
-            active_orders = []
+            active_orders: list[dict[str, Any]] = []
             for filename in os.listdir(self.orders_dir):
                 if not filename.endswith(".json"):
                     continue
@@ -137,7 +138,7 @@ class FileOrderRepository(OrderRepository):
             logger.error("Error archiving order in file: %s", e)
             raise OrderError(f"Failed to archive order: {e}") from e
 
-    def add_manual(self, order_id: str, order_data: dict) -> bool:
+    def add_manual(self, order_id: str, order_data: dict[str, Any]) -> bool:
         order_data["order_id"] = order_id
         order_data["order_date"] = str(order_data.get("order_date") or datetime.now())
         order_data["status"] = "active"
@@ -154,7 +155,7 @@ class DatabaseOrderRepository(OrderRepository):
             self._engine = create_engine(self.database_url, pool_pre_ping=True)
         return self._engine
 
-    def save(self, order_data: dict) -> bool:
+    def save(self, order_data: dict[str, Any]) -> bool:
         engine = self._get_engine()
         fields = _extract_order_fields(order_data)
         fields["order_date"] = _parse_order_date(fields["order_date"])
@@ -177,7 +178,7 @@ class DatabaseOrderRepository(OrderRepository):
             logger.error("Database error saving order: %s", e)
             raise OrderError(f"Database error saving order: {e}") from e
 
-    def get_active(self) -> list[dict]:
+    def get_active(self) -> list[dict[str, Any]]:
         engine = self._get_engine()
 
         try:
@@ -211,6 +212,6 @@ class DatabaseOrderRepository(OrderRepository):
             logger.error("Database error archiving order: %s", e)
             raise OrderError(f"Database error archiving order: {e}") from e
 
-    def add_manual(self, order_id: str, order_data: dict) -> bool:
+    def add_manual(self, order_id: str, order_data: dict[str, Any]) -> bool:
         order_data["order_id"] = order_id
         return self.save(order_data)

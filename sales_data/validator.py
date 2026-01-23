@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from utils.logging_config import get_logger
+
+logger = get_logger("validator")
 
 DFRAME_EMPTY = "DataFrame is empty"
 
@@ -201,14 +202,14 @@ class DataValidator:
 
             if "Kategorie" in wb.sheetnames:
                 sheet = wb["Kategorie"]
-                headers = {cell.value for cell in sheet[1]}
+                headers = {str(cell.value) for cell in sheet[1] if cell.value is not None}
                 if DataValidator.CATEGORY_COLUMNS.issubset(headers):
                     wb.close()
                     return "Kategorie"
 
             for sheet_name in wb.sheetnames:
                 sheet = wb[sheet_name]
-                headers = {cell.value for cell in sheet[1] if cell.value}
+                headers = {str(cell.value) for cell in sheet[1] if cell.value is not None}
                 if DataValidator.CATEGORY_COLUMNS.issubset(headers):
                     wb.close()
                     return sheet_name

@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 from io import BytesIO
 
-from camelot import read_pdf
+from camelot import read_pdf  # type: ignore[attr-defined]
 from pypdf import PdfReader
 
 from utils.logging_config import get_logger
@@ -161,8 +161,8 @@ def _extract_quantity_from_table(tables) -> int | None:
     return None
 
 
-def _extract_from_lines(page_text: str) -> dict:
-    result = {"operation": None, "facility": None, "material": None}
+def _extract_from_lines(page_text: str) -> dict[str, str | None]:
+    result: dict[str, str | None] = {"operation": None, "facility": None, "material": None}
     for line in page_text.split('\n'):
         line_lower = line.lower()
         if not result["operation"]:

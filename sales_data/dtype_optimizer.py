@@ -14,9 +14,9 @@ def optimize_dtypes(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
             continue
         elif col_type == "object":
             df = _optimize_object_column(df, col)
-        elif np.issubdtype(col_type, np.integer):
+        elif np.issubdtype(col_type, np.integer):  # type: ignore[arg-type]
             df = _optimize_integer_column(df, col)
-        elif np.issubdtype(col_type, np.floating):
+        elif np.issubdtype(col_type, np.floating):  # type: ignore[arg-type]
             df = _optimize_float_column(df, col)
 
     if verbose:

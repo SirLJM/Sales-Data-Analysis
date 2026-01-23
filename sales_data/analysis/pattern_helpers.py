@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from .order_priority import get_size_quantities_for_model_color
+from .utils import find_column
 
 
 def calculate_size_priorities(
@@ -57,7 +58,7 @@ def calculate_size_sales_history(
 
     df = monthly_agg.copy()
 
-    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    sku_col = find_column(df, ["sku", "SKU", "entity_id"])
     if sku_col is None:
         return {}
 
@@ -65,25 +66,21 @@ def calculate_size_sales_history(
     df["_color"] = df[sku_col].astype(str).str[5:7]
     df["_size"] = df[sku_col].astype(str).str[7:9]
 
-    filtered = df[(df["_model"] == model) & (df["_color"] == color)]
+    filtered = pd.DataFrame(df[(df["_model"] == model) & (df["_color"] == color)])
     if filtered.empty:
         return {}
 
-    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
-    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+    month_col = find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
 
     if month_col is None or qty_col is None:
         return {}
 
-    sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
-    recent = filtered[filtered[month_col].isin(sorted_months)]
+    sorted_months = sorted(pd.Series(filtered[month_col]).unique(), reverse=True)[:months]
+    recent = pd.DataFrame(filtered[pd.Series(filtered[month_col]).isin(sorted_months)])
 
-    size_sales = recent.groupby("_size", observed=True)[qty_col].sum().to_dict()
+    size_sales = recent.groupby("_size", observed=True)[qty_col].sum().to_dict()  # type: ignore[call-overload]
     return _apply_size_aliases(size_sales, size_aliases)
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    return next((col for col in candidates if col in df.columns), None)
 
 
 def _apply_size_aliases(size_sales: dict, size_aliases: dict[str, str] | None) -> dict[str, int]:
@@ -108,24 +105,24 @@ def get_size_sales_by_month_for_model(
 
     df = monthly_agg.copy()
 
-    sku_col = _find_column(df, ["sku", "SKU", "entity_id"])
+    sku_col = find_column(df, ["sku", "SKU", "entity_id"])
     if sku_col is None:
         return {}
 
     df["_model"] = df[sku_col].astype(str).str[:5]
     df["_size"] = df[sku_col].astype(str).str[7:9]
 
-    filtered = df[df["_model"] == model]
+    filtered = pd.DataFrame(df[df["_model"] == model])
     if filtered.empty:
         return {}
 
-    month_col = _find_column(filtered, ["year_month", "month", "MONTH"])
-    qty_col = _find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
+    month_col = find_column(filtered, ["year_month", "month", "MONTH"])
+    qty_col = find_column(filtered, ["total_quantity", "TOTAL_QUANTITY", "ilosc"])
 
     if month_col is None or qty_col is None:
         return {}
 
-    sorted_months = sorted(filtered[month_col].unique(), reverse=True)[:months]
+    sorted_months = sorted(pd.Series(filtered[month_col]).unique(), reverse=True)[:months]
 
     result = {}
     for month in sorted_months:

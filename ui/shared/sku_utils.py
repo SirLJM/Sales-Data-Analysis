@@ -25,9 +25,9 @@ def parse_sku(sku: str) -> dict[str, str]:
 
 def add_sku_components(df: pd.DataFrame, sku_col: str = "SKU") -> pd.DataFrame:
     df = df.copy()
-    df["MODEL"] = extract_model(df[sku_col])
-    df["COLOR"] = extract_color(df[sku_col])
-    df["SIZE"] = extract_size(df[sku_col])
+    df["MODEL"] = extract_model(pd.Series(df[sku_col]))
+    df["COLOR"] = extract_color(pd.Series(df[sku_col]))
+    df["SIZE"] = extract_size(pd.Series(df[sku_col]))
     return df
 
 

@@ -18,6 +18,24 @@ def load_sales_for_accuracy(
     return sales_df if sales_df is not None and not sales_df.empty else None
 
 
+def _extract_generated_date(forecast_df: pd.DataFrame) -> datetime | None:
+    if "generated_date" not in forecast_df.columns:
+        return None
+
+    gen_date = forecast_df["generated_date"].iloc[0]
+    if gen_date is None or bool(pd.isnull(gen_date)):
+        return None
+
+    try:
+        ts = pd.Timestamp(gen_date)
+        if bool(pd.isnull(ts)):
+            return None
+        dt = ts.to_pydatetime()
+        return dt if isinstance(dt, datetime) else None
+    except (ValueError, TypeError):
+        return None
+
+
 @st.cache_data(ttl=Config.CACHE_TTL)
 def load_forecast_for_accuracy(
     analysis_start: datetime, lookback_months: int = 4
@@ -27,15 +45,10 @@ def load_forecast_for_accuracy(
     data_source = get_data_source()
     forecast_df = data_source.load_forecast_data(generated_date=target_generated_date)
 
-    if forecast_df is not None and not forecast_df.empty:
-        generated_date = None
-        if "generated_date" in forecast_df.columns:
-            gen_date = forecast_df["generated_date"].iloc[0]
-            if gen_date is not None:
-                generated_date = pd.Timestamp(gen_date).to_pydatetime()
-        return forecast_df, generated_date
+    if forecast_df is None or forecast_df.empty:
+        return None, None
 
-    return None, None
+    return forecast_df, _extract_generated_date(forecast_df)
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)

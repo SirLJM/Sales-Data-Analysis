@@ -15,6 +15,7 @@ from sales_data.analysis.internal_forecast import (
     batch_generate_forecasts,
     get_available_methods,
 )
+from sales_data.analysis.utils import find_column
 from ui.constants import Icons, MimeTypes
 from ui.i18n import Keys, t
 from ui.shared.session_manager import get_data_source, get_settings
@@ -162,7 +163,7 @@ def _render_parameters() -> dict:
             forecast_method = st.selectbox(
                 t(Keys.FORECAST_METHOD),
                 options=method_options,
-                format_func=lambda x: method_labels.get(x, x),
+                format_func=lambda x: method_labels.get(x) or x,
                 key="fc_method",
                 help=t(Keys.FORECAST_METHOD_HELP),
             )
@@ -231,11 +232,11 @@ def _render_parameters() -> dict:
 
 
 def _filter_monthly_agg_by_date(monthly_agg: pd.DataFrame, cutoff_date) -> pd.DataFrame:
-    if monthly_agg is None or monthly_agg.empty:
+    if monthly_agg.empty:
         return monthly_agg
 
     df = monthly_agg.copy()
-    month_col = _find_column(df, ["year_month", "month", "MONTH"])
+    month_col = find_column(df, ["year_month", "month", "MONTH"])
 
     if month_col is None:
         return df
@@ -244,7 +245,7 @@ def _filter_monthly_agg_by_date(monthly_agg: pd.DataFrame, cutoff_date) -> pd.Da
     df["_period"] = pd.PeriodIndex(df[month_col].astype(str), freq="M")
     filtered = df[df["_period"] <= cutoff_period].drop(columns=["_period"])
 
-    return filtered
+    return pd.DataFrame(filtered)
 
 
 def _generate_comparison(params: dict) -> None:
@@ -274,7 +275,8 @@ def _generate_comparison(params: dict) -> None:
 
         progress_bar.progress(20, text=t(Keys.FC_LOADING_SALES))
 
-        forecast_start_period = pd.Period(pd.Timestamp(generation_date), freq="M") + 1
+        gen_period = pd.to_datetime(generation_date).to_period("M")
+        forecast_start_period = gen_period + 1
         comparison_sales_df = _load_sales_for_period(str(forecast_start_period), comparison_date)
 
         if comparison_sales_df is None or comparison_sales_df.empty:
@@ -314,7 +316,7 @@ def _generate_comparison(params: dict) -> None:
 
         comparison_df = align_forecasts(
             internal_forecasts,
-            external_forecast,
+            external_forecast if external_forecast is not None else pd.DataFrame(),
             comparison_sales_df,
             params["entity_type"],
         )
@@ -358,8 +360,8 @@ def _prepare_entity_list(monthly_agg: pd.DataFrame, params: dict) -> list[dict]:
     filter_type = params["filter_type"]
     filter_params = params["filter_params"]
 
-    id_col = _find_column(monthly_agg, ["entity_id", "sku", "SKU"])
-    qty_col = _find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY"])
+    id_col = find_column(monthly_agg, ["entity_id", "sku", "SKU"])
+    qty_col = find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY"])
 
     if id_col is None or qty_col is None:
         return []
@@ -538,7 +540,7 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
         st.info(t(Keys.FC_NO_TYPE_BREAKDOWN))
         return
 
-    display_df = type_summary[[
+    display_df = pd.DataFrame(type_summary[[
         "product_type",
         "total_entities",
         "internal_wins",
@@ -547,7 +549,7 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
         "internal_win_pct",
         "avg_internal_mape",
         "avg_external_mape",
-    ]].copy()
+    ]])
 
     col_type = t(Keys.FC_COL_TYPE)
     col_total = t(Keys.FC_COL_TOTAL)
@@ -558,8 +560,8 @@ def _display_type_breakdown(type_summary: pd.DataFrame) -> None:
     col_avg_int_mape = t(Keys.FC_COL_AVG_INT_MAPE)
     col_avg_ext_mape = t(Keys.FC_COL_AVG_EXT_MAPE)
 
-    display_df.columns = [col_type, col_total, col_int_wins, col_ext_wins, col_ties, col_int_win_pct, col_avg_int_mape,
-                          col_avg_ext_mape]
+    display_df.columns = pd.Index([col_type, col_total, col_int_wins, col_ext_wins, col_ties, col_int_win_pct, col_avg_int_mape,
+                          col_avg_ext_mape])
 
     display_df[col_int_win_pct] = display_df[col_int_win_pct].apply(lambda x: f"{x:.1f}%")
     display_df[col_avg_int_mape] = display_df[col_avg_int_mape].apply(lambda x: f"{x:.1f}%")
@@ -583,9 +585,9 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
         with form_col2:
             st.form_submit_button("🔍", width='stretch')
 
-    display_df = metrics_df.copy()
+    display_df = pd.DataFrame(metrics_df)
     if search:
-        display_df = display_df[display_df["entity_id"].str.contains(search.upper())]
+        display_df = pd.DataFrame(display_df[display_df["entity_id"].str.contains(search.upper())])
 
     sort_col = st.selectbox(
         t(Keys.SORT_BY),
@@ -599,8 +601,9 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
         key="fc_sort",
     )
 
-    ascending = sort_col == "entity_id"
-    display_df = display_df.sort_values(sort_col, ascending=ascending)
+    if sort_col:
+        ascending = sort_col == "entity_id"
+        display_df = pd.DataFrame(display_df.sort_values(by=str(sort_col), ascending=ascending))
 
     col_entity = t(Keys.FC_COL_ENTITY)
     col_method = t(Keys.FC_COL_METHOD)
@@ -611,13 +614,13 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
     col_winner = t(Keys.FC_COL_WINNER)
     col_improvement = t(Keys.FC_IMPROVEMENT)
 
-    show_df = display_df[[
+    show_df = pd.DataFrame(display_df[[
         "entity_id", "method", "months_compared", "total_actual",
         "internal_mape", "external_mape", "winner", "improvement_pct"
-    ]].copy()
+    ]])
 
-    show_df.columns = [col_entity, col_method, col_months, col_actual_vol, col_int_mape, col_ext_mape, col_winner,
-                       col_improvement]
+    show_df.columns = pd.Index([col_entity, col_method, col_months, col_actual_vol, col_int_mape, col_ext_mape, col_winner,
+                       col_improvement])
 
     show_df[col_int_mape] = show_df[col_int_mape].apply(lambda x: f"{x:.1f}%")
     show_df[col_ext_mape] = show_df[col_ext_mape].apply(lambda x: f"{x:.1f}%")
@@ -690,10 +693,6 @@ def _display_entity_chart(data: dict) -> None:
             )
 
             st.plotly_chart(fig, width='stretch')
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    return next((col for col in candidates if col in df.columns), None)
 
 
 def _render_save_section() -> None:
@@ -857,18 +856,18 @@ def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
         if sales_df is None or sales_df.empty:
             return None
 
-        date_col = _find_column(sales_df, ["data", "sale_date", "date"])
+        date_col = find_column(sales_df, ["data", "sale_date", "date"])
         if date_col is None:
             return sales_df
 
         df = sales_df.copy()
         df[date_col] = pd.to_datetime(df[date_col])
 
-        start_date = pd.Period(start_period).start_time
+        start_date = pd.to_datetime(start_period).to_period("M").start_time
         end_dt = pd.to_datetime(end_date)
 
         filtered = df[(df[date_col] >= start_date) & (df[date_col] <= end_dt)]
-        return filtered
+        return pd.DataFrame(filtered)
 
     except Exception as e:
         logger.warning("Error loading sales for period: %s", e)
@@ -883,8 +882,7 @@ def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
         st.error(t(Keys.FC_FAILED_LOAD))
         return
 
-    # noinspection PyTypeChecker
-    with st.spinner(t(Keys.FC_LOADING_DATA)):
+    with st.spinner(t(Keys.FC_LOADING_DATA)):  # type: ignore[attr-defined]
         external_forecast = _load_external_forecast_cached()
 
         forecast_start, _ = _get_forecast_date_range(batch)
@@ -898,7 +896,7 @@ def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
 
         comparison_df = align_forecasts(
             forecasts_df,
-            external_forecast,
+            external_forecast if external_forecast is not None else pd.DataFrame(),
             sales_df,
             entity_type,
         )

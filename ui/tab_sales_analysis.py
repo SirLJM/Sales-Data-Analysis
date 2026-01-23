@@ -61,7 +61,7 @@ def _render_content(context: dict) -> None:
     _render_stock_metrics(filtered_summary, stock_df, stock_loaded)
     _render_download_button(filtered_summary, group_by_model)
 
-    if stock_loaded and use_forecast and forecast_df is not None:
+    if stock_loaded and use_forecast and forecast_df is not None and forecast_date is not None:
         _render_stock_projection(
             summary, forecast_df, forecast_date, id_column, group_by_model
         )
@@ -135,7 +135,8 @@ def _process_stock_data(
     stock_df_sku_level = stock_df[["SKU", "DESCRIPTION", ColumnNames.STOCK, "PRICE", ColumnNames.VALUE]].copy()
 
     if group_by_model:
-        stock_df["MODEL"] = extract_model(stock_df["SKU"])
+        sku_series = pd.Series(stock_df["SKU"])
+        stock_df["MODEL"] = extract_model(sku_series)
         stock_agg = stock_df.groupby("MODEL", as_index=False, observed=True).agg({
             ColumnNames.STOCK: "sum",
             ColumnNames.VALUE: "sum",
@@ -164,7 +165,8 @@ def _process_stock_data(
 
 
 def _merge_forecast_by_model(summary: pd.DataFrame, forecast_metrics: pd.DataFrame) -> None:
-    forecast_metrics["MODEL"] = extract_model(forecast_metrics["sku"])
+    sku_series = pd.Series(forecast_metrics["sku"])
+    forecast_metrics["MODEL"] = extract_model(sku_series)
     if "FORECAST_LEADTIME" not in forecast_metrics.columns:
         return
     forecast_agg = forecast_metrics.groupby("MODEL", observed=True).agg({"FORECAST_LEADTIME": "sum"}).reset_index()
@@ -299,24 +301,25 @@ def _render_filters(
                     key="overstock_threshold",
                 )
 
-    filtered = summary.copy()
+    filtered: pd.DataFrame = summary.copy()
 
     if search_term:
-        filtered = filtered[
-            filtered[id_column].astype(str).str.contains(search_term, case=False, na=False)
-        ]
+        search_mask = filtered[id_column].astype(str).str.contains(search_term, case=False, na=False)
+        filtered = filtered[search_mask]
 
-    if show_only_below_rop and "BELOW_ROP" in filtered.columns:
+    if show_only_below_rop and "BELOW_ROP" in list(filtered.columns):
         filtered = filtered[filtered["BELOW_ROP"]]
 
     if show_bestsellers:
         filtered = filtered[filtered["LAST_2_YEARS_AVG"] > 300]
 
-    if stock_loaded and show_overstocked and ColumnNames.OVERSTOCKED_PCT in filtered.columns:
-        filtered = filtered[filtered[ColumnNames.OVERSTOCKED_PCT] >= overstock_threshold]
+    if stock_loaded and show_overstocked and ColumnNames.OVERSTOCKED_PCT in list(filtered.columns):
+        overstocked_mask = pd.Series(filtered[ColumnNames.OVERSTOCKED_PCT]) >= overstock_threshold
+        filtered = pd.DataFrame(filtered[overstocked_mask])
 
     if type_filter:
-        filtered = filtered[filtered["TYPE"].isin(type_filter)]
+        type_col = pd.Series(filtered["TYPE"])
+        filtered = filtered[type_col.isin(type_filter)]
 
     return filtered
 
@@ -430,17 +433,19 @@ def _get_available_ids_for_projection(
 ) -> list:
     if group_by_model:
         forecast_df_copy = forecast_df.copy()
-        forecast_df_copy["model"] = extract_model(forecast_df_copy["sku"])
-        forecast_ids = forecast_df_copy["model"].unique()
+        sku_series = pd.Series(forecast_df_copy["sku"])
+        forecast_df_copy["model"] = extract_model(sku_series)
+        forecast_ids = list(forecast_df_copy["model"].unique())
     else:
-        forecast_ids = forecast_df["sku"].unique()
+        forecast_ids = list(forecast_df["sku"].unique())
 
+    id_col_series = pd.Series(summary[id_column])
     valid_summary = summary[
         (summary[ColumnNames.STOCK].notna())
         & (summary["ROP"].notna())
-        & (summary[id_column].isin(forecast_ids))
+        & (id_col_series.isin(forecast_ids))
         ]
-    return sorted(valid_summary[id_column].unique())
+    return sorted(pd.Series(valid_summary[id_column]).unique())
 
 
 def _render_stock_projection(
@@ -760,7 +765,8 @@ def _render_yearly_summary_table(
 
 def _get_year_column(pivot: pd.DataFrame, year: int) -> pd.Series:
     if year in pivot.columns:
-        return pivot[year].astype(int)
+        col = pd.Series(pivot[year])
+        return col.astype(int)
     return pd.Series([0] * len(pivot), index=pivot.index)
 
 
@@ -827,7 +833,8 @@ def _sort_yearly_summary(data: pd.DataFrame, sort_by: str, prev_year: int) -> pd
 
     for pattern, (col, ascending) in sort_configs.items():
         if pattern in sort_by:
-            return data.sort_values(col, ascending=ascending)
+            sorted_df: pd.DataFrame = data.sort_values(by=col, ascending=ascending)
+            return sorted_df
 
     return data
 
@@ -843,14 +850,14 @@ def _render_yearly_trend_chart(
     current_year = datetime.now().year
 
     sales_data = yearly_sales[yearly_sales[id_col] == selected_id].copy()
-    sales_data = sales_data.sort_values("YEAR")
+    sales_data = sales_data.sort_values(by="YEAR")
 
     if yearly_forecast is not None:
         forecast_data = yearly_forecast[yearly_forecast[id_col] == selected_id].copy()
         forecast_data = forecast_data[forecast_data["YEAR"] >= current_year]
         forecast_data = forecast_data.groupby("YEAR", as_index=False, observed=True).agg({"QUANTITY": "sum"})
     else:
-        forecast_data = pd.DataFrame(columns=["YEAR", "QUANTITY"])
+        forecast_data = pd.DataFrame({"YEAR": pd.Series(dtype=int), "QUANTITY": pd.Series(dtype=int)})
 
     fig = go.Figure()
 

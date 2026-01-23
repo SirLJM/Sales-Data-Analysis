@@ -57,7 +57,7 @@ class PostgresExecutor:
         try:
             with self.engine.connect() as conn:
                 result = conn.execute(text(adapted_sql))
-                df = pd.DataFrame(result.fetchall(), columns=list(result.keys()))
+                df = pd.DataFrame(result.fetchall(), columns=pd.Index(list(result.keys())))
                 if df.empty:
                     return None, MSG_NO_DATA_MATCH, adapted_sql
                 return df, "", adapted_sql

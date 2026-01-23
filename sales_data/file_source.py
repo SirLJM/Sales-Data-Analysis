@@ -29,12 +29,15 @@ class FileSource(DataSource):
         if self._sales_data is None:
             self._sales_data = self.loader.consolidate_all_files()
 
+        if self._sales_data is None:
+            return pd.DataFrame()
+
         df = self._sales_data.copy()
 
         if start_date is not None:
-            df = df[df["data"] >= start_date]
+            df = pd.DataFrame(df[df["data"] >= start_date])
         if end_date is not None:
-            df = df[df["data"] <= end_date]
+            df = pd.DataFrame(df[df["data"] <= end_date])
 
         return df
 
@@ -175,18 +178,18 @@ class FileSource(DataSource):
 
         group_col = "model" if entity_type == "model" else "sku"
 
-        monthly_agg = (
-            monthly_data.groupby([group_col, "year_month"], as_index=False, observed=True)
-            .agg({"ilosc": "sum", "razem": "sum", "order_id": "nunique"})
-            .rename(
-                columns={
-                    group_col: "entity_id",
-                    "ilosc": "total_quantity",
-                    "razem": "total_revenue",
-                    "order_id": "unique_orders",
-                }
-            )
+        grouped_data = monthly_data.groupby([group_col, "year_month"], as_index=False, observed=True).agg(
+            {"ilosc": "sum", "razem": "sum", "order_id": "nunique"}
         )
+        renamed_data = pd.DataFrame(grouped_data).rename(
+            columns={
+                group_col: "entity_id",
+                "ilosc": "total_quantity",
+                "razem": "total_revenue",
+                "order_id": "unique_orders",
+            }
+        )
+        monthly_agg = pd.DataFrame(renamed_data)
 
         monthly_agg["entity_type"] = entity_type
         monthly_agg["year_month"] = monthly_agg["year_month"].astype(str)

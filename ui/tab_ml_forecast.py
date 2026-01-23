@@ -11,6 +11,7 @@ from sales_data.analysis.ml_forecast import (
     generate_ml_forecast,
 )
 from sales_data.analysis.ml_model_selection import get_available_ml_models
+from sales_data.analysis.utils import find_column
 from ui.constants import Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import Keys, t
 from ui.shared.session_manager import get_data_source, get_settings
@@ -205,9 +206,11 @@ def _run_training(params: dict) -> None:
     progress_bar = st.progress(0, text=t(Keys.ML_LOADING_DATA))
 
     try:
-        monthly_agg, sku_stats, entities = _load_training_data(progress_bar, params)
-        if entities is None:
+        result = _load_training_data(progress_bar, params)
+        if result[0] is None:
             return
+
+        monthly_agg, sku_stats, entities = result
 
         st.info(t(Keys.ML_TRAINING_FOR_ENTITIES).format(count=len(entities)))
 
@@ -226,7 +229,7 @@ def _run_training(params: dict) -> None:
 
 def _load_training_data(
         progress_bar, params: dict
-) -> tuple[pd.DataFrame | None, pd.DataFrame | None, list[dict] | None]:
+) -> tuple[pd.DataFrame, pd.DataFrame | None, list[dict]] | tuple[None, None, None]:
     progress_bar.progress(5, text=t(Keys.ML_LOADING_MONTHLY_AGG))
 
     monthly_agg = _load_monthly_aggregations_cached()
@@ -312,8 +315,8 @@ def _prepare_entity_list(monthly_agg: pd.DataFrame, params: dict) -> list[dict]:
     entity_type = params["entity_type"]
     top_n = params["top_n"]
 
-    id_col = _find_column(monthly_agg, ["entity_id", "sku", "SKU"])
-    qty_col = _find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY"])
+    id_col = find_column(monthly_agg, ["entity_id", "sku", "SKU"])
+    qty_col = find_column(monthly_agg, ["total_quantity", "TOTAL_QUANTITY"])
 
     if id_col is None or qty_col is None:
         return []
@@ -388,12 +391,23 @@ def _display_forecast_table(forecasts_df: pd.DataFrame) -> None:
     summary = []
     for entity in entities:
         entity_data = forecasts_df[forecasts_df["entity_id"] == entity]
+        model_type_val = "N/A"
+        if "model_type" in entity_data.columns:
+            model_type_val = str(pd.Series(entity_data["model_type"]).iloc[0])
+
+        cv_score_val = "N/A"
+        if "cv_score" in entity_data.columns:
+            cv_raw = pd.Series(entity_data["cv_score"]).iloc[0]
+            if pd.notna(cv_raw):
+                cv_score_val = f"{cv_raw:.1f}%"
+
+        forecast_total = pd.Series(entity_data["forecast"]).sum()
+
         summary.append({
             col_entity: entity,
-            col_model: entity_data["model_type"].iloc[0] if "model_type" in entity_data.columns else "N/A",
-            col_cv_score: f"{entity_data['cv_score'].iloc[0]:.1f}%" if "cv_score" in entity_data.columns and pd.notna(
-                entity_data["cv_score"].iloc[0]) else "N/A",
-            col_total_forecast: f"{entity_data['forecast'].sum():,.0f}",
+            col_model: model_type_val,
+            col_cv_score: cv_score_val,
+            col_total_forecast: f"{forecast_total:,.0f}",
         })
 
     summary_df = pd.DataFrame(summary)
@@ -592,11 +606,11 @@ def _render_manage_tab() -> None:
         avg_cv = sum(m.get("cv_score", 0) or 0 for m in models) / len(models) if models else 0
         st.metric(t(Keys.ML_AVG_CV_SCORE), f"{avg_cv:.1f}%")
     with col3:
-        model_types = {}
+        model_types: dict[str, int] = {}
         for m in models:
             mt = m.get("model_type", "unknown")
             model_types[mt] = model_types.get(mt, 0) + 1
-        most_common = max(model_types, key=model_types.get) if model_types else "N/A"
+        most_common = max(model_types, key=lambda k: model_types[k]) if model_types else "N/A"
         st.metric(t(Keys.ML_MOST_COMMON_MODEL), most_common)
 
     st.markdown("---")
@@ -736,10 +750,3 @@ def _clear_session_data() -> None:
     ]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
-
-
-def _find_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    for col in candidates:
-        if col in df.columns:
-            return col
-    return None

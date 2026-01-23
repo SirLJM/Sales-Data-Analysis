@@ -40,7 +40,7 @@ def _load_data_source_config() -> dict:
 
 
 def _get_effective_mode(config: dict) -> str:
-    return os.environ.get("DATA_SOURCE_MODE", config.get("mode", "file"))
+    return os.environ.get("DATA_SOURCE_MODE") or config.get("mode") or "file"
 
 
 class DataSourceFactory:
