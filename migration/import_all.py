@@ -16,6 +16,7 @@ from migration.individual.import_current_sales import import_current_sales
 from migration.individual.import_forecast import import_forecast_data
 from migration.individual.import_model_metadata import import_model_metadata
 from migration.individual.import_size_aliases import import_size_aliases
+from migration.individual.import_bom import import_bom_data
 from migration.individual.import_color_aliases import import_color_aliases
 from migration.individual.import_stock import import_stock_data
 from initial_populate import populate_archival_sales
@@ -142,6 +143,7 @@ def main() -> None:
         ("Importing model metadata", import_model_metadata),
         ("Importing size aliases", import_size_aliases),
         ("Importing color aliases", import_color_aliases),
+        ("Importing BOM data", import_bom_data),
         ("Refreshing materialized views", refresh_materialized_views),
     ]
 

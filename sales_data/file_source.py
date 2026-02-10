@@ -223,6 +223,15 @@ class FileSource(DataSource):
     def get_data_source_type(self) -> str:
         return "file"
 
+    def load_bom_data(self) -> pd.DataFrame | None:
+        return self.loader.load_bom_data()
+
+    def load_material_catalog(self) -> pd.DataFrame | None:
+        return self.loader.load_material_catalog()
+
+    def load_material_stock(self) -> pd.DataFrame | None:
+        return SalesDataLoader.load_material_stock()
+
     def load_outlet_models(self) -> set[str]:
         outlet_file = self.loader.get_latest_outlet_file()
         if outlet_file is None:

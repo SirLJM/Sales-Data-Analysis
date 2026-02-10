@@ -59,6 +59,12 @@ from .internal_forecast import (
     prepare_monthly_series,
     select_forecast_method,
 )
+from .material_planning import (
+    calculate_material_gap,
+    calculate_material_requirements,
+    extract_production_quantities_from_orders,
+    map_ribbing_type_to_material,
+)
 
 __all__ = [
     "AVERAGE_SALES",
@@ -103,4 +109,8 @@ __all__ = [
     "generate_internal_forecast",
     "prepare_monthly_series",
     "select_forecast_method",
+    "calculate_material_gap",
+    "calculate_material_requirements",
+    "extract_production_quantities_from_orders",
+    "map_ribbing_type_to_material",
 ]

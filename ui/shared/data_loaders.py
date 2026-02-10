@@ -152,6 +152,24 @@ def load_category_mappings() -> pd.DataFrame | None:
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
+def load_bom_data() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    return data_source.load_bom_data()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_material_catalog() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    return data_source.load_material_catalog()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_material_stock() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    return data_source.load_material_stock()
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
 def load_size_aliases() -> dict[str, str]:
     data_source = get_data_source()
     return data_source.load_size_aliases()

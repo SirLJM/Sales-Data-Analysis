@@ -73,3 +73,15 @@ class DataSource(ABC):
     @abstractmethod
     def load_outlet_models(self) -> set[str]:
         pass
+
+    @abstractmethod
+    def load_bom_data(self) -> pd.DataFrame | None:
+        pass
+
+    @abstractmethod
+    def load_material_catalog(self) -> pd.DataFrame | None:
+        pass
+
+    @abstractmethod
+    def load_material_stock(self) -> pd.DataFrame | None:
+        pass

@@ -461,6 +461,67 @@ class DatabaseSource(DataSource):
     def load_outlet_models(self) -> set[str]:
         return set()
 
+    def load_bom_data(self) -> pd.DataFrame | None:
+        logger.info("Loading BOM data from database")
+        query = """
+            SELECT model, main_material_name, main_consumption_m2, main_consumption_mb,
+                   main_consumption_kg, main_yield_mb_kg, main_width,
+                   ribbing_type, ribbing_consumption_mb, lining_consumption_mb,
+                   is_outlet, is_withdrawn
+            FROM bom_components
+            ORDER BY model
+        """
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+            if df.empty:
+                logger.warning("No BOM data found in database")
+                return None
+            logger.info("Loaded %d BOM rows from database", len(df))
+            return df
+        except Exception as e:
+            logger.warning("BOM table not available in database: %s", e)
+            return None
+
+    def load_material_catalog(self) -> pd.DataFrame | None:
+        logger.info("Loading material catalog from database")
+        query = """
+            SELECT material_name, supplier, composition, material_type,
+                   layout_width, yield_m_per_kg
+            FROM material_catalog
+            ORDER BY material_name
+        """
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+            if df.empty:
+                logger.warning("No material catalog data found in database")
+                return None
+            logger.info("Loaded %d materials from database", len(df))
+            return df
+        except Exception as e:
+            logger.warning("Material catalog table not available in database: %s", e)
+            return None
+
+    def load_material_stock(self) -> pd.DataFrame | None:
+        logger.info("Loading material stock from database")
+        query = """
+            SELECT material_name, quantity_kg, quantity_meters, updated_at
+            FROM material_stock
+            ORDER BY material_name
+        """
+        try:
+            with self.engine.connect() as conn:
+                df = pd.read_sql_query(text(query), conn)
+            if df.empty:
+                logger.warning("No material stock data found in database")
+                return None
+            logger.info("Loaded %d material stock rows from database", len(df))
+            return df
+        except Exception as e:
+            logger.warning("Material stock table not available in database: %s", e)
+            return None
+
     def close(self) -> None:
         if self.engine:
             self.engine.dispose()

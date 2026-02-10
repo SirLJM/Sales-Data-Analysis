@@ -34,6 +34,7 @@ class Keys:
     TAB_FORECAST_ACCURACY: Final[str] = "tab_forecast_accuracy"
     TAB_FORECAST_COMPARISON: Final[str] = "tab_forecast_comparison"
     TAB_ML_FORECAST: Final[str] = "tab_ml_forecast"
+    TAB_MATERIAL_PLANNING: Final[str] = "tab_material_planning"
     TAB_NL_QUERY: Final[str] = "tab_nl_query"
 
     SIDEBAR_PARAMETERS: Final[str] = "sidebar_parameters"
@@ -123,6 +124,7 @@ class Keys:
     TITLE_FORECAST_ACCURACY: Final[str] = "title_forecast_accuracy"
     TITLE_FORECAST_COMPARISON: Final[str] = "title_forecast_comparison"
     TITLE_ML_FORECAST: Final[str] = "title_ml_forecast"
+    TITLE_MATERIAL_PLANNING: Final[str] = "title_material_planning"
     TITLE_NL_QUERY: Final[str] = "title_nl_query"
     TITLE_TOP_SALES_REPORT: Final[str] = "title_top_sales_report"
     TITLE_TOP_5_BY_TYPE: Final[str] = "title_top_5_by_type"
@@ -556,7 +558,33 @@ class Keys:
 
     ERR_ORDER_CREATION: Final[str] = "err_order_creation"
     ERR_ORDER_TRACKING: Final[str] = "err_order_tracking"
+    ERR_MATERIAL_PLANNING: Final[str] = "err_material_planning"
     ERR_SAVING_ORDER: Final[str] = "err_saving_order"
+
+    MAT_SECTION_ORDERS: Final[str] = "mat_section_orders"
+    MAT_SECTION_MANUAL: Final[str] = "mat_section_manual"
+    MAT_SECTION_STOCK: Final[str] = "mat_section_stock"
+    MAT_NO_BOM: Final[str] = "mat_no_bom"
+    MAT_NO_ORDERS: Final[str] = "mat_no_orders"
+    MAT_NO_REQUIREMENTS: Final[str] = "mat_no_requirements"
+    MAT_NO_STOCK: Final[str] = "mat_no_stock"
+    MAT_MODEL: Final[str] = "mat_model"
+    MAT_QUANTITY: Final[str] = "mat_quantity"
+    MAT_ADD_ENTRY: Final[str] = "mat_add_entry"
+    MAT_REMOVE: Final[str] = "mat_remove"
+    MAT_COMBINED_REQUIREMENTS: Final[str] = "mat_combined_requirements"
+    MAT_DOWNLOAD_CSV: Final[str] = "mat_download_csv"
+    MAT_COL_MATERIAL: Final[str] = "mat_col_material"
+    MAT_COL_TYPE: Final[str] = "mat_col_type"
+    MAT_COL_METERS: Final[str] = "mat_col_meters"
+    MAT_COL_KG: Final[str] = "mat_col_kg"
+    MAT_COL_SUPPLIER: Final[str] = "mat_col_supplier"
+    MAT_COL_MODELS: Final[str] = "mat_col_models"
+    MAT_COL_MODEL_COUNT: Final[str] = "mat_col_model_count"
+    MAT_COL_STOCK_M: Final[str] = "mat_col_stock_m"
+    MAT_COL_STOCK_KG: Final[str] = "mat_col_stock_kg"
+    MAT_COL_GAP_M: Final[str] = "mat_col_gap_m"
+    MAT_COL_GAP_KG: Final[str] = "mat_col_gap_kg"
 
     CAPTION_SIZE_DISTRIBUTION: Final[str] = "caption_size_distribution"
     CAPTION_TOTAL_QTY_FACILITIES: Final[str] = "caption_total_qty_facilities"
@@ -877,6 +905,9 @@ _EN_LOADING_DATA = "Loading data..."
 _PL_LOADING_DATA = "Wczytywanie danych..."
 _PL_QUANTITY = "Ilość"
 
+_EN_DOWNLOAD_CSV = "Download CSV"
+_PL_DOWNLOAD_CSV = "Pobierz CSV"
+
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         Keys.PAGE_TITLE: "Inventory & Pattern Optimizer",
@@ -889,6 +920,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TAB_ORDER_RECOMMENDATIONS: "🎯 Order Recommendations",
         Keys.TAB_ORDER_CREATION: "🛒 Order Creation",
         Keys.TAB_ORDER_TRACKING: "🚚 Order Tracking",
+        Keys.TAB_MATERIAL_PLANNING: "🧵 Material Planning",
         Keys.TAB_FORECAST_ACCURACY: "📈 Forecast Accuracy",
         Keys.TAB_FORECAST_COMPARISON: "🔬 Forecast Comparison",
         Keys.TAB_ML_FORECAST: "🤖 ML Forecast",
@@ -906,7 +938,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_RESET: "🔄 Reset",
         Keys.BTN_CANCEL: "Cancel",
         Keys.BTN_CLEAR: "Clear",
-        Keys.BTN_DOWNLOAD_CSV: "Download CSV",
+        Keys.BTN_DOWNLOAD_CSV: _EN_DOWNLOAD_CSV,
         Keys.BTN_GENERATE: "Generate",
         Keys.BTN_REFRESH: "Refresh",
         Keys.BTN_CREATE_ORDER: "Create Order",
@@ -978,6 +1010,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_ORDER_RECOMMENDATIONS: "🎯 Order Recommendations",
         Keys.TITLE_ORDER_CREATION: "📋 Order Creation",
         Keys.TITLE_ORDER_TRACKING: "📦 Order Tracking",
+        Keys.TITLE_MATERIAL_PLANNING: "🧵 Material Planning",
         Keys.TITLE_FORECAST_ACCURACY: "Forecast Accuracy Monitoring",
         Keys.TITLE_FORECAST_COMPARISON: "Forecast Comparison",
         Keys.TITLE_ML_FORECAST: "ML Forecast",
@@ -1414,7 +1447,33 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         Keys.ERR_ORDER_CREATION: "Error in Order Creation: {error}",
         Keys.ERR_ORDER_TRACKING: "Error in Order Tracking: {error}",
+        Keys.ERR_MATERIAL_PLANNING: "Error in Material Planning: {error}",
         Keys.ERR_SAVING_ORDER: "Error saving order: {error}",
+
+        Keys.MAT_SECTION_ORDERS: "Material Requirements from Active Orders",
+        Keys.MAT_SECTION_MANUAL: "Manual Production Input",
+        Keys.MAT_SECTION_STOCK: "Material Stock & Purchase Recommendations",
+        Keys.MAT_NO_BOM: "BOM data not available. Ensure the model metadata Excel file contains a BOM sheet.",
+        Keys.MAT_NO_ORDERS: "No active orders found. Add orders in Order Tracking or use manual input below.",
+        Keys.MAT_NO_REQUIREMENTS: "No material requirements calculated. Check if BOM data matches order models.",
+        Keys.MAT_NO_STOCK: "Material stock data not yet available. Requirements shown as full purchase need.",
+        Keys.MAT_MODEL: "Model",
+        Keys.MAT_QUANTITY: "Quantity",
+        Keys.MAT_ADD_ENTRY: "Add",
+        Keys.MAT_REMOVE: "Remove",
+        Keys.MAT_COMBINED_REQUIREMENTS: "Combined Material Requirements",
+        Keys.MAT_DOWNLOAD_CSV: _EN_DOWNLOAD_CSV,
+        Keys.MAT_COL_MATERIAL: "Material",
+        Keys.MAT_COL_TYPE: "Component",
+        Keys.MAT_COL_METERS: "Total (m)",
+        Keys.MAT_COL_KG: "Total (kg)",
+        Keys.MAT_COL_SUPPLIER: "Supplier",
+        Keys.MAT_COL_MODELS: "Models",
+        Keys.MAT_COL_MODEL_COUNT: "# Models",
+        Keys.MAT_COL_STOCK_M: "Stock (m)",
+        Keys.MAT_COL_STOCK_KG: "Stock (kg)",
+        Keys.MAT_COL_GAP_M: "Gap (m)",
+        Keys.MAT_COL_GAP_KG: "Gap (kg)",
 
         Keys.CAPTION_SIZE_DISTRIBUTION: "All colors combined + last 3 months sales history",
         Keys.CAPTION_TOTAL_QTY_FACILITIES: "📊 Total quantity across all facilities: {total:,}",
@@ -1691,7 +1750,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.DISPLAY_TOTAL_PATTERNS: "Total Patterns",
         Keys.DISPLAY_TOTAL_EXCESS: "Total Excess",
         Keys.DISPLAY_COVERAGE: "Coverage",
-        Keys.DISPLAY_DOWNLOAD_CSV: "Download CSV",
+        Keys.DISPLAY_DOWNLOAD_CSV: _EN_DOWNLOAD_CSV,
         Keys.DISPLAY_MODEL: "Model",
 
         Keys.TASK_ADD_NEW: "Add New Task",
@@ -1742,6 +1801,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TAB_ORDER_RECOMMENDATIONS: "🎯 Rekomendacje Zamówień",
         Keys.TAB_ORDER_CREATION: "🛒 Tworzenie Zamówienia",
         Keys.TAB_ORDER_TRACKING: "🚚 Śledzenie Zamówień",
+        Keys.TAB_MATERIAL_PLANNING: "🧵 Planowanie Materiałów",
         Keys.TAB_FORECAST_ACCURACY: "📈 Dokładność Prognozy",
         Keys.TAB_FORECAST_COMPARISON: "🔬 Porównanie Prognoz",
         Keys.TAB_ML_FORECAST: "🤖 Prognoza ML",
@@ -1759,7 +1819,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_RESET: "🔄 Resetuj",
         Keys.BTN_CANCEL: "Anuluj",
         Keys.BTN_CLEAR: "Wyczyść",
-        Keys.BTN_DOWNLOAD_CSV: "Pobierz CSV",
+        Keys.BTN_DOWNLOAD_CSV: _PL_DOWNLOAD_CSV,
         Keys.BTN_GENERATE: "Generuj",
         Keys.BTN_REFRESH: "Odśwież",
         Keys.BTN_CREATE_ORDER: "Utwórz Zamówienie",
@@ -1831,6 +1891,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TITLE_ORDER_RECOMMENDATIONS: "🎯 Rekomendacje Zamówień",
         Keys.TITLE_ORDER_CREATION: "📋 Tworzenie Zamówienia",
         Keys.TITLE_ORDER_TRACKING: "📦 Śledzenie Zamówień",
+        Keys.TITLE_MATERIAL_PLANNING: "🧵 Planowanie Materiałów",
         Keys.TITLE_FORECAST_ACCURACY: "Monitoring Dokładności Prognozy",
         Keys.TITLE_FORECAST_COMPARISON: "Porównanie Prognoz",
         Keys.TITLE_ML_FORECAST: "Prognoza ML",
@@ -2267,7 +2328,33 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         Keys.ERR_ORDER_CREATION: "Błąd w Tworzeniu Zamówienia: {error}",
         Keys.ERR_ORDER_TRACKING: "Błąd w Śledzeniu Zamówień: {error}",
+        Keys.ERR_MATERIAL_PLANNING: "Błąd w Planowaniu Materiałów: {error}",
         Keys.ERR_SAVING_ORDER: "Błąd podczas zapisywania zamówienia: {error}",
+
+        Keys.MAT_SECTION_ORDERS: "Zapotrzebowanie materiałowe z aktywnych zamówień",
+        Keys.MAT_SECTION_MANUAL: "Ręczne wprowadzanie produkcji",
+        Keys.MAT_SECTION_STOCK: "Stan materiałów i rekomendacje zakupowe",
+        Keys.MAT_NO_BOM: "Dane BOM niedostępne. Upewnij się, że plik Excel z metadanymi modeli zawiera arkusz BOM.",
+        Keys.MAT_NO_ORDERS: "Brak aktywnych zamówień. Dodaj zamówienia w Śledzeniu Zamówień lub użyj ręcznego wprowadzania poniżej.",
+        Keys.MAT_NO_REQUIREMENTS: "Brak obliczonego zapotrzebowania. Sprawdź czy dane BOM pasują do modeli zamówień.",
+        Keys.MAT_NO_STOCK: "Dane o stanie materiałów jeszcze niedostępne. Zapotrzebowanie wyświetlone jako pełna potrzeba zakupowa.",
+        Keys.MAT_MODEL: "Model",
+        Keys.MAT_QUANTITY: "Ilość",
+        Keys.MAT_ADD_ENTRY: "Dodaj",
+        Keys.MAT_REMOVE: "Usuń",
+        Keys.MAT_COMBINED_REQUIREMENTS: "Łączne zapotrzebowanie materiałowe",
+        Keys.MAT_DOWNLOAD_CSV: _PL_DOWNLOAD_CSV,
+        Keys.MAT_COL_MATERIAL: "Materiał",
+        Keys.MAT_COL_TYPE: "Komponent",
+        Keys.MAT_COL_METERS: "Łącznie (m)",
+        Keys.MAT_COL_KG: "Łącznie (kg)",
+        Keys.MAT_COL_SUPPLIER: "Dostawca",
+        Keys.MAT_COL_MODELS: "Modele",
+        Keys.MAT_COL_MODEL_COUNT: "# Modeli",
+        Keys.MAT_COL_STOCK_M: "Stan (m)",
+        Keys.MAT_COL_STOCK_KG: "Stan (kg)",
+        Keys.MAT_COL_GAP_M: "Brak (m)",
+        Keys.MAT_COL_GAP_KG: "Brak (kg)",
 
         Keys.CAPTION_SIZE_DISTRIBUTION: "Wszystkie kolory łącznie + historia sprzedaży z ostatnich 3 miesięcy",
         Keys.CAPTION_TOTAL_QTY_FACILITIES: "📊 Łączna ilość we wszystkich zakładach: {total:,}",
@@ -2544,7 +2631,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.DISPLAY_TOTAL_PATTERNS: "Łącznie Wzorców",
         Keys.DISPLAY_TOTAL_EXCESS: "Łącznie Nadwyżki",
         Keys.DISPLAY_COVERAGE: "Pokrycie",
-        Keys.DISPLAY_DOWNLOAD_CSV: "Pobierz CSV",
+        Keys.DISPLAY_DOWNLOAD_CSV: _PL_DOWNLOAD_CSV,
         Keys.DISPLAY_MODEL: "Model",
 
         Keys.TASK_ADD_NEW: "Dodaj Nowe Zadanie",
@@ -2596,6 +2683,7 @@ def get_tab_names() -> list[str]:
         t(Keys.TAB_ORDER_RECOMMENDATIONS),
         t(Keys.TAB_ORDER_CREATION),
         t(Keys.TAB_ORDER_TRACKING),
+        t(Keys.TAB_MATERIAL_PLANNING),
         t(Keys.TAB_FORECAST_ACCURACY),
         t(Keys.TAB_FORECAST_COMPARISON),
         t(Keys.TAB_ML_FORECAST),

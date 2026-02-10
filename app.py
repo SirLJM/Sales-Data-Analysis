@@ -17,6 +17,7 @@ from ui import tab_monthly_analysis
 from ui import tab_nlq
 from ui import tab_order_creation
 from ui import tab_order_recommendations
+from ui import tab_material_planning
 from ui import tab_order_tracking
 from ui import tab_pattern_optimizer
 from ui import tab_sales_analysis
@@ -59,6 +60,7 @@ TAB_RENDERERS = [
     (tab_order_recommendations.render, True),
     (tab_order_creation.render, True),
     (tab_order_tracking.render, False),
+    (tab_material_planning.render, False),
     (tab_forecast_accuracy.render, True),
     (tab_forecast_comparison.render, False),
     (tab_ml_forecast.render, False),

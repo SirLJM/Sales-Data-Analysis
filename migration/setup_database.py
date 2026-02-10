@@ -77,6 +77,7 @@ def main():
         ("schema.sql", "Schema", True),
         ("triggers.sql", "Triggers", True),
         ("orders_schema.sql", "Order tables", True),
+        ("bom_schema.sql", "BOM tables", True),
         ("materialized_views.sql", "Materialized views", True),
     ]
 

@@ -35,6 +35,7 @@ class SessionKeys:
     TASK_FILTER_PRIORITY: Final[str] = "task_filter_priority"
     PATTERN_RESULTS_CACHE: Final[str] = "pattern_results_cache"
     MIN_ORDER_OVERRIDE: Final[str] = "min_order_override"
+    MATERIAL_MANUAL_INPUTS: Final[str] = "material_manual_inputs"
 
 
 class ColumnNames:

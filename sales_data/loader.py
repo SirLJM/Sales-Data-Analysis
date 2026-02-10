@@ -19,6 +19,8 @@ logger = get_logger("loader")
 
 PATH_TO = "/path/to"
 
+FILE_LOCKED_MSG = "File is locked/open. Please close the Excel file and restart the app."
+
 CSV = ".csv"
 
 XLSX = ".xlsx"
@@ -516,11 +518,180 @@ class SalesDataLoader:
             return df
 
         except PermissionError:
-            logger.error("File is locked/open. Please close the Excel file and restart the app.")
+            logger.error(FILE_LOCKED_MSG)
             return None
         except Exception as e:
             logger.warning("Could not load model metadata: %s", e)
             return None
+
+    def _read_bom_sheet(self, file_path: Path) -> pd.DataFrame | None:
+        sheet_name = self.validator.find_bom_sheet(file_path)
+        if not sheet_name:
+            logger.warning("Could not find BOM sheet in %s", file_path)
+            return None
+        return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
+
+    @staticmethod
+    def _clean_bom_boolean(value) -> bool:
+        if pd.isna(value):
+            return False
+        s = str(value).strip().lower()
+        return s in ("tak", "yes", "1", "true", "x")
+
+    @staticmethod
+    def _clean_ribbing_type(value) -> str | None:
+        if pd.isna(value):
+            return None
+        s = str(value).strip().lower()
+        if s in ("brak", "nan", "", "-", "0"):
+            return None
+        return str(value).strip()
+
+    def _normalize_bom_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        column_mapping = {
+            "Model": "model",
+            "u Martyny nazwa": "main_material_name",
+            "norma m2/szt": "main_consumption_m2",
+            "norma mb/szt": "main_consumption_mb",
+            "KG/sztukę": "main_consumption_kg",
+            "wydajność mb/kg": "main_yield_mb_kg",
+            "szer trafaret": "main_width",
+            "Ściągacz rodzaj": "ribbing_type",
+            "Ściągacz mb/szt": "ribbing_consumption_mb",
+            "podszewka single jersey 180 zużycie": "lining_consumption_mb",
+            "OUTLET cały model": "is_outlet",
+            "wycofany?": "is_withdrawn",
+        }
+
+        available = {k: v for k, v in column_mapping.items() if k in df.columns}
+        result = pd.DataFrame(df[list(available.keys())].copy())
+        result = result.rename(columns=available)
+
+        result = pd.DataFrame(result.dropna(subset=["model"]))
+        result["model"] = pd.Series(result["model"]).astype(str).str.strip().str.upper()
+
+        for col in ["main_consumption_m2", "main_consumption_mb", "main_consumption_kg",
+                     "main_yield_mb_kg", "main_width", "ribbing_consumption_mb",
+                     "lining_consumption_mb"]:
+            if col in result.columns:
+                result[col] = pd.Series(pd.to_numeric(result[col], errors="coerce")).fillna(0)
+
+        if "ribbing_type" in result.columns:
+            result["ribbing_type"] = result["ribbing_type"].apply(self._clean_ribbing_type)
+
+        for bool_col in ["is_outlet", "is_withdrawn"]:
+            if bool_col in result.columns:
+                result[bool_col] = result[bool_col].apply(self._clean_bom_boolean)
+
+        if "main_material_name" in result.columns:
+            result["main_material_name"] = (
+                result["main_material_name"].astype(str)
+                .str.strip()
+                .replace("nan", None)
+            )
+
+        return result
+
+    def load_bom_data(self) -> pd.DataFrame | None:
+        file_path = self.find_model_metadata_file()
+        if file_path is None:
+            logger.warning("BOM file not found (model metadata file)")
+            return None
+
+        logger.info("Loading BOM data: %s", file_path.name)
+
+        try:
+            df = self._read_bom_sheet(file_path)
+            if df is None:
+                return None
+
+            is_valid, errors = self.validator.validate_bom_data(df)
+            if not is_valid:
+                logger.warning("Invalid BOM data: %s", errors)
+                return None
+
+            result = self._normalize_bom_data(df)
+            logger.info("Loaded BOM data for %d models", len(result))
+            return result
+
+        except PermissionError:
+            logger.error(FILE_LOCKED_MSG)
+            return None
+        except Exception as e:
+            logger.warning("Could not load BOM data: %s", e)
+            return None
+
+    def _read_material_catalog_sheet(self, file_path: Path) -> pd.DataFrame | None:
+        sheet_name = self.validator.find_material_catalog_sheet(file_path)
+        if not sheet_name:
+            logger.warning("Could not find material catalog sheet in %s", file_path)
+            return None
+        return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
+
+    def load_material_catalog(self) -> pd.DataFrame | None:
+        file_path = self.find_model_metadata_file()
+        if file_path is None:
+            logger.warning("Material catalog file not found")
+            return None
+
+        logger.info("Loading material catalog: %s", file_path.name)
+
+        try:
+            df = self._read_material_catalog_sheet(file_path)
+            if df is None:
+                return None
+
+            is_valid, errors = self.validator.validate_material_catalog(df)
+            if not is_valid:
+                logger.warning("Invalid material catalog: %s", errors)
+                return None
+
+            column_mapping = {
+                "OPIS Z KARTY PRODUKTU": "material_name",
+                "DOSTAWCA": "supplier",
+                "SKŁAD": "composition",
+                "RODZAJ MATERIAŁU": "material_type",
+                "SZER UKŁADÓW": "layout_width",
+                "WYDAJNOŚĆ (m/kg)": "yield_m_per_kg",
+            }
+
+            available = {k: v for k, v in column_mapping.items() if k in df.columns}
+            result = pd.DataFrame(df[list(available.keys())].copy())
+            result = result.rename(columns=available)
+            result = pd.DataFrame(result.dropna(subset=["material_name"]))
+
+            for num_col in ["layout_width", "yield_m_per_kg"]:
+                if num_col in result.columns:
+                    result[num_col] = pd.Series(pd.to_numeric(result[num_col], errors="coerce")).fillna(0)
+
+            logger.info("Loaded %d materials from catalog", len(result))
+            return result
+
+        except PermissionError:
+            logger.error(FILE_LOCKED_MSG)
+            return None
+        except Exception as e:
+            logger.warning("Could not load material catalog: %s", e)
+            return None
+
+    @staticmethod
+    def load_material_stock() -> pd.DataFrame | None:
+        data_dir = Path(__file__).parent.parent / "data"
+        if not data_dir.exists():
+            return None
+
+        for file_path in data_dir.glob("material_stock*"):
+            if file_path.suffix.lower() in (XLSX, CSV):
+                logger.info("Found material stock file: %s", file_path.name)
+                try:
+                    if file_path.suffix == CSV:
+                        return pd.read_csv(file_path)
+                    return pd.read_excel(file_path)
+                except Exception as e:
+                    logger.warning("Could not load material stock: %s", e)
+                    return None
+
+        return None
 
     def load_color_aliases(self) -> dict[str, str]:
         file_path = self.find_model_metadata_file()

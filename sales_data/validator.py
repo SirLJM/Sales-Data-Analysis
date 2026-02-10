@@ -38,6 +38,8 @@ class DataValidator:
         "Kategoria",
         "Nazwa"
     }
+    BOM_COLUMNS = {"Model", "u Martyny nazwa", "norma mb/szt"}
+    MATERIAL_CATALOG_COLUMNS = {"OPIS Z KARTY PRODUKTU", "RODZAJ MATERIAŁU", "DOSTAWCA"}
 
     @staticmethod
     def validate_sales_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
@@ -193,6 +195,49 @@ class DataValidator:
         return DataValidator.find_sheet_by_columns(
             file_path, DataValidator.MODEL_METADATA_COLUMNS, None
         )
+
+    @staticmethod
+    def find_bom_sheet(file_path: Path) -> str | None:
+        return DataValidator.find_sheet_by_columns(
+            file_path, DataValidator.BOM_COLUMNS, None
+        )
+
+    @staticmethod
+    def find_material_catalog_sheet(file_path: Path) -> str | None:
+        return DataValidator.find_sheet_by_columns(
+            file_path, DataValidator.MATERIAL_CATALOG_COLUMNS, None
+        )
+
+    @staticmethod
+    def validate_bom_data(df: pd.DataFrame) -> tuple[bool, list[str]]:
+        errors = []
+
+        missing_columns = DataValidator.BOM_COLUMNS - set(df.columns)
+        if missing_columns:
+            errors.append(f"Missing required columns: {', '.join(missing_columns)}")
+
+        if len(df) == 0:
+            errors.append(DFRAME_EMPTY)
+
+        if "Model" not in df.columns:
+            errors.append("Column 'Model' is required")
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
+
+    @staticmethod
+    def validate_material_catalog(df: pd.DataFrame) -> tuple[bool, list[str]]:
+        errors = []
+
+        missing_columns = DataValidator.MATERIAL_CATALOG_COLUMNS - set(df.columns)
+        if missing_columns:
+            errors.append(f"Missing required columns: {', '.join(missing_columns)}")
+
+        if len(df) == 0:
+            errors.append(DFRAME_EMPTY)
+
+        is_valid = len(errors) == 0
+        return is_valid, errors
 
     @staticmethod
     def find_category_sheet(file_path: Path) -> str | None:
