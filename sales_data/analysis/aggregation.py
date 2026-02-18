@@ -158,7 +158,8 @@ def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.Da
     all_months = sorted(df[month_col].unique(), reverse=True)
 
     children_months = all_months[:n_months]
-    adult_months = all_months[12:12 + n_months] if len(all_months) > 12 else []
+    adult_start = max(0, 12 - n_months)
+    adult_months = all_months[adult_start:12] if len(all_months) > 12 else []
 
     results = [
         r for r in (
