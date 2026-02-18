@@ -17,6 +17,8 @@ class SessionKeys:
     SELECTED_ORDER_ITEMS: Final[str] = "selected_order_items"
     SZWALNIA_INCLUDE_FILTER: Final[str] = "szwalnia_include_filter"
     SZWALNIA_EXCLUDE_FILTER: Final[str] = "szwalnia_exclude_filter"
+    MATERIAL_INCLUDE_FILTER: Final[str] = "material_include_filter"
+    MATERIAL_EXCLUDE_FILTER: Final[str] = "material_exclude_filter"
     MONTHLY_YOY_PODGRUPA: Final[str] = "monthly_yoy_podgrupa"
     MONTHLY_YOY_KATEGORIA: Final[str] = "monthly_yoy_kategoria"
     MONTHLY_YOY_METADATA: Final[str] = "monthly_yoy_metadata"

@@ -12,6 +12,8 @@ from utils.logging_config import get_logger
 
 logger = get_logger("tab_order_recommendations")
 
+DEFAULT_EXCLUDED_MATERIALS = ["30% KASZMIR, 70% MERINO", "WEŁNA 100% MERINO", "MUŚLIN"]
+
 
 @st.fragment
 def render(context: dict) -> None:
@@ -40,6 +42,7 @@ def _render_content(context: dict) -> None:
 
     _render_parameters_expander()
     _render_facility_filters()
+    _render_material_filters()
     _render_controls_row()
     _render_results(context)
 
@@ -55,6 +58,10 @@ def _initialize_tab_session_state() -> None:
         st.session_state[SessionKeys.SZWALNIA_INCLUDE_FILTER] = []
     if SessionKeys.SZWALNIA_EXCLUDE_FILTER not in st.session_state:
         st.session_state[SessionKeys.SZWALNIA_EXCLUDE_FILTER] = []
+    if SessionKeys.MATERIAL_INCLUDE_FILTER not in st.session_state:
+        st.session_state[SessionKeys.MATERIAL_INCLUDE_FILTER] = []
+    if SessionKeys.MATERIAL_EXCLUDE_FILTER not in st.session_state:
+        st.session_state[SessionKeys.MATERIAL_EXCLUDE_FILTER] = []
     if "forecast_source" not in st.session_state:
         st.session_state["forecast_source"] = "External"
 
@@ -210,6 +217,39 @@ def _render_facility_filters() -> None:
         )
 
 
+def _render_material_filters() -> None:
+    st.write(f"**{t(Keys.FILTER_BY_MATERIAL)}**")
+    model_metadata_df = load_model_metadata()
+
+    if model_metadata_df is None or ColumnNames.MATERIAL not in model_metadata_df.columns:
+        st.info(t(Keys.MODEL_METADATA_NOT_AVAILABLE))
+        return
+
+    unique_materials = sorted(
+        model_metadata_df[ColumnNames.MATERIAL].dropna().str.strip().unique().tolist()
+    )
+    col_include, col_exclude = st.columns(2)
+
+    with col_include:
+        st.session_state[SessionKeys.MATERIAL_INCLUDE_FILTER] = st.multiselect(
+            t(Keys.INCLUDE_MATERIALS),
+            options=unique_materials,
+            default=st.session_state[SessionKeys.MATERIAL_INCLUDE_FILTER],
+            help=t(Keys.HELP_INCLUDE_MATERIALS),
+        )
+
+    with col_exclude:
+        current_exclude = st.session_state[SessionKeys.MATERIAL_EXCLUDE_FILTER]
+        if not current_exclude:
+            current_exclude = [m for m in DEFAULT_EXCLUDED_MATERIALS if m in unique_materials]
+        st.session_state[SessionKeys.MATERIAL_EXCLUDE_FILTER] = st.multiselect(
+            t(Keys.EXCLUDE_MATERIALS_REC),
+            options=unique_materials,
+            default=current_exclude,
+            help=t(Keys.HELP_EXCLUDE_MATERIALS),
+        )
+
+
 def _render_controls_row() -> None:
     col_source, col_top_n, col_calc, col_clear = st.columns([2, 2, 1, 1])
 
@@ -330,6 +370,7 @@ def _generate_recommendations(context: dict) -> None:
 
             recommendations = _filter_active_orders(recommendations)
             recommendations = _apply_facility_filters(recommendations)
+            recommendations = _apply_material_filters(recommendations)
 
             set_session_value(SessionKeys.RECOMMENDATIONS_DATA, recommendations)
             source_label = "ML" if use_ml else "External"
@@ -487,6 +528,43 @@ def _apply_facility_filters(recommendations: dict) -> dict:
         priority_skus = priority_skus[~priority_skus[ColumnNames.SZWALNIA_G].isin(exclude_filter)]
 
     priority_skus = priority_skus.drop(columns=["Model", ColumnNames.SZWALNIA_G])
+
+    model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_skus)
+
+    recommendations["priority_skus"] = priority_skus
+    recommendations["model_color_summary"] = model_color_summary
+
+    return recommendations
+
+
+def _apply_material_filters(recommendations: dict) -> dict:
+    include_filter = st.session_state[SessionKeys.MATERIAL_INCLUDE_FILTER]
+    exclude_filter = st.session_state[SessionKeys.MATERIAL_EXCLUDE_FILTER]
+
+    if not include_filter and not exclude_filter:
+        return recommendations
+
+    model_metadata_df = load_model_metadata()
+    if model_metadata_df is None or ColumnNames.MATERIAL not in model_metadata_df.columns:
+        return recommendations
+
+    priority_skus = recommendations["priority_skus"].copy()
+    priority_skus = priority_skus.merge(
+        model_metadata_df[["Model", ColumnNames.MATERIAL]],
+        left_on="MODEL",
+        right_on="Model",
+        how="left",
+    )
+
+    priority_skus[ColumnNames.MATERIAL] = priority_skus[ColumnNames.MATERIAL].str.strip()
+
+    if include_filter:
+        priority_skus = priority_skus[priority_skus[ColumnNames.MATERIAL].isin(include_filter)]
+
+    if exclude_filter:
+        priority_skus = priority_skus[~priority_skus[ColumnNames.MATERIAL].isin(exclude_filter)]
+
+    priority_skus = priority_skus.drop(columns=["Model", ColumnNames.MATERIAL])
 
     model_color_summary = SalesAnalyzer.aggregate_order_by_model_color(priority_skus)
 

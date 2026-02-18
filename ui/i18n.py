@@ -275,6 +275,9 @@ class Keys:
     TYPE_MULTIPLIERS: Final[str] = "type_multipliers"
     STOCKOUT_RISK_PARAMS: Final[str] = "stockout_risk_params"
     FILTER_BY_FACILITY: Final[str] = "filter_by_facility"
+    FILTER_BY_MATERIAL: Final[str] = "filter_by_material"
+    INCLUDE_MATERIALS: Final[str] = "include_materials"
+    EXCLUDE_MATERIALS_REC: Final[str] = "exclude_materials_rec"
     PARAM_STOCKOUT_RISK: Final[str] = "param_stockout_risk"
     PARAM_REVENUE_IMPACT: Final[str] = "param_revenue_impact"
     PARAM_DEMAND_FORECAST: Final[str] = "param_demand_forecast"
@@ -478,6 +481,8 @@ class Keys:
     HELP_DEMAND_CAP: Final[str] = "help_demand_cap"
     HELP_INCLUDE_FACILITIES: Final[str] = "help_include_facilities"
     HELP_EXCLUDE_FACILITIES: Final[str] = "help_exclude_facilities"
+    HELP_INCLUDE_MATERIALS: Final[str] = "help_include_materials"
+    HELP_EXCLUDE_MATERIALS: Final[str] = "help_exclude_materials"
     HELP_FORECAST_SOURCE: Final[str] = "help_forecast_source"
     HELP_SELECT_ITEMS: Final[str] = "help_select_items"
     NEW_PRODUCTS: Final[str] = "new_products"
@@ -1167,6 +1172,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TYPE_MULTIPLIERS: "**Type Multipliers** (priority boost by product type)",
         Keys.STOCKOUT_RISK_PARAMS: "**Stockout Risk & Other Parameters**",
         Keys.FILTER_BY_FACILITY: "**Filter by Production Facility**",
+        Keys.FILTER_BY_MATERIAL: "**Filter by Material Type**",
+        Keys.INCLUDE_MATERIALS: "Include Materials:",
+        Keys.EXCLUDE_MATERIALS_REC: "Exclude Materials:",
         Keys.PARAM_STOCKOUT_RISK: "Stockout Risk",
         Keys.PARAM_REVENUE_IMPACT: "Revenue Impact",
         Keys.PARAM_DEMAND_FORECAST: "Demand Forecast",
@@ -1370,6 +1378,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.HELP_DEMAND_CAP: "Maximum forecast value used in priority calculation.",
         Keys.HELP_INCLUDE_FACILITIES: "Select facilities to INCLUDE. Empty = include all.",
         Keys.HELP_EXCLUDE_FACILITIES: "Select facilities to EXCLUDE. Takes precedence over include.",
+        Keys.HELP_INCLUDE_MATERIALS: "Select materials to INCLUDE. Empty = include all.",
+        Keys.HELP_EXCLUDE_MATERIALS: "Select materials to EXCLUDE. Takes precedence over include.",
         Keys.HELP_FORECAST_SOURCE: "External uses loaded forecast file. ML uses trained ML models from Tab 10.",
         Keys.HELP_SELECT_ITEMS: "Select items to create order",
         Keys.NEW_PRODUCTS: "New Products",
@@ -2051,6 +2061,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.TYPE_MULTIPLIERS: "**Mnożniki Typów** (zwiększenie priorytetu wg typu produktu)",
         Keys.STOCKOUT_RISK_PARAMS: "**Ryzyko Braku Towaru i Inne Parametry**",
         Keys.FILTER_BY_FACILITY: "**Filtruj wg Zakładu Produkcyjnego**",
+        Keys.FILTER_BY_MATERIAL: "**Filtruj wg Rodzaju Materiału**",
+        Keys.INCLUDE_MATERIALS: "Uwzględnij Materiały:",
+        Keys.EXCLUDE_MATERIALS_REC: "Wyklucz Materiały:",
         Keys.PARAM_STOCKOUT_RISK: "Ryzyko Braku Towaru",
         Keys.PARAM_REVENUE_IMPACT: "Wpływ na Przychód",
         Keys.PARAM_DEMAND_FORECAST: "Prognoza Popytu",
@@ -2254,6 +2267,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.HELP_DEMAND_CAP: "Maksymalna wartość prognozy używana w obliczaniu priorytetu.",
         Keys.HELP_INCLUDE_FACILITIES: "Wybierz zakłady do UWZGLĘDNIENIA. Puste = uwzględnij wszystkie.",
         Keys.HELP_EXCLUDE_FACILITIES: "Wybierz zakłady do WYKLUCZENIA. Ma pierwszeństwo przed uwzględnieniem.",
+        Keys.HELP_INCLUDE_MATERIALS: "Wybierz materiały do UWZGLĘDNIENIA. Puste = uwzględnij wszystkie.",
+        Keys.HELP_EXCLUDE_MATERIALS: "Wybierz materiały do WYKLUCZENIA. Ma pierwszeństwo przed uwzględnieniem.",
         Keys.HELP_FORECAST_SOURCE: "Zewnętrzna używa wczytanego pliku prognozy. ML używa wytrenowanych modeli ML z zakładki 10.",
         Keys.HELP_SELECT_ITEMS: "Wybierz pozycje do utworzenia zamówienia",
         Keys.NEW_PRODUCTS: "Nowe Produkty",
