@@ -317,7 +317,15 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
 
     monthly_agg = _load_monthly_aggregations_cached()
 
-    pattern_results = _get_cached_pattern_results(model, all_colors, pattern_set, monthly_agg)
+    exclude_low_sales = st.checkbox(
+        t(Keys.EXCLUDE_LOW_SALES_SIZES),
+        value=st.session_state.get(SessionKeys.EXCLUDE_LOW_SALES_SIZES, True),
+        key=SessionKeys.EXCLUDE_LOW_SALES_SIZES,
+    )
+
+    pattern_results = _get_cached_pattern_results(
+        model, all_colors, pattern_set, monthly_agg, exclude_low_sales
+    )
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
 
@@ -631,9 +639,10 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
 
 
 def _get_cached_pattern_results(
-        model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
+        model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
+        exclude_low_sales: bool = True,
 ) -> dict:
-    cache_key = f"{model}:{','.join(sorted(colors))}"
+    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}"
     cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
 
     if cache.get("key") == cache_key and cache.get("results"):
@@ -643,7 +652,7 @@ def _get_cached_pattern_results(
     logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
     pattern_results = {}
     for color in colors:
-        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg)
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales)
         pattern_results[color] = result
 
     st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
@@ -687,7 +696,8 @@ def _get_order_creation_size_quantities(
 
 
 def _optimize_color_pattern(
-        model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
+        model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
+        exclude_low_sales: bool = True,
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
@@ -704,7 +714,7 @@ def _optimize_color_pattern(
     size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases)
 
     size_sales_history = None
-    if monthly_agg is not None and not monthly_agg.empty:
+    if exclude_low_sales and monthly_agg is not None and not monthly_agg.empty:
         size_sales_history = SalesAnalyzer.calculate_size_sales_history(
             monthly_agg, model, color, size_aliases, months=2
         )
