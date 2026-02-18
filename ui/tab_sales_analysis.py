@@ -8,13 +8,14 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.i18n import t, Keys
-from ui.shared.data_loaders import load_data, load_forecast, load_stock, load_yearly_sales, load_yearly_forecast
+from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_yearly_sales, load_yearly_forecast
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
 from ui.shared.styles import SIDEBAR_STYLE
 from utils.logging_config import get_logger
 
 YO_Y_ = "YoY %"
+DEFAULT_EXCLUDED_MATERIALS = ["30% KASZMIR, 70% MERINO", "WEŁNA 100% MERINO", "MUŚLIN"]
 
 logger = get_logger("tab_sales_analysis")
 
@@ -42,6 +43,7 @@ def _render_content(context: dict) -> None:
     analyzer = SalesAnalyzer(df)
 
     summary, id_column = _build_summary(analyzer, group_by_model, settings)
+    summary = _merge_model_metadata(summary, id_column)
     seasonal_data = analyzer.determine_seasonal_months()
 
     stock_df, stock_df_sku_level, stock_loaded = _process_stock_data(
@@ -109,6 +111,35 @@ def _build_summary(analyzer: SalesAnalyzer, group_by_model: bool, settings: dict
     summary["LAST_2_YEARS_AVG"] = summary["LAST_2_YEARS_AVG"].fillna(0)
 
     return summary, id_column
+
+
+def _merge_model_metadata(summary: pd.DataFrame, id_column: str) -> pd.DataFrame:
+    metadata = load_model_metadata()
+    if metadata is None:
+        return summary
+
+    merge_cols = ["Model"]
+    for col in [ColumnNames.SZWALNIA_G, ColumnNames.MATERIAL]:
+        if col in metadata.columns:
+            merge_cols.append(col)
+
+    if len(merge_cols) <= 1:
+        return summary
+
+    metadata_subset = metadata[merge_cols].drop_duplicates(subset=["Model"])
+
+    if id_column == "MODEL":
+        summary = summary.merge(metadata_subset, left_on="MODEL", right_on="Model", how="left")
+        if "Model" in summary.columns:
+            summary = summary.drop(columns=["Model"])
+    else:
+        summary["_MODEL"] = pd.Series(summary["SKU"]).astype(str).str[:5]
+        summary = summary.merge(metadata_subset, left_on="_MODEL", right_on="Model", how="left")
+        summary = summary.drop(columns=["_MODEL"])
+        if "Model" in summary.columns:
+            summary = summary.drop(columns=["Model"])
+
+    return summary
 
 
 def _process_stock_data(
@@ -224,28 +255,38 @@ def _arrange_columns(
         stock_loaded: bool,
         group_by_model: bool,
 ) -> pd.DataFrame:
+    metadata_cols = [ColumnNames.SZWALNIA_G, ColumnNames.MATERIAL]
+
     if stock_loaded:
         if group_by_model:
             column_order = [
-                id_column, "TYPE", ColumnNames.STOCK, "ROP", "SS", "FORECAST_LEADTIME",
-                ColumnNames.OVERSTOCKED_PCT, "DEFICIT", "MONTHS", "QUANTITY",
-                ColumnNames.AVERAGE_SALES, "LAST_2_YEARS_AVG", "CV", ColumnNames.VALUE, "BELOW_ROP",
-            ]
-        else:
-            column_order = [
-                id_column, "DESCRIPTION", "TYPE", ColumnNames.STOCK, "ROP", "SS",
+                id_column, "TYPE", *metadata_cols, ColumnNames.STOCK, "ROP", "SS",
                 "FORECAST_LEADTIME", ColumnNames.OVERSTOCKED_PCT, "DEFICIT", "MONTHS",
                 "QUANTITY", ColumnNames.AVERAGE_SALES, "LAST_2_YEARS_AVG", "CV",
                 ColumnNames.VALUE, "BELOW_ROP",
             ]
+        else:
+            column_order = [
+                id_column, "DESCRIPTION", "TYPE", *metadata_cols, ColumnNames.STOCK,
+                "ROP", "SS", "FORECAST_LEADTIME", ColumnNames.OVERSTOCKED_PCT, "DEFICIT",
+                "MONTHS", "QUANTITY", ColumnNames.AVERAGE_SALES, "LAST_2_YEARS_AVG", "CV",
+                ColumnNames.VALUE, "BELOW_ROP",
+            ]
     else:
         column_order = [
-            id_column, "TYPE", "MONTHS", "QUANTITY", ColumnNames.AVERAGE_SALES,
-            "LAST_2_YEARS_AVG", "SS", "CV", "ROP", "FORECAST_LEADTIME",
+            id_column, "TYPE", *metadata_cols, "MONTHS", "QUANTITY",
+            ColumnNames.AVERAGE_SALES, "LAST_2_YEARS_AVG", "SS", "CV", "ROP",
+            "FORECAST_LEADTIME",
         ]
 
     column_order = [col for col in column_order if col in summary.columns]
     return summary[column_order]
+
+
+def _get_unique_values(df: pd.DataFrame, column: str) -> list[str]:
+    if column not in df.columns:
+        return []
+    return sorted(df[column].dropna().astype(str).str.strip().unique().tolist())
 
 
 def _render_filters(
@@ -286,6 +327,34 @@ def _render_filters(
             key="type_filter",
         )
 
+    col_mat, col_mat_ex, col_fac = st.columns(3)
+    material_options = _get_unique_values(summary, ColumnNames.MATERIAL)
+    with col_mat:
+        material_filter = st.multiselect(
+            t(Keys.FILTER_MATERIAL_TYPE),
+            options=material_options,
+            default=[],
+            key="sa_material_filter",
+        ) if material_options else []
+
+    with col_mat_ex:
+        default_excluded = [m for m in DEFAULT_EXCLUDED_MATERIALS if m in material_options]
+        material_exclude = st.multiselect(
+            t(Keys.EXCLUDE_MATERIALS),
+            options=material_options,
+            default=default_excluded,
+            key="sa_material_exclude",
+        ) if material_options else []
+
+    with col_fac:
+        facility_options = _get_unique_values(summary, ColumnNames.SZWALNIA_G)
+        facility_filter = st.multiselect(
+            t(Keys.LABEL_PRIMARY_FACILITY),
+            options=facility_options,
+            default=[],
+            key="sa_facility_filter",
+        ) if facility_options else []
+
     overstock_threshold = Config.DEFAULT_OVERSTOCK_THRESHOLD
     show_overstocked = False
 
@@ -301,7 +370,35 @@ def _render_filters(
                     key="overstock_threshold",
                 )
 
-    filtered: pd.DataFrame = summary.copy()
+    return _apply_filters(
+        summary, id_column,
+        search_term=search_term,
+        show_only_below_rop=show_only_below_rop,
+        show_bestsellers=show_bestsellers,
+        show_overstocked=stock_loaded and show_overstocked,
+        overstock_threshold=overstock_threshold,
+        type_filter=type_filter,
+        material_filter=material_filter,
+        material_exclude=material_exclude,
+        facility_filter=facility_filter,
+    )
+
+
+def _apply_filters(
+        df: pd.DataFrame,
+        id_column: str,
+        *,
+        search_term: str,
+        show_only_below_rop: bool,
+        show_bestsellers: bool,
+        show_overstocked: bool,
+        overstock_threshold: int,
+        type_filter: list[str],
+        material_filter: list[str],
+        material_exclude: list[str],
+        facility_filter: list[str],
+) -> pd.DataFrame:
+    filtered: pd.DataFrame = df.copy()
 
     if search_term:
         search_mask = filtered[id_column].astype(str).str.contains(search_term, case=False, na=False)
@@ -313,13 +410,22 @@ def _render_filters(
     if show_bestsellers:
         filtered = filtered[filtered["LAST_2_YEARS_AVG"] > 300]
 
-    if stock_loaded and show_overstocked and ColumnNames.OVERSTOCKED_PCT in list(filtered.columns):
+    if show_overstocked and ColumnNames.OVERSTOCKED_PCT in list(filtered.columns):
         overstocked_mask = pd.Series(filtered[ColumnNames.OVERSTOCKED_PCT]) >= overstock_threshold
         filtered = pd.DataFrame(filtered[overstocked_mask])
 
     if type_filter:
         type_col = pd.Series(filtered["TYPE"])
         filtered = filtered[type_col.isin(type_filter)]
+
+    if material_filter and ColumnNames.MATERIAL in filtered.columns:
+        filtered = pd.DataFrame(filtered[filtered[ColumnNames.MATERIAL].isin(material_filter)])
+
+    if material_exclude and ColumnNames.MATERIAL in filtered.columns:
+        filtered = pd.DataFrame(filtered[~filtered[ColumnNames.MATERIAL].isin(material_exclude)])
+
+    if facility_filter and ColumnNames.SZWALNIA_G in filtered.columns:
+        filtered = pd.DataFrame(filtered[filtered[ColumnNames.SZWALNIA_G].isin(facility_filter)])
 
     return filtered
 

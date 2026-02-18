@@ -19,8 +19,10 @@ COL_TOTAL_QUANTITY = "Total Quantity"
 OTHER_OPTION = "(Other)"
 
 CAPACITY_THRESHOLDS = [
-    (200, "🔴", Keys.STATUS_2_PLUS_WEEKS),
-    (150, "🟠", Keys.STATUS_1_5_PLUS_WEEKS),
+    (300, "🔴", Keys.STATUS_3_PLUS_WEEKS),
+    (250, "🔴", Keys.STATUS_2_5_PLUS_WEEKS),
+    (200, "🟠", Keys.STATUS_2_PLUS_WEEKS),
+    (150, "🟡", Keys.STATUS_1_5_PLUS_WEEKS),
     (100, "🟡", Keys.STATUS_1_PLUS_WEEK),
     (75, "🟢", Keys.STATUS_OK),
 ]

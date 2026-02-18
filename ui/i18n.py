@@ -238,6 +238,7 @@ class Keys:
     BTN_GENERATE_WORST_ROTATING: Final[str] = "btn_generate_worst_rotating"
     CALCULATING_WORST_MODELS: Final[str] = "calculating_worst_models"
     FILTER_MATERIAL_TYPE: Final[str] = "filter_material_type"
+    EXCLUDE_MATERIALS: Final[str] = "exclude_materials"
     FILTER_COLOR: Final[str] = "filter_color"
     ALL_MATERIALS: Final[str] = "all_materials"
     ALL_COLORS: Final[str] = "all_colors"
@@ -524,6 +525,8 @@ class Keys:
     LABEL_STATUS: Final[str] = "label_status"
     HELP_WEEKS_AHEAD: Final[str] = "help_weeks_ahead"
     CAPTION_CAPACITY_LEGEND: Final[str] = "caption_capacity_legend"
+    STATUS_3_PLUS_WEEKS: Final[str] = "status_3_plus_weeks"
+    STATUS_2_5_PLUS_WEEKS: Final[str] = "status_2_5_plus_weeks"
     STATUS_2_PLUS_WEEKS: Final[str] = "status_2_plus_weeks"
     STATUS_1_5_PLUS_WEEKS: Final[str] = "status_1_5_plus_weeks"
     STATUS_1_PLUS_WEEK: Final[str] = "status_1_plus_week"
@@ -1127,6 +1130,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_WORST_ROTATING: "Generate Outlet Candidates",
         Keys.CALCULATING_WORST_MODELS: "Calculating worst performing models...",
         Keys.FILTER_MATERIAL_TYPE: "Material Type",
+        Keys.EXCLUDE_MATERIALS: "Exclude Materials",
         Keys.FILTER_COLOR: "Color",
         Keys.ALL_MATERIALS: "All Materials",
         Keys.ALL_COLORS: "All Colors",
@@ -1412,7 +1416,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.LABEL_WEEKS_AHEAD: "Weeks Ahead",
         Keys.LABEL_STATUS: "Status",
         Keys.HELP_WEEKS_AHEAD: "How many weeks of capacity is currently ordered (based on monthly capacity / 4)",
-        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Low (<75%) | 🟢 OK (75-99%) | 🟡 1+ week (100-149%) | 🟠 1.5+ weeks (150-199%) | 🔴 2+ weeks (≥200%)",
+        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Low (<75%) | 🟢 OK (75-99%) | 🟡 1+ week (100-149%) | 🟡 1.5+ weeks (150-199%) | 🟠 2+ weeks (200-249%) | 🔴 2.5+ weeks (250-299%) | 🔴 3+ weeks (≥300%)",
+        Keys.STATUS_3_PLUS_WEEKS: "3+ weeks",
+        Keys.STATUS_2_5_PLUS_WEEKS: "2.5+ weeks",
         Keys.STATUS_2_PLUS_WEEKS: "2+ weeks",
         Keys.STATUS_1_5_PLUS_WEEKS: "1.5+ weeks",
         Keys.STATUS_1_PLUS_WEEK: "1+ week",
@@ -2008,6 +2014,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_WORST_ROTATING: "Generuj Kandydatów do Outletu",
         Keys.CALCULATING_WORST_MODELS: "Obliczanie najsłabiej sprzedających się modeli...",
         Keys.FILTER_MATERIAL_TYPE: "Rodzaj Materiału",
+        Keys.EXCLUDE_MATERIALS: "Wyklucz Materiały",
         Keys.FILTER_COLOR: "Kolor",
         Keys.ALL_MATERIALS: "Wszystkie Materiały",
         Keys.ALL_COLORS: "Wszystkie Kolory",
@@ -2293,7 +2300,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.LABEL_WEEKS_AHEAD: "Tygodni Wprzód",
         Keys.LABEL_STATUS: "Status",
         Keys.HELP_WEEKS_AHEAD: "Ile tygodni pojemności jest obecnie zamówionych (miesięczna pojemność / 4)",
-        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Niska (<75%) | 🟢 OK (75-99%) | 🟡 1+ tydzień (100-149%) | 🟠 1.5+ tygodnia (150-199%) | 🔴 2+ tygodnie (≥200%)",
+        Keys.CAPTION_CAPACITY_LEGEND: "Status: ⚪ Niska (<75%) | 🟢 OK (75-99%) | 🟡 1+ tyg. (100-149%) | 🟡 1.5+ tyg. (150-199%) | 🟠 2+ tyg. (200-249%) | 🔴 2.5+ tyg. (250-299%) | 🔴 3+ tyg. (≥300%)",
+        Keys.STATUS_3_PLUS_WEEKS: "3+ tygodnie",
+        Keys.STATUS_2_5_PLUS_WEEKS: "2.5+ tygodnia",
         Keys.STATUS_2_PLUS_WEEKS: "2+ tygodnie",
         Keys.STATUS_1_5_PLUS_WEEKS: "1.5+ tygodnia",
         Keys.STATUS_1_PLUS_WEEK: "1+ tydzień",
