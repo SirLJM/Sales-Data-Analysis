@@ -135,6 +135,14 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
     sku_summary = _merge_forecast_data(sku_summary, forecast_df, settings["lead_time"])
     sku_summary = apply_priority_scoring(sku_summary, settings)
 
+    monthly_agg = _load_monthly_aggregations_cached()
+    if monthly_agg is not None and not monthly_agg.empty:
+        period_sales = SalesAnalyzer.calculate_period_sales(monthly_agg, settings["lead_time"])
+        sku_summary = sku_summary.merge(period_sales, on="SKU", how="left")
+        sku_summary["PERIOD_SALES"] = sku_summary["PERIOD_SALES"].fillna(0).astype(int)
+    else:
+        sku_summary["PERIOD_SALES"] = 0
+
     return sku_summary
 
 
@@ -191,12 +199,13 @@ def _add_sku_components(sku_summary: pd.DataFrame) -> pd.DataFrame:
 
 def _calculate_order_qty_for_row(row: pd.Series) -> tuple[str, int]:
     size_code = str(row["SIZE"])
-    forecast_qty = int(row.get("FORECAST_LEADTIME", 0) or 0)
+    period_sales = int(row.get("PERIOD_SALES", 0) or 0)
+    if period_sales == 0:
+        return size_code, 0
     stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
-    rop_value = row.get("ROP", 0)
-    rop = 0 if rop_value is None or (isinstance(rop_value, float) and pd.isna(rop_value)) else int(rop_value)
-    deficit = max(0, rop - stock_qty)
-    order_qty = max(forecast_qty, deficit)
+    ss_value = row.get("SS", 0)
+    ss = 0 if ss_value is None or (isinstance(ss_value, float) and pd.isna(ss_value)) else int(ss_value)
+    order_qty = max(0, period_sales + ss - stock_qty)
     return size_code, order_qty
 
 
@@ -243,7 +252,7 @@ def _save_order_to_session(selected_items: list[dict], model_data: pd.DataFrame)
 
     required_cols = [
         "SKU", "MODEL", "COLOR", "SIZE", "PRIORITY_SCORE", "DEFICIT",
-        "FORECAST_LEADTIME", ColumnNames.STOCK, "ROP", "SS", "TYPE"
+        "FORECAST_LEADTIME", ColumnNames.STOCK, "ROP", "SS", "TYPE", "PERIOD_SALES"
     ]
     available_cols = [col for col in required_cols if col in model_data.columns]
     priority_skus = model_data[available_cols].copy()
@@ -652,6 +661,31 @@ def _get_effective_min_order_for_pattern_set(pattern_set: PatternSet) -> int:
     return pattern_set.get_min_order()
 
 
+def _get_order_creation_size_quantities(
+        priority_skus: pd.DataFrame, model: str, color: str, size_aliases: dict[str, str]
+) -> dict[str, int]:
+    model_color = pd.DataFrame(
+        priority_skus[(priority_skus["MODEL"] == model) & (priority_skus["COLOR"] == color)]
+    )
+    if model_color.empty:
+        return {}
+
+    result: dict[str, int] = {}
+    for _, row in model_color.iterrows():
+        period_sales = int(row.get("PERIOD_SALES", 0) or 0)
+        if period_sales == 0:
+            continue
+        stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
+        ss_value = row.get("SS", 0)
+        ss = 0 if ss_value is None or (isinstance(ss_value, float) and pd.isna(ss_value)) else int(ss_value)
+        order_qty = max(0, period_sales + ss - stock_qty)
+        if order_qty > 0:
+            size_code = str(row["SIZE"])
+            alias = size_aliases.get(size_code, size_code)
+            result[alias] = result.get(alias, 0) + order_qty
+    return result
+
+
 def _optimize_color_pattern(
         model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None
 ) -> dict:
@@ -667,14 +701,17 @@ def _optimize_color_pattern(
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
+    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases)
+
     size_sales_history = None
     if monthly_agg is not None and not monthly_agg.empty:
         size_sales_history = SalesAnalyzer.calculate_size_sales_history(
-            monthly_agg, model, color, size_aliases, months=4
+            monthly_agg, model, color, size_aliases, months=2
         )
 
     return SalesAnalyzer.optimize_pattern_with_aliases(
-        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode, size_sales_history
+        priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode,
+        size_sales_history, size_quantities_override, min_sales_threshold=2,
     )
 
 

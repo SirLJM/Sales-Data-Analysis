@@ -110,13 +110,14 @@ MIN_SALES_THRESHOLD = 3
 def filter_low_sales_sizes(
     quantities: dict[str, int],
     size_sales_history: dict[str, int] | None,
+    min_sales_threshold: int = MIN_SALES_THRESHOLD,
 ) -> tuple[dict[str, int], list[str]]:
     if size_sales_history is None:
         return quantities, []
 
     excluded_sizes = {
         size for size, qty in quantities.items()
-        if size_sales_history.get(size, 0) < MIN_SALES_THRESHOLD
+        if size_sales_history.get(size, 0) < min_sales_threshold
     }
 
     return {k: v for k, v in quantities.items() if k not in excluded_sizes}, list(excluded_sizes)
@@ -242,6 +243,7 @@ def optimize_patterns(
     algorithm_mode: str = "greedy_overshoot",
     size_priorities: dict[str, float] | None = None,
     size_sales_history: dict[str, int] | None = None,
+    min_sales_threshold: int = MIN_SALES_THRESHOLD,
 ) -> dict:
     logger.info("Optimizing patterns: %d sizes, %d patterns, min_order=%d", len(quantities), len(patterns), min_per_pattern)
 
@@ -249,7 +251,7 @@ def optimize_patterns(
         logger.warning("Early exit: no patterns (%d) or all quantities are zero", len(patterns))
         return _get_empty_result(quantities)
 
-    filtered_quantities, excluded_sizes = filter_low_sales_sizes(quantities, size_sales_history)
+    filtered_quantities, excluded_sizes = filter_low_sales_sizes(quantities, size_sales_history, min_sales_threshold)
 
     if not any(filtered_quantities.values()):
         logger.warning("All quantities filtered out, returning empty result")

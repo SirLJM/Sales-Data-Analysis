@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 
 import pandas as pd
+
+from ui.shared.sku_utils import ADULT_PREFIXES, CHILDREN_PREFIXES
 
 AVERAGE_SALES = "AVERAGE SALES"
 
@@ -114,3 +117,57 @@ def calculate_last_two_years_avg_sales(data: pd.DataFrame, by_model: bool = Fals
     avg_sales["LAST_2_YEARS_AVG"] = pd.Series(avg_sales["LAST_2_YEARS_AVG"]).round(2)
 
     return avg_sales
+
+
+_PERIOD_SALES_COLUMNS = pd.Index(["SKU", "PERIOD_SALES"])
+
+
+def _aggregate_group_sales(
+    df: pd.DataFrame, mask: "pd.Series[bool]", month_col: str, sku_col: str, qty_col: str, target_months: list[str],
+) -> pd.DataFrame | None:
+    if not target_months or not mask.any():
+        return None
+    filtered = pd.DataFrame(df[mask & df[month_col].isin(target_months)])
+    if filtered.empty:
+        return None
+    sales = pd.DataFrame(filtered.groupby(sku_col, as_index=False, observed=True)[qty_col].sum())
+    sales.columns = _PERIOD_SALES_COLUMNS
+    return sales
+
+
+def _resolve_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    return next((c for c in candidates if c in df.columns), None)
+
+
+def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.DataFrame:
+    if monthly_agg is None or monthly_agg.empty:
+        return pd.DataFrame(columns=_PERIOD_SALES_COLUMNS)
+
+    df = monthly_agg.copy()
+
+    sku_col = _resolve_column(df, ["entity_id", "sku", "SKU"])
+    month_col = _resolve_column(df, ["year_month", "month"])
+    qty_col = _resolve_column(df, ["total_quantity", "ilosc"])
+
+    if sku_col is None or month_col is None or qty_col is None:
+        return pd.DataFrame(columns=_PERIOD_SALES_COLUMNS)
+
+    n_months = math.ceil(lead_time)
+    df["_prefix"] = df[sku_col].astype(str).str[:2].str.lower()
+    df[month_col] = df[month_col].astype(str)
+    all_months = sorted(df[month_col].unique(), reverse=True)
+
+    children_months = all_months[:n_months]
+    adult_months = all_months[12:12 + n_months] if len(all_months) > 12 else []
+
+    results = [
+        r for r in (
+            _aggregate_group_sales(df, df["_prefix"].isin(CHILDREN_PREFIXES), month_col, sku_col, qty_col, children_months),
+            _aggregate_group_sales(df, df["_prefix"].isin(ADULT_PREFIXES), month_col, sku_col, qty_col, adult_months),
+        ) if r is not None
+    ]
+
+    if not results:
+        return pd.DataFrame(columns=_PERIOD_SALES_COLUMNS)
+
+    return pd.DataFrame(pd.concat(results, ignore_index=True))

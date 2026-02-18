@@ -2,6 +2,18 @@ from __future__ import annotations
 
 import pandas as pd
 
+CHILDREN_PREFIXES = ("ch", "ni", "dz")
+ADULT_PREFIXES = ("do", "ju")
+
+
+def get_sku_age_category(sku: str) -> str | None:
+    prefix = sku[:2].lower()
+    if prefix in CHILDREN_PREFIXES:
+        return "children"
+    if prefix in ADULT_PREFIXES:
+        return "adult"
+    return None
+
 
 def extract_model(sku_series: pd.Series) -> pd.Series:
     return sku_series.astype(str).str[:5]

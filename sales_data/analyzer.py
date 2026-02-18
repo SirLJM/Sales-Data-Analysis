@@ -16,6 +16,7 @@ from sales_data.analysis import (
     calculate_model_stock_projection,
     calculate_monthly_yoy_by_category,
     calculate_order_priority,
+    calculate_period_sales,
     calculate_safety_stock_and_rop,
     calculate_size_priorities,
     calculate_size_sales_history,
@@ -54,6 +55,10 @@ class SalesAnalyzer:
 
     def calculate_last_two_years_avg_sales(self, by_model: bool = False) -> pd.DataFrame:
         return calculate_last_two_years_avg_sales(self.data, by_model)
+
+    @staticmethod
+    def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.DataFrame:
+        return calculate_period_sales(monthly_agg, lead_time)
 
     @staticmethod
     def classify_sku_type(
@@ -229,9 +234,12 @@ class SalesAnalyzer:
             min_per_pattern: int,
             algorithm_mode: str = "greedy_overshoot",
             size_sales_history: dict[str, int] | None = None,
+            size_quantities_override: dict[str, int] | None = None,
+            min_sales_threshold: int = 3,
     ) -> dict:
         return optimize_pattern_with_aliases(
-            priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode, size_sales_history
+            priority_skus, model, color, pattern_set, size_aliases, min_per_pattern, algorithm_mode,
+            size_sales_history, size_quantities_override, min_sales_threshold,
         )
 
     @staticmethod

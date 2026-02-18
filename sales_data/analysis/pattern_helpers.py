@@ -145,10 +145,15 @@ def optimize_pattern_with_aliases(
         min_per_pattern: int,
         algorithm_mode: str = "greedy_overshoot",
         size_sales_history: dict[str, int] | None = None,
+        size_quantities_override: dict[str, int] | None = None,
+        min_sales_threshold: int = 3,
 ) -> dict:
     from utils.pattern_optimizer import optimize_patterns
 
-    size_quantities = get_size_quantities_for_model_color(priority_skus, model, color)
+    if size_quantities_override is not None:
+        size_quantities = size_quantities_override
+    else:
+        size_quantities = get_size_quantities_for_model_color(priority_skus, model, color)
 
     if not size_quantities:
         return {
@@ -183,6 +188,7 @@ def optimize_pattern_with_aliases(
         algorithm_mode,
         size_priorities,
         size_sales_history,
+        min_sales_threshold,
     )
 
     return result

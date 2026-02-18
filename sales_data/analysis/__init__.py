@@ -7,12 +7,31 @@ from .aggregation import (
     aggregate_forecast_yearly,
     aggregate_yearly_sales,
     calculate_last_two_years_avg_sales,
+    calculate_period_sales,
 )
 from .classification import classify_sku_type, determine_seasonal_months
+from .forecast_comparison import (
+    aggregate_comparison_by_type,
+    align_forecasts,
+    calculate_comparison_metrics,
+    calculate_overall_summary,
+)
+from .internal_forecast import (
+    batch_generate_forecasts,
+    generate_internal_forecast,
+    prepare_monthly_series,
+    select_forecast_method,
+)
 from .inventory_metrics import (
     calculate_forecast_date_range,
     calculate_forecast_metrics,
     calculate_safety_stock_and_rop,
+)
+from .material_planning import (
+    calculate_material_gap,
+    calculate_material_requirements,
+    extract_production_quantities_from_orders,
+    map_ribbing_type_to_material,
 )
 from .order_priority import (
     aggregate_order_by_model_color,
@@ -47,24 +66,6 @@ from .utils import (
     get_week_start_monday,
     parse_sku_components,
 )
-from .forecast_comparison import (
-    align_forecasts,
-    calculate_comparison_metrics,
-    aggregate_comparison_by_type,
-    calculate_overall_summary,
-)
-from .internal_forecast import (
-    batch_generate_forecasts,
-    generate_internal_forecast,
-    prepare_monthly_series,
-    select_forecast_method,
-)
-from .material_planning import (
-    calculate_material_gap,
-    calculate_material_requirements,
-    extract_production_quantities_from_orders,
-    map_ribbing_type_to_material,
-)
 
 __all__ = [
     "AVERAGE_SALES",
@@ -79,6 +80,7 @@ __all__ = [
     "calculate_model_stock_projection",
     "calculate_monthly_yoy_by_category",
     "calculate_order_priority",
+    "calculate_period_sales",
     "calculate_safety_stock_and_rop",
     "calculate_size_priorities",
     "calculate_size_sales_history",
