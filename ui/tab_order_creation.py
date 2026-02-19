@@ -323,8 +323,14 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         key=SessionKeys.EXCLUDE_LOW_SALES_SIZES,
     )
 
+    include_ss = st.checkbox(
+        t(Keys.INCLUDE_SAFETY_STOCK),
+        value=st.session_state.get(SessionKeys.INCLUDE_SAFETY_STOCK, False),
+        key=SessionKeys.INCLUDE_SAFETY_STOCK,
+    )
+
     pattern_results = _get_cached_pattern_results(
-        model, all_colors, pattern_set, monthly_agg, exclude_low_sales
+        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss
     )
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
@@ -640,9 +646,9 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
 
 def _get_cached_pattern_results(
         model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
-        exclude_low_sales: bool = True,
+        exclude_low_sales: bool = True, include_ss: bool = False,
 ) -> dict:
-    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}"
+    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}"
     cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
 
     if cache.get("key") == cache_key and cache.get("results"):
@@ -652,7 +658,7 @@ def _get_cached_pattern_results(
     logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
     pattern_results = {}
     for color in colors:
-        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales)
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss)
         pattern_results[color] = result
 
     st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
@@ -670,8 +676,16 @@ def _get_effective_min_order_for_pattern_set(pattern_set: PatternSet) -> int:
     return pattern_set.get_min_order()
 
 
+def _extract_ss_value(row: pd.Series) -> int:
+    ss_value = row.get("SS", 0)
+    if ss_value is None or (isinstance(ss_value, float) and pd.isna(ss_value)):
+        return 0
+    return int(ss_value)
+
+
 def _get_order_creation_size_quantities(
-        priority_skus: pd.DataFrame, model: str, color: str, size_aliases: dict[str, str]
+        priority_skus: pd.DataFrame, model: str, color: str, size_aliases: dict[str, str],
+        include_ss: bool = False,
 ) -> dict[str, int]:
     model_color = pd.DataFrame(
         priority_skus[(priority_skus["MODEL"] == model) & (priority_skus["COLOR"] == color)]
@@ -685,8 +699,7 @@ def _get_order_creation_size_quantities(
         if period_sales == 0:
             continue
         stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
-        ss_value = row.get("SS", 0)
-        ss = 0 if ss_value is None or (isinstance(ss_value, float) and pd.isna(ss_value)) else int(ss_value)
+        ss = _extract_ss_value(row) if include_ss else 0
         order_qty = max(0, period_sales + ss - stock_qty)
         if order_qty > 0:
             size_code = str(row["SIZE"])
@@ -697,7 +710,7 @@ def _get_order_creation_size_quantities(
 
 def _optimize_color_pattern(
         model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
-        exclude_low_sales: bool = True,
+        exclude_low_sales: bool = True, include_ss: bool = False,
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
@@ -711,7 +724,7 @@ def _optimize_color_pattern(
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
-    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases)
+    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases, include_ss)
 
     size_sales_history = None
     if exclude_low_sales and monthly_agg is not None and not monthly_agg.empty:

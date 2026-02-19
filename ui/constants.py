@@ -39,6 +39,7 @@ class SessionKeys:
     MIN_ORDER_OVERRIDE: Final[str] = "min_order_override"
     MATERIAL_MANUAL_INPUTS: Final[str] = "material_manual_inputs"
     EXCLUDE_LOW_SALES_SIZES: Final[str] = "exclude_low_sales_sizes"
+    INCLUDE_SAFETY_STOCK: Final[str] = "include_safety_stock"
 
 
 class ColumnNames:

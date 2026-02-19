@@ -616,6 +616,7 @@ class Keys:
     SALES: Final[str] = "sales"
     EXCLUDED: Final[str] = "excluded"
     EXCLUDE_LOW_SALES_SIZES: Final[str] = "exclude_low_sales_sizes"
+    INCLUDE_SAFETY_STOCK: Final[str] = "include_safety_stock"
     ERR_PATTERN_OPTIMIZER: Final[str] = "err_pattern_optimizer"
 
     BTN_GENERATE_ACCURACY_REPORT: Final[str] = "btn_generate_accuracy_report"
@@ -1514,6 +1515,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.SALES: "sales",
         Keys.EXCLUDED: "excluded",
         Keys.EXCLUDE_LOW_SALES_SIZES: "Exclude sizes/colors with no recent sales (last 2 months)",
+        Keys.INCLUDE_SAFETY_STOCK: "Include Safety Stock (SS) in order quantities",
         Keys.ERR_PATTERN_OPTIMIZER: "Error in Pattern Optimizer: {error}",
 
         Keys.BTN_GENERATE_ACCURACY_REPORT: "Generate Accuracy Report",
@@ -2404,6 +2406,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.SALES: "sprzedaż",
         Keys.EXCLUDED: "wykluczony",
         Keys.EXCLUDE_LOW_SALES_SIZES: "Wyklucz rozmiary/kolory bez sprzedaży w ostatnich 2 miesiącach",
+        Keys.INCLUDE_SAFETY_STOCK: "Uwzględnij zapas bezpieczeństwa (SS) w ilościach zamówienia",
         Keys.ERR_PATTERN_OPTIMIZER: "Błąd w Optymalizatorze Wzorców: {error}",
 
         Keys.BTN_GENERATE_ACCURACY_REPORT: "Generuj Raport Dokładności",
