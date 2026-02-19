@@ -17,7 +17,7 @@ from ui.shared.data_loaders import (
     merge_stock_into_summary,
 )
 from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
-from ui.shared.sku_utils import extract_color, extract_model, extract_size, get_size_sort_key
+from ui.shared.sku_utils import ADULT_PREFIXES, extract_color, extract_model, extract_size, get_size_sort_key
 from ui.shared.styles import ROTATED_TABLE_STYLE
 from utils.logging_config import get_logger
 from utils.pattern_optimizer import PatternSet, load_pattern_sets
@@ -89,24 +89,6 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
             st.error(f"{Icons.ERROR} {t(Keys.NO_DATA_FOR_MODEL).format(model=model_code)}")
             return
 
-        # DEBUG: show all colors with PERIOD_SALES and STOCK
-        debug_cols = ["SKU", "COLOR", "SIZE", "PERIOD_SALES", ColumnNames.STOCK, "SS", "ROP", "FORECAST_LEADTIME"]
-        debug_cols = [c for c in debug_cols if c in model_data.columns]
-        st.subheader("DEBUG: model_data for all colors")
-        st.dataframe(model_data[debug_cols].sort_values(["COLOR", "SIZE"]), hide_index=True)
-
-        monthly_agg_debug = _load_monthly_aggregations_cached()
-        if monthly_agg_debug is not None:
-            sku_col = next((c for c in ["entity_id", "sku", "SKU"] if c in monthly_agg_debug.columns), None)
-            month_col = next((c for c in ["year_month", "month"] if c in monthly_agg_debug.columns), None)
-            if sku_col and month_col:
-                all_months = sorted(monthly_agg_debug[month_col].astype(str).unique(), reverse=True)
-                n_months = 3
-                adult_start = max(0, 12 - n_months)
-                adult_months = all_months[adult_start:12] if len(all_months) > 12 else []
-                st.write(f"DEBUG: total months={len(all_months)}, adult_months={adult_months}")
-                st.write(f"DEBUG: all_months[:13]={all_months[:13]}")
-
         selected_items = _build_selected_items(model_data, model_code)
 
         if selected_items:
@@ -160,6 +142,29 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         sku_summary["PERIOD_SALES"] = sku_summary["PERIOD_SALES"].fillna(0).astype(int)
     else:
         sku_summary["PERIOD_SALES"] = 0
+
+    sku_summary = _apply_forecast_fallback_for_new_adults(sku_summary)
+
+    return sku_summary
+
+
+def _apply_forecast_fallback_for_new_adults(sku_summary: pd.DataFrame) -> pd.DataFrame:
+    if "TYPE" not in sku_summary.columns or "FORECAST_LEADTIME" not in sku_summary.columns:
+        return sku_summary
+
+    new_adult_mask = (
+        (sku_summary["TYPE"] == "New")
+        & (pd.Series(sku_summary["SKU"]).astype(str).str[:2].str.lower().isin(ADULT_PREFIXES))
+        & (sku_summary["PERIOD_SALES"] == 0)
+        & (sku_summary["FORECAST_LEADTIME"] > 0)
+    )
+
+    if new_adult_mask.any():
+        sku_summary.loc[new_adult_mask, "PERIOD_SALES"] = (
+            sku_summary.loc[new_adult_mask, "FORECAST_LEADTIME"].astype(int)
+        )
+        count = int(new_adult_mask.sum())
+        logger.info("Forecast fallback applied to %d new adult SKUs with no period sales", count)
 
     return sku_summary
 
