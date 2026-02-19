@@ -89,6 +89,24 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
             st.error(f"{Icons.ERROR} {t(Keys.NO_DATA_FOR_MODEL).format(model=model_code)}")
             return
 
+        # DEBUG: show all colors with PERIOD_SALES and STOCK
+        debug_cols = ["SKU", "COLOR", "SIZE", "PERIOD_SALES", ColumnNames.STOCK, "SS", "ROP", "FORECAST_LEADTIME"]
+        debug_cols = [c for c in debug_cols if c in model_data.columns]
+        st.subheader("DEBUG: model_data for all colors")
+        st.dataframe(model_data[debug_cols].sort_values(["COLOR", "SIZE"]), hide_index=True)
+
+        monthly_agg_debug = _load_monthly_aggregations_cached()
+        if monthly_agg_debug is not None:
+            sku_col = next((c for c in ["entity_id", "sku", "SKU"] if c in monthly_agg_debug.columns), None)
+            month_col = next((c for c in ["year_month", "month"] if c in monthly_agg_debug.columns), None)
+            if sku_col and month_col:
+                all_months = sorted(monthly_agg_debug[month_col].astype(str).unique(), reverse=True)
+                n_months = 3
+                adult_start = max(0, 12 - n_months)
+                adult_months = all_months[adult_start:12] if len(all_months) > 12 else []
+                st.write(f"DEBUG: total months={len(all_months)}, adult_months={adult_months}")
+                st.write(f"DEBUG: all_months[:13]={all_months[:13]}")
+
         selected_items = _build_selected_items(model_data, model_code)
 
         if selected_items:
