@@ -14,29 +14,42 @@ def _build_navigation_js(tab_names: list[str]) -> str:
 (function() {
     var storageKey = 'stockmonitor_active_tab';
     var tabNames = """ + str(tab_names) + """;
+    var doc = window.parent.document;
+    var store = window.parent.sessionStorage;
 
     function getTabsContainer() {
-        return window.parent.document.querySelector('div[data-testid="stTabs"]');
+        return doc.querySelector('div[data-testid="stTabs"]');
     }
 
     function getAllTabs() {
-        return window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+        return doc.querySelectorAll('button[data-baseweb="tab"]');
     }
 
-    function getCurrentTabIndex() {
+    function restoreSavedTab() {
+        var saved = store.getItem(storageKey);
+        if (saved === null) return;
+        var idx = parseInt(saved);
+        if (isNaN(idx) || idx <= 0) return;
         var tabs = getAllTabs();
-        for (var i = 0; i < tabs.length; i++) {
-            if (tabs[i].getAttribute('aria-selected') === 'true') return i;
+        if (idx >= tabs.length) return;
+        if (tabs[idx].getAttribute('aria-selected') === 'true') return;
+        tabs[idx].click();
+    }
+
+    function restoreSavedTabWithRetry(attempts) {
+        var tabs = getAllTabs();
+        if (tabs.length === 0 && attempts > 0) {
+            setTimeout(function() { restoreSavedTabWithRetry(attempts - 1); }, 100);
+            return;
         }
-        return 0;
+        restoreSavedTab();
     }
 
     function injectNavMenu() {
         var tabsContainer = getTabsContainer();
         if (!tabsContainer) return false;
 
-        var existingNav = window.parent.document.getElementById('nav-menu-injected');
-        if (existingNav) return true;
+        if (doc.getElementById('nav-menu-injected')) return true;
 
         var navHtml = '<div id="nav-menu-injected" style="position:absolute;left:-40px;top:0;z-index:1000;">' +
             '<button id="nav-btn" style="background:transparent;border:none;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:4px;">☰</button>' +
@@ -51,8 +64,8 @@ def _build_navigation_js(tab_names: list[str]) -> str:
         tabsContainer.style.marginLeft = '45px';
         tabsContainer.insertAdjacentHTML('afterbegin', navHtml);
 
-        var btn = window.parent.document.getElementById('nav-btn');
-        var dropdown = window.parent.document.getElementById('nav-dropdown');
+        var btn = doc.getElementById('nav-btn');
+        var dropdown = doc.getElementById('nav-dropdown');
 
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -66,6 +79,7 @@ def _build_navigation_js(tab_names: list[str]) -> str:
                 var idx = parseInt(this.getAttribute('data-idx'));
                 var tabs = getAllTabs();
                 if (tabs[idx]) {
+                    store.setItem(storageKey, idx);
                     tabs[idx].click();
                 }
                 dropdown.style.display = 'none';
@@ -78,17 +92,17 @@ def _build_navigation_js(tab_names: list[str]) -> str:
         if (window.parent._tabTrackingSetup) return;
         window.parent._tabTrackingSetup = true;
 
-        window.parent.document.addEventListener('click', function(e) {
+        doc.addEventListener('click', function(e) {
             var tab = e.target.closest('button[data-baseweb="tab"]');
             if (tab) {
                 var tabs = getAllTabs();
                 var idx = Array.from(tabs).indexOf(tab);
                 if (idx >= 0) {
-                    window.parent.sessionStorage.setItem(storageKey, idx);
+                    store.setItem(storageKey, idx);
                 }
             }
 
-            var dropdown = window.parent.document.getElementById('nav-dropdown');
+            var dropdown = doc.getElementById('nav-dropdown');
             if (dropdown && !e.target.closest('#nav-menu-injected')) {
                 dropdown.style.display = 'none';
             }
@@ -100,14 +114,18 @@ def _build_navigation_js(tab_names: list[str]) -> str:
             window.parent._navObserver.disconnect();
         }
 
-        var observer = new MutationObserver(function(mutations) {
-            var tabsContainer = getTabsContainer();
-            if (tabsContainer && !window.parent.document.getElementById('nav-menu-injected')) {
-                injectNavMenu();
-            }
+        var debounceTimer = null;
+        var observer = new MutationObserver(function() {
+            if (debounceTimer) return;
+            debounceTimer = setTimeout(function() {
+                debounceTimer = null;
+                if (getTabsContainer() && !doc.getElementById('nav-menu-injected')) {
+                    injectNavMenu();
+                }
+            }, 200);
         });
 
-        observer.observe(window.parent.document.body, {
+        observer.observe(doc.querySelector('[data-testid="stAppViewContainer"]') || doc.body, {
             childList: true,
             subtree: true
         });
@@ -115,19 +133,22 @@ def _build_navigation_js(tab_names: list[str]) -> str:
         window.parent._navObserver = observer;
     }
 
-    function ensureNavExists() {
-        var navExists = window.parent.document.getElementById('nav-menu-injected');
-        if (!navExists) {
-            injectNavMenu();
-        }
+    if (window.parent._navInterval) {
+        clearInterval(window.parent._navInterval);
     }
 
     setTimeout(function() {
         injectNavMenu();
         setupTabTracking();
         setupMutationObserver();
-        setInterval(ensureNavExists, 500);
-    }, 100);
+        restoreSavedTabWithRetry(10);
+
+        window.parent._navInterval = setInterval(function() {
+            if (!doc.getElementById('nav-menu-injected')) {
+                injectNavMenu();
+            }
+        }, 2000);
+    }, 200);
 })();
 </script>
 """
