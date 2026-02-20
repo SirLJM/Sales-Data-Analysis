@@ -164,6 +164,15 @@ INPUT_FIELD_STYLE: Final[str] = """
 </style>
 """
 
+NAVIGATION_MENU_STYLE: Final[str] = """
+<style>
+[data-testid="stTabs"] {
+    margin-left: 45px !important;
+    position: relative !important;
+}
+</style>
+"""
+
 RESPONSIVE_TABS_STYLE: Final[str] = """
 <style>
 /* Tabs root container */

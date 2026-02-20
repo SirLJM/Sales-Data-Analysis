@@ -121,6 +121,7 @@ class Config:
     RECOMMENDATIONS_STEP: Final[int] = 5
     WEEKLY_LOOKBACK_DAYS: Final[int] = 60
     DEFAULT_OVERSTOCK_THRESHOLD: Final[int] = 20
+    HPGL_CHART_HEIGHT: Final[int] = 700
 
 
 class MimeTypes:

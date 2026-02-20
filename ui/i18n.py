@@ -36,6 +36,7 @@ class Keys:
     TAB_ML_FORECAST: Final[str] = "tab_ml_forecast"
     TAB_MATERIAL_PLANNING: Final[str] = "tab_material_planning"
     TAB_NL_QUERY: Final[str] = "tab_nl_query"
+    TAB_MARKER_VIEWER: Final[str] = "tab_marker_viewer"
 
     SIDEBAR_PARAMETERS: Final[str] = "sidebar_parameters"
     SIDEBAR_LEAD_TIME_FORECAST: Final[str] = "sidebar_lead_time_forecast"
@@ -903,6 +904,19 @@ class Keys:
     ERR_TASK_PLANNER: Final[str] = "err_task_planner"
     ERR_TASK_TITLE_REQUIRED: Final[str] = "err_task_title_required"
 
+    HPGL_TITLE: Final[str] = "hpgl_title"
+    HPGL_UPLOAD_LABEL: Final[str] = "hpgl_upload_label"
+    HPGL_MODEL: Final[str] = "hpgl_model"
+    HPGL_PRODUCT_TYPE: Final[str] = "hpgl_product_type"
+    HPGL_SIZE_RUN: Final[str] = "hpgl_size_run"
+    HPGL_MATERIAL: Final[str] = "hpgl_material"
+    HPGL_PIECES: Final[str] = "hpgl_pieces"
+    HPGL_DIMENSIONS: Final[str] = "hpgl_dimensions"
+    HPGL_PIECE: Final[str] = "hpgl_piece"
+    HPGL_DOWNLOAD: Final[str] = "hpgl_download"
+    HPGL_NO_SEGMENTS: Final[str] = "hpgl_no_segments"
+    ERR_MARKER_VIEWER: Final[str] = "err_marker_viewer"
+
     PROGRESS_LOADING_DATA: Final[str] = "progress_loading_data"
     PROGRESS_LOADING_SALES: Final[str] = "progress_loading_sales"
     PROGRESS_LOADING_STOCK: Final[str] = "progress_loading_stock"
@@ -917,6 +931,7 @@ _PL_QUANTITY = "Ilość"
 
 _EN_DOWNLOAD_CSV = "Download CSV"
 _PL_DOWNLOAD_CSV = "Pobierz CSV"
+_PL_MATERIAL = "Materiał"
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
@@ -1802,6 +1817,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.ERR_TASK_PLANNER: "Error in Task Planner: {error}",
         Keys.ERR_TASK_TITLE_REQUIRED: "Task title is required",
 
+        Keys.TAB_MARKER_VIEWER: "📐 Marker Viewer",
+        Keys.HPGL_TITLE: "Cutting Marker Viewer",
+        Keys.HPGL_UPLOAD_LABEL: "Upload HPGL marker file (.plt)",
+        Keys.HPGL_MODEL: "Model",
+        Keys.HPGL_PRODUCT_TYPE: "Product Type",
+        Keys.HPGL_SIZE_RUN: "Size Run",
+        Keys.HPGL_MATERIAL: "Material",
+        Keys.HPGL_PIECES: "Pieces",
+        Keys.HPGL_DIMENSIONS: "Dimensions",
+        Keys.HPGL_PIECE: "Piece",
+        Keys.HPGL_DOWNLOAD: "Download .plt",
+        Keys.HPGL_NO_SEGMENTS: "No segments found in file",
+        Keys.ERR_MARKER_VIEWER: "Error in Marker Viewer: {error}",
+
         Keys.PROGRESS_LOADING_DATA: _EN_LOADING_DATA,
         Keys.PROGRESS_LOADING_SALES: "Loading sales data...",
         Keys.PROGRESS_LOADING_STOCK: "Loading stock data...",
@@ -2137,7 +2166,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.QUANTITY: _PL_QUANTITY,
         Keys.FACILITY: "Zakład",
         Keys.OPERATION: "Operacja",
-        Keys.MATERIAL: "Materiał",
+        Keys.MATERIAL: _PL_MATERIAL,
         Keys.DAYS_ELAPSED: "Dni Minęło",
         Keys.UPLOAD_PDF: "Wgraj plik PDF zamówienia",
         Keys.FILE_UPLOADED: "Plik wgrany: {filename}",
@@ -2372,7 +2401,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.MAT_REMOVE: "Usuń",
         Keys.MAT_COMBINED_REQUIREMENTS: "Łączne zapotrzebowanie materiałowe",
         Keys.MAT_DOWNLOAD_CSV: _PL_DOWNLOAD_CSV,
-        Keys.MAT_COL_MATERIAL: "Materiał",
+        Keys.MAT_COL_MATERIAL: _PL_MATERIAL,
         Keys.MAT_COL_TYPE: "Komponent",
         Keys.MAT_COL_METERS: "Łącznie (m)",
         Keys.MAT_COL_KG: "Łącznie (kg)",
@@ -2693,6 +2722,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.ERR_TASK_PLANNER: "Błąd w Planerze Zadań: {error}",
         Keys.ERR_TASK_TITLE_REQUIRED: "Tytuł zadania jest wymagany",
 
+        Keys.TAB_MARKER_VIEWER: "📐 Podgląd Markera",
+        Keys.HPGL_TITLE: "Podgląd Markera Rozkroju",
+        Keys.HPGL_UPLOAD_LABEL: "Wgraj plik markera HPGL (.plt)",
+        Keys.HPGL_MODEL: "Model",
+        Keys.HPGL_PRODUCT_TYPE: "Typ Produktu",
+        Keys.HPGL_SIZE_RUN: "Rozmiary",
+        Keys.HPGL_MATERIAL: _PL_MATERIAL,
+        Keys.HPGL_PIECES: "Elementy",
+        Keys.HPGL_DIMENSIONS: "Wymiary",
+        Keys.HPGL_PIECE: "Element",
+        Keys.HPGL_DOWNLOAD: "Pobierz .plt",
+        Keys.HPGL_NO_SEGMENTS: "Nie znaleziono segmentów w pliku",
+        Keys.ERR_MARKER_VIEWER: "Błąd w Podglądzie Markera: {error}",
+
         Keys.PROGRESS_LOADING_DATA: _PL_LOADING_DATA,
         Keys.PROGRESS_LOADING_SALES: "Ładowanie sprzedaży...",
         Keys.PROGRESS_LOADING_STOCK: "Ładowanie stanu magazynowego...",
@@ -2718,4 +2761,5 @@ def get_tab_names() -> list[str]:
         t(Keys.TAB_FORECAST_COMPARISON),
         t(Keys.TAB_ML_FORECAST),
         t(Keys.TAB_NL_QUERY),
+        t(Keys.TAB_MARKER_VIEWER),
     ]
