@@ -91,14 +91,10 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
 
         selected_items = _build_selected_items(model_data, model_code)
 
-        if selected_items:
-            logger.info("Order created for model '%s' with %d items", model_code, len(selected_items))
-            _save_order_to_session(selected_items, model_data)
-            st.success(f"{Icons.SUCCESS} {t(Keys.CREATED_ORDER).format(model=model_code, count=len(selected_items))}")
-            st.rerun()
-        else:
-            logger.warning("No items with forecast/deficit found for model '%s'", model_code)
-            st.warning(f"{Icons.WARNING} {t(Keys.NO_FORECAST_DEFICIT).format(model=model_code)}")
+        logger.info("Order created for model '%s' with %d items", model_code, len(selected_items))
+        _save_order_to_session(selected_items, model_data)
+        st.success(f"{Icons.SUCCESS} {t(Keys.CREATED_ORDER).format(model=model_code, count=len(selected_items))}")
+        st.rerun()
 
 
 def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict) -> pd.DataFrame:
@@ -260,9 +256,8 @@ def _build_selected_items(model_data: pd.DataFrame, model_code: str) -> list[dic
     for color in model_data["COLOR"].unique():
         color_data = pd.DataFrame(model_data[model_data["COLOR"] == color])
         size_quantities = _build_size_quantities(color_data)
-        if size_quantities:
-            item = _create_color_item(color_data, model_code, str(color), size_quantities)
-            selected_items.append(item)
+        item = _create_color_item(color_data, model_code, str(color), size_quantities)
+        selected_items.append(item)
     return selected_items
 
 
@@ -352,8 +347,14 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         key=SessionKeys.INCLUDE_SAFETY_STOCK,
     )
 
+    use_forecast_fallback = st.checkbox(
+        t(Keys.USE_FORECAST_FALLBACK),
+        value=st.session_state.get(SessionKeys.USE_FORECAST_FALLBACK, False),
+        key=SessionKeys.USE_FORECAST_FALLBACK,
+    )
+
     pattern_results = _get_cached_pattern_results(
-        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss
+        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback
     )
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
@@ -669,9 +670,9 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
 
 def _get_cached_pattern_results(
         model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
-        exclude_low_sales: bool = True, include_ss: bool = False,
+        exclude_low_sales: bool = True, include_ss: bool = False, use_forecast_fallback: bool = False,
 ) -> dict:
-    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}"
+    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}:forecast={use_forecast_fallback}"
     cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
 
     if cache.get("key") == cache_key and cache.get("results"):
@@ -681,7 +682,7 @@ def _get_cached_pattern_results(
     logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
     pattern_results = {}
     for color in colors:
-        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss)
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback)
         pattern_results[color] = result
 
     st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
@@ -708,7 +709,7 @@ def _extract_ss_value(row: pd.Series) -> int:
 
 def _get_order_creation_size_quantities(
         priority_skus: pd.DataFrame, model: str, color: str, size_aliases: dict[str, str],
-        include_ss: bool = False,
+        include_ss: bool = False, use_forecast_fallback: bool = False,
 ) -> dict[str, int]:
     model_color = pd.DataFrame(
         priority_skus[(priority_skus["MODEL"] == model) & (priority_skus["COLOR"] == color)]
@@ -719,11 +720,13 @@ def _get_order_creation_size_quantities(
     result: dict[str, int] = {}
     for _, row in model_color.iterrows():
         period_sales = int(row.get("PERIOD_SALES", 0) or 0)
-        if period_sales == 0:
+        forecast = int(row.get("FORECAST_LEADTIME", 0) or 0)
+        effective_demand = max(period_sales, forecast) if use_forecast_fallback else period_sales
+        if effective_demand == 0:
             continue
         stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
         ss = _extract_ss_value(row) if include_ss else 0
-        order_qty = max(0, period_sales + ss - stock_qty)
+        order_qty = max(0, effective_demand + ss - stock_qty)
         if order_qty > 0:
             size_code = str(row["SIZE"])
             alias = size_aliases.get(size_code, size_code)
@@ -733,7 +736,7 @@ def _get_order_creation_size_quantities(
 
 def _optimize_color_pattern(
         model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
-        exclude_low_sales: bool = True, include_ss: bool = False,
+        exclude_low_sales: bool = True, include_ss: bool = False, use_forecast_fallback: bool = False,
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
@@ -747,7 +750,7 @@ def _optimize_color_pattern(
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
-    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases, include_ss)
+    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases, include_ss, use_forecast_fallback)
 
     size_sales_history = None
     if exclude_low_sales and monthly_agg is not None and not monthly_agg.empty:
@@ -836,6 +839,7 @@ def _load_forecast_data_for_colors(model: str, colors: list[str]) -> dict:
         if not row.empty:
             forecast_dict[color] = {
                 "priority_score": float(row.iloc[0].get("PRIORITY_SCORE", 0)),
+                "period_sales": int(row.iloc[0].get("PERIOD_SALES", 0)),
                 "forecast": int(row.iloc[0].get("FORECAST_LEADTIME", 0)),
                 "deficit": int(row.iloc[0].get("DEFICIT", 0)),
                 "coverage_gap": int(row.iloc[0].get("COVERAGE_GAP", 0)),
@@ -887,6 +891,7 @@ def _create_base_row(model: str, color: str, pattern_res: dict, forecast: dict, 
         "Stock": forecast.get("stock", 0),
         "Safety Stock": forecast.get("safety_stock", 0),
         "ROP": forecast.get("reorder_point", 0),
+        "Period Sales": forecast.get("period_sales", 0),
         "Forecast": forecast.get("forecast", 0),
         "Deficit": forecast.get("deficit", 0),
         "Coverage Gap": forecast.get("coverage_gap", 0),
