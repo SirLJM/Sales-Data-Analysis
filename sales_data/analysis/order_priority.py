@@ -169,6 +169,8 @@ def aggregate_order_by_model_color(priority_df: pd.DataFrame) -> pd.DataFrame:
         agg_dict["REVENUE_AT_RISK"] = "sum"
     if "PERIOD_SALES" in priority_df.columns:
         agg_dict["PERIOD_SALES"] = "sum"
+    if "PERIOD_SALES_SEASONAL" in priority_df.columns:
+        agg_dict["PERIOD_SALES_SEASONAL"] = "sum"
 
     grouped_agg = pd.DataFrame(priority_df.groupby(["MODEL", "COLOR"], as_index=False, observed=True).agg(agg_dict))
     grouped = pd.DataFrame(grouped_agg.sort_values(by="PRIORITY_SCORE", ascending=False))

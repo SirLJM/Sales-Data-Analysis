@@ -41,6 +41,7 @@ class SessionKeys:
     EXCLUDE_LOW_SALES_SIZES: Final[str] = "exclude_low_sales_sizes"
     INCLUDE_SAFETY_STOCK: Final[str] = "include_safety_stock"
     USE_FORECAST_FALLBACK: Final[str] = "use_forecast_fallback"
+    TREAT_AS_SEASONAL: Final[str] = "treat_as_seasonal"
 
 
 class ColumnNames:

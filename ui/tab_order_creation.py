@@ -136,8 +136,14 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         period_sales = SalesAnalyzer.calculate_period_sales(monthly_agg, settings["lead_time"])
         sku_summary = sku_summary.merge(period_sales, on="SKU", how="left")
         sku_summary["PERIOD_SALES"] = sku_summary["PERIOD_SALES"].fillna(0).astype(int)
+
+        seasonal_sales = SalesAnalyzer.calculate_period_sales(monthly_agg, settings["lead_time"], force_seasonal=True)
+        seasonal_sales.columns = pd.Index(["SKU", "PERIOD_SALES_SEASONAL"])
+        sku_summary = sku_summary.merge(seasonal_sales, on="SKU", how="left")
+        sku_summary["PERIOD_SALES_SEASONAL"] = sku_summary["PERIOD_SALES_SEASONAL"].fillna(0).astype(int)
     else:
         sku_summary["PERIOD_SALES"] = 0
+        sku_summary["PERIOD_SALES_SEASONAL"] = 0
 
     sku_summary = _apply_forecast_fallback_for_new_adults(sku_summary)
 
@@ -270,7 +276,8 @@ def _save_order_to_session(selected_items: list[dict], model_data: pd.DataFrame)
 
     required_cols = [
         "SKU", "MODEL", "COLOR", "SIZE", "PRIORITY_SCORE", "DEFICIT",
-        "FORECAST_LEADTIME", ColumnNames.STOCK, "ROP", "SS", "TYPE", "PERIOD_SALES"
+        "FORECAST_LEADTIME", ColumnNames.STOCK, "ROP", "SS", "TYPE", "PERIOD_SALES",
+        "PERIOD_SALES_SEASONAL",
     ]
     available_cols = [col for col in required_cols if col in model_data.columns]
     priority_skus = model_data[available_cols].copy()
@@ -347,6 +354,12 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         key=SessionKeys.INCLUDE_SAFETY_STOCK,
     )
 
+    treat_as_seasonal = st.checkbox(
+        t(Keys.TREAT_AS_SEASONAL),
+        value=st.session_state.get(SessionKeys.TREAT_AS_SEASONAL, False),
+        key=SessionKeys.TREAT_AS_SEASONAL,
+    )
+
     use_forecast_fallback = st.checkbox(
         t(Keys.USE_FORECAST_FALLBACK),
         value=st.session_state.get(SessionKeys.USE_FORECAST_FALLBACK, False),
@@ -354,7 +367,8 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     )
 
     pattern_results = _get_cached_pattern_results(
-        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback
+        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss,
+        use_forecast_fallback, treat_as_seasonal,
     )
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
@@ -671,8 +685,9 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
 def _get_cached_pattern_results(
         model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
         exclude_low_sales: bool = True, include_ss: bool = False, use_forecast_fallback: bool = False,
+        treat_as_seasonal: bool = False,
 ) -> dict:
-    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}:forecast={use_forecast_fallback}"
+    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}:seasonal={treat_as_seasonal}:forecast={use_forecast_fallback}"
     cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
 
     if cache.get("key") == cache_key and cache.get("results"):
@@ -682,7 +697,7 @@ def _get_cached_pattern_results(
     logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
     pattern_results = {}
     for color in colors:
-        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback)
+        result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback, treat_as_seasonal)
         pattern_results[color] = result
 
     st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
@@ -707,9 +722,24 @@ def _extract_ss_value(row: pd.Series) -> int:
     return int(ss_value)
 
 
+def _compute_row_order_qty(
+        row: pd.Series, treat_as_seasonal: bool, use_forecast_fallback: bool, include_ss: bool,
+) -> tuple[str, int]:
+    sales_col = "PERIOD_SALES_SEASONAL" if treat_as_seasonal else "PERIOD_SALES"
+    period_sales = int(row.get(sales_col, 0) or 0)
+    forecast = int(row.get("FORECAST_LEADTIME", 0) or 0)
+    effective_demand = max(period_sales, forecast) if use_forecast_fallback else period_sales
+    if effective_demand == 0:
+        return str(row["SIZE"]), 0
+    stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
+    ss = _extract_ss_value(row) if include_ss else 0
+    return str(row["SIZE"]), max(0, effective_demand + ss - stock_qty)
+
+
 def _get_order_creation_size_quantities(
         priority_skus: pd.DataFrame, model: str, color: str, size_aliases: dict[str, str],
         include_ss: bool = False, use_forecast_fallback: bool = False,
+        treat_as_seasonal: bool = False,
 ) -> dict[str, int]:
     model_color = pd.DataFrame(
         priority_skus[(priority_skus["MODEL"] == model) & (priority_skus["COLOR"] == color)]
@@ -719,16 +749,8 @@ def _get_order_creation_size_quantities(
 
     result: dict[str, int] = {}
     for _, row in model_color.iterrows():
-        period_sales = int(row.get("PERIOD_SALES", 0) or 0)
-        forecast = int(row.get("FORECAST_LEADTIME", 0) or 0)
-        effective_demand = max(period_sales, forecast) if use_forecast_fallback else period_sales
-        if effective_demand == 0:
-            continue
-        stock_qty = int(row.get(ColumnNames.STOCK, 0) or 0)
-        ss = _extract_ss_value(row) if include_ss else 0
-        order_qty = max(0, effective_demand + ss - stock_qty)
+        size_code, order_qty = _compute_row_order_qty(row, treat_as_seasonal, use_forecast_fallback, include_ss)
         if order_qty > 0:
-            size_code = str(row["SIZE"])
             alias = size_aliases.get(size_code, size_code)
             result[alias] = result.get(alias, 0) + order_qty
     return result
@@ -737,6 +759,7 @@ def _get_order_creation_size_quantities(
 def _optimize_color_pattern(
         model: str, color: str, pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
         exclude_low_sales: bool = True, include_ss: bool = False, use_forecast_fallback: bool = False,
+        treat_as_seasonal: bool = False,
 ) -> dict:
     recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
     if not recommendations_data:
@@ -750,7 +773,7 @@ def _optimize_color_pattern(
     settings = get_settings()
     algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
 
-    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases, include_ss, use_forecast_fallback)
+    size_quantities_override = _get_order_creation_size_quantities(priority_skus, model, color, size_aliases, include_ss, use_forecast_fallback, treat_as_seasonal)
 
     size_sales_history = None
     if exclude_low_sales and monthly_agg is not None and not monthly_agg.empty:
@@ -840,6 +863,7 @@ def _load_forecast_data_for_colors(model: str, colors: list[str]) -> dict:
             forecast_dict[color] = {
                 "priority_score": float(row.iloc[0].get("PRIORITY_SCORE", 0)),
                 "period_sales": int(row.iloc[0].get("PERIOD_SALES", 0)),
+                "period_sales_seasonal": int(row.iloc[0].get("PERIOD_SALES_SEASONAL", 0)),
                 "forecast": int(row.iloc[0].get("FORECAST_LEADTIME", 0)),
                 "deficit": int(row.iloc[0].get("DEFICIT", 0)),
                 "coverage_gap": int(row.iloc[0].get("COVERAGE_GAP", 0)),
@@ -892,6 +916,7 @@ def _create_base_row(model: str, color: str, pattern_res: dict, forecast: dict, 
         "Safety Stock": forecast.get("safety_stock", 0),
         "ROP": forecast.get("reorder_point", 0),
         "Period Sales": forecast.get("period_sales", 0),
+        "Period Sales (Seasonal)": forecast.get("period_sales_seasonal", 0),
         "Forecast": forecast.get("forecast", 0),
         "Deficit": forecast.get("deficit", 0),
         "Coverage Gap": forecast.get("coverage_gap", 0),

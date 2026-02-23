@@ -139,7 +139,7 @@ def _resolve_column(df: pd.DataFrame, candidates: list[str]) -> str | None:
     return next((c for c in candidates if c in df.columns), None)
 
 
-def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.DataFrame:
+def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float, force_seasonal: bool = False) -> pd.DataFrame:
     if monthly_agg is None or monthly_agg.empty:
         return pd.DataFrame(columns=_PERIOD_SALES_COLUMNS)
 
@@ -161,12 +161,19 @@ def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.Da
     adult_start = max(0, 12 - n_months)
     adult_months = all_months[adult_start:12] if len(all_months) > 12 else []
 
-    results = [
-        r for r in (
-            _aggregate_group_sales(df, df["_prefix"].isin(CHILDREN_PREFIXES), month_col, sku_col, qty_col, children_months),
-            _aggregate_group_sales(df, df["_prefix"].isin(ADULT_PREFIXES), month_col, sku_col, qty_col, adult_months),
-        ) if r is not None
-    ]
+    if force_seasonal:
+        results = [
+            r for r in (
+                _aggregate_group_sales(df, pd.Series(True, index=df.index), month_col, sku_col, qty_col, adult_months),
+            ) if r is not None
+        ]
+    else:
+        results = [
+            r for r in (
+                _aggregate_group_sales(df, df["_prefix"].isin(CHILDREN_PREFIXES), month_col, sku_col, qty_col, children_months),
+                _aggregate_group_sales(df, df["_prefix"].isin(ADULT_PREFIXES), month_col, sku_col, qty_col, adult_months),
+            ) if r is not None
+        ]
 
     if not results:
         return pd.DataFrame(columns=_PERIOD_SALES_COLUMNS)

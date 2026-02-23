@@ -57,8 +57,8 @@ class SalesAnalyzer:
         return calculate_last_two_years_avg_sales(self.data, by_model)
 
     @staticmethod
-    def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float) -> pd.DataFrame:
-        return calculate_period_sales(monthly_agg, lead_time)
+    def calculate_period_sales(monthly_agg: pd.DataFrame, lead_time: float, force_seasonal: bool = False) -> pd.DataFrame:
+        return calculate_period_sales(monthly_agg, lead_time, force_seasonal)
 
     @staticmethod
     def classify_sku_type(
