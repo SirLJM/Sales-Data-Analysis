@@ -272,6 +272,15 @@ class Keys:
     NO_SALES_DATA: Final[str] = "no_sales_data"
     CLICK_GENERATE: Final[str] = "click_generate"
 
+    TITLE_COLOR_ANALYSIS: Final[str] = "title_color_analysis"
+    SALES_BY_COLOR: Final[str] = "sales_by_color"
+    COLOR_NAME: Final[str] = "color_name"
+    NO_DATA_COLOR: Final[str] = "no_data_color"
+    DOWNLOAD_COLOR_SUMMARY: Final[str] = "download_color_summary"
+    DOWNLOAD_COLOR_DETAILS: Final[str] = "download_color_details"
+    METRIC_RISING_COLORS: Final[str] = "metric_rising_colors"
+    METRIC_FALLING_COLORS: Final[str] = "metric_falling_colors"
+
     PRIORITY_WEIGHTS: Final[str] = "priority_weights"
     TYPE_MULTIPLIERS: Final[str] = "type_multipliers"
     STOCKOUT_RISK_PARAMS: Final[str] = "stockout_risk_params"
@@ -366,6 +375,11 @@ class Keys:
     STATUS_READY: Final[str] = "status_ready"
     STATUS_PENDING: Final[str] = "status_pending"
     ARCHIVE_ORDER: Final[str] = "archive_order"
+    TITLE_ARCHIVED_ORDERS: Final[str] = "title_archived_orders"
+    NO_ARCHIVED_ORDERS: Final[str] = "no_archived_orders"
+    TOTAL_ARCHIVED_ORDERS: Final[str] = "total_archived_orders"
+    COL_ARCHIVED_AT: Final[str] = "col_archived_at"
+    COL_PROCESSING_TIME: Final[str] = "col_processing_time"
 
     ANALYSIS_START_DATE: Final[str] = "analysis_start_date"
     ANALYSIS_END_DATE: Final[str] = "analysis_end_date"
@@ -1187,6 +1201,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.NO_SALES_DATA: "No sales data loaded. Please ensure data is loaded in Tab 1.",
         Keys.CLICK_GENERATE: "Click 'Generate Monthly YoY Analysis' to start the analysis.",
 
+        Keys.TITLE_COLOR_ANALYSIS: "Sales by Color YoY",
+        Keys.SALES_BY_COLOR: "Sales by Color",
+        Keys.COLOR_NAME: "Color",
+        Keys.NO_DATA_COLOR: "No data for this color.",
+        Keys.DOWNLOAD_COLOR_SUMMARY: "Download Color Summary (CSV)",
+        Keys.DOWNLOAD_COLOR_DETAILS: "Download Color Details (CSV)",
+        Keys.METRIC_RISING_COLORS: "Rising Colors",
+        Keys.METRIC_FALLING_COLORS: "Falling Colors",
+
         Keys.PRIORITY_WEIGHTS: "**Priority Weights** (contribution to final score)",
         Keys.TYPE_MULTIPLIERS: "**Type Multipliers** (priority boost by product type)",
         Keys.STOCKOUT_RISK_PARAMS: "**Stockout Risk & Other Parameters**",
@@ -1281,6 +1304,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.STATUS_READY: "🚚 Ready",
         Keys.STATUS_PENDING: "⏳ {days}d",
         Keys.ARCHIVE_ORDER: "Check to archive this order",
+        Keys.TITLE_ARCHIVED_ORDERS: "📁 Archived Orders",
+        Keys.NO_ARCHIVED_ORDERS: "No archived orders.",
+        Keys.TOTAL_ARCHIVED_ORDERS: "📁 Total archived orders: {count}",
+        Keys.COL_ARCHIVED_AT: "Archived At",
+        Keys.COL_PROCESSING_TIME: "Processing Time",
 
         Keys.ANALYSIS_START_DATE: "Analysis Start Date",
         Keys.ANALYSIS_END_DATE: "Analysis End Date",
@@ -2094,6 +2122,15 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.NO_SALES_DATA: "Brak wczytanych danych sprzedaży. Upewnij się, że dane są wczytane w Zakładce 1.",
         Keys.CLICK_GENERATE: "Kliknij 'Generuj Miesięczną Analizę R/R', aby rozpocząć analizę.",
 
+        Keys.TITLE_COLOR_ANALYSIS: "Sprzedaż wg Koloru R/R",
+        Keys.SALES_BY_COLOR: "Sprzedaż wg Koloru",
+        Keys.COLOR_NAME: "Kolor",
+        Keys.NO_DATA_COLOR: "Brak danych dla tego koloru.",
+        Keys.DOWNLOAD_COLOR_SUMMARY: "Pobierz Podsumowanie Kolorów (CSV)",
+        Keys.DOWNLOAD_COLOR_DETAILS: "Pobierz Szczegóły Kolorów (CSV)",
+        Keys.METRIC_RISING_COLORS: "Rosnące Kolory",
+        Keys.METRIC_FALLING_COLORS: "Spadające Kolory",
+
         Keys.PRIORITY_WEIGHTS: "**Wagi Priorytetów** (wkład do końcowego wyniku)",
         Keys.TYPE_MULTIPLIERS: "**Mnożniki Typów** (zwiększenie priorytetu wg typu produktu)",
         Keys.STOCKOUT_RISK_PARAMS: "**Ryzyko Braku Towaru i Inne Parametry**",
@@ -2188,6 +2225,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.STATUS_READY: "🚚 Gotowe",
         Keys.STATUS_PENDING: "⏳ {days}d",
         Keys.ARCHIVE_ORDER: "Zaznacz, aby zarchiwizować to zamówienie",
+        Keys.TITLE_ARCHIVED_ORDERS: "📁 Zarchiwizowane Zamówienia",
+        Keys.NO_ARCHIVED_ORDERS: "Brak zarchiwizowanych zamówień.",
+        Keys.TOTAL_ARCHIVED_ORDERS: "📁 Łącznie zarchiwizowanych zamówień: {count}",
+        Keys.COL_ARCHIVED_AT: "Data Archiwizacji",
+        Keys.COL_PROCESSING_TIME: "Czas Realizacji",
 
         Keys.ANALYSIS_START_DATE: "Data Początkowa Analizy",
         Keys.ANALYSIS_END_DATE: "Data Końcowa Analizy",

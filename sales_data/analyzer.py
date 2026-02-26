@@ -15,6 +15,7 @@ from sales_data.analysis import (
     calculate_last_two_years_avg_sales,
     calculate_model_stock_projection,
     calculate_monthly_yoy_by_category,
+    calculate_monthly_yoy_by_color,
     calculate_order_priority,
     calculate_period_sales,
     calculate_safety_stock_and_rop,
@@ -249,6 +250,13 @@ class SalesAnalyzer:
             reference_date: datetime | None = None
     ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
         return calculate_monthly_yoy_by_category(sales_df, category_df, reference_date)
+
+    @staticmethod
+    def calculate_monthly_yoy_by_color(
+            sales_df: pd.DataFrame,
+            reference_date: datetime | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+        return calculate_monthly_yoy_by_color(sales_df, reference_date)
 
     def aggregate_yearly_sales(self, include_color: bool = False) -> pd.DataFrame:
         return aggregate_yearly_sales(self.data, _by_model=True, include_color=include_color)

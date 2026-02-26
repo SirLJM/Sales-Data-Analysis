@@ -336,6 +336,94 @@ def calculate_monthly_yoy_by_category(
     return podgrupa_summary, kategoria_details, metadata
 
 
+def calculate_monthly_yoy_by_color(
+        sales_df: pd.DataFrame,
+        reference_date: datetime | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    if reference_date is None:
+        reference_date = datetime.now()
+
+    current_year = reference_date.year
+    current_month = reference_date.month
+
+    last_complete_month = current_month - 1 if current_month > 1 else 12
+    year_for_range = current_year if current_month > 1 else current_year - 1
+
+    current_start = datetime(year_for_range, 1, 1)
+    current_end = datetime(year_for_range, last_complete_month, 1) + pd.DateOffset(months=1) - timedelta(seconds=1)
+
+    prior_start = current_start - pd.DateOffset(years=1)
+    prior_end = current_end - pd.DateOffset(years=1)
+
+    df = sales_df.copy()
+    df["data"] = pd.to_datetime(df["data"])
+
+    current_sales = df[(df["data"] >= current_start) & (df["data"] <= current_end)].copy()
+    prior_sales = df[(df["data"] >= prior_start) & (df["data"] <= prior_end)].copy()
+
+    current_sales["color"] = pd.Series(current_sales["sku"]).astype(str).str[5:7]
+    current_sales["model"] = pd.Series(current_sales["sku"]).astype(str).str[:5]
+    prior_sales["color"] = pd.Series(prior_sales["sku"]).astype(str).str[5:7]
+    prior_sales["model"] = pd.Series(prior_sales["sku"]).astype(str).str[:5]
+
+    current_color_agg = current_sales.groupby(
+        "color", as_index=False
+    )["ilosc"].sum().rename(columns={"ilosc": "current_qty"})  # type: ignore[union-attr]
+
+    prior_color_agg = prior_sales.groupby(
+        "color", as_index=False
+    )["ilosc"].sum().rename(columns={"ilosc": "prior_qty"})  # type: ignore[union-attr]
+
+    color_summary = current_color_agg.merge(
+        prior_color_agg, on="color", how="outer", validate="one_to_one"
+    ).fillna({"current_qty": 0, "prior_qty": 0})
+
+    color_summary["difference"] = color_summary["current_qty"] - color_summary["prior_qty"]
+    color_summary["percent_change"] = color_summary.apply(
+        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"]),
+        axis=1
+    )
+    color_summary = pd.DataFrame(color_summary).sort_values(by="current_qty", ascending=False)
+
+    current_detail_agg = current_sales.groupby(
+        ["color", "model"], as_index=False
+    )["ilosc"].sum().rename(columns={"ilosc": "current_qty"})  # type: ignore[union-attr]
+
+    prior_detail_agg = prior_sales.groupby(
+        ["color", "model"], as_index=False
+    )["ilosc"].sum().rename(columns={"ilosc": "prior_qty"})  # type: ignore[union-attr]
+
+    color_model_details = current_detail_agg.merge(
+        prior_detail_agg, on=["color", "model"], how="outer", validate="one_to_one"
+    ).fillna({"current_qty": 0, "prior_qty": 0})
+
+    color_model_details["difference"] = color_model_details["current_qty"] - color_model_details["prior_qty"]
+    color_model_details["percent_change"] = color_model_details.apply(
+        lambda row: _calculate_percent_change(row["current_qty"], row["prior_qty"]),
+        axis=1
+    )
+    color_model_details = color_model_details.sort_values(["color", "current_qty"], ascending=[True, False])
+
+    rising_count = len(color_summary[color_summary["difference"] > 0])
+    falling_count = len(color_summary[color_summary["difference"] < 0])
+
+    metadata = {
+        "current_start": current_start,
+        "current_end": current_end,
+        "prior_start": prior_start,
+        "prior_end": prior_end,
+        "current_label": f"{current_start.strftime('%b %Y')} - {current_end.strftime('%b %Y')}",
+        "prior_label": f"{prior_start.strftime('%b %Y')} - {prior_end.strftime('%b %Y')}",
+        "total_current": color_summary["current_qty"].sum(),
+        "total_prior": color_summary["prior_qty"].sum(),
+        "total_difference": color_summary["difference"].sum(),
+        "rising_count": rising_count,
+        "falling_count": falling_count,
+    }
+
+    return color_summary, color_model_details, metadata
+
+
 def normalize_monthly_agg_columns(df: pd.DataFrame) -> pd.DataFrame:
     column_mapping = {
         "entity_id": "SKU",

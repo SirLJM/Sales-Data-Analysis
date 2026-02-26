@@ -26,6 +26,15 @@ def get_active_orders() -> list:
         return []
 
 
+def get_archived_orders() -> list:
+    try:
+        repository = create_order_repository()
+        return repository.get_archived()
+    except Exception as e:
+        logger.error("Failed to get archived orders: %s", e)
+        return []
+
+
 def archive_order(order_id: str) -> bool:
     try:
         repository = create_order_repository()

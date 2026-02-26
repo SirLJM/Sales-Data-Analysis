@@ -22,6 +22,8 @@ class SessionKeys:
     MONTHLY_YOY_PODGRUPA: Final[str] = "monthly_yoy_podgrupa"
     MONTHLY_YOY_KATEGORIA: Final[str] = "monthly_yoy_kategoria"
     MONTHLY_YOY_METADATA: Final[str] = "monthly_yoy_metadata"
+    COLOR_YOY_SUMMARY: Final[str] = "color_yoy_summary"
+    COLOR_YOY_DETAILS: Final[str] = "color_yoy_details"
     WORST_MODELS_12M: Final[str] = "worst_models_12m"
     WORST_MODELS_12M_FILTERS: Final[str] = "worst_models_12m_filters"
     WORST_ROTATING_MODELS: Final[str] = "worst_rotating_models"
@@ -85,6 +87,8 @@ class ColumnNames:
     CURRENT_PERIOD: Final[str] = "Current Period"
     LAST_WEEK: Final[str] = "Last Week"
     DAYS_ELAPSED: Final[str] = "Days Elapsed"
+    ARCHIVED_AT: Final[str] = "Archived At"
+    PROCESSING_TIME: Final[str] = "Processing Time"
     COVERAGE_GAP: Final[str] = "COVERAGE_GAP"
     REVENUE_AT_RISK: Final[str] = "REVENUE_AT_RISK"
 

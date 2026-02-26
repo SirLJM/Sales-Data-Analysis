@@ -76,6 +76,10 @@ def _render_generate_button(category_df: pd.DataFrame) -> None:
                 set_session_value(SessionKeys.MONTHLY_YOY_KATEGORIA, kategoria_details)
                 set_session_value(SessionKeys.MONTHLY_YOY_METADATA, metadata)
 
+                color_summary, color_details, _ = SalesAnalyzer.calculate_monthly_yoy_by_color(sales_df)
+                set_session_value(SessionKeys.COLOR_YOY_SUMMARY, color_summary)
+                set_session_value(SessionKeys.COLOR_YOY_DETAILS, color_details)
+
                 st.success(t(Keys.ANALYSIS_SUCCESS))
 
             except Exception as e:
@@ -110,6 +114,9 @@ def _render_analysis_results() -> None:
 
     st.divider()
     _render_worst_rotating_section()
+
+    st.divider()
+    _render_color_analysis_section()
 
 
 def _render_period_comparison(metadata: dict) -> None:
@@ -410,3 +417,126 @@ def _render_worst_models_download(df: pd.DataFrame, label: str, filename: str) -
         file_name=filename,
         mime=MimeTypes.TEXT_CSV
     )
+
+
+def _render_color_analysis_section() -> None:
+    color_summary = get_session_value(SessionKeys.COLOR_YOY_SUMMARY)
+    if color_summary is None:
+        return
+
+    color_details = get_session_value(SessionKeys.COLOR_YOY_DETAILS)
+    metadata = get_session_value(SessionKeys.MONTHLY_YOY_METADATA)
+
+    st.subheader(t(Keys.TITLE_COLOR_ANALYSIS))
+
+    color_aliases = load_color_aliases()
+
+    rising_count = len(color_summary[color_summary["difference"] > 0])
+    falling_count = len(color_summary[color_summary["difference"] < 0])
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(t(Keys.METRIC_RISING_COLORS), rising_count)
+    with col2:
+        st.metric(t(Keys.METRIC_FALLING_COLORS), falling_count)
+
+    for row in color_summary.to_dict("records"):
+        color_code: str = str(row["color"])
+        current_qty = int(row["current_qty"])
+        pct_change: float = float(row["percent_change"])
+
+        color_name = color_aliases.get(color_code, color_code)
+        display_label = f"{color_name} ({color_code})" if color_name != color_code else color_code
+        indicator = _get_trend_indicator(pct_change)
+        pct_display = f"{Icons.NEW} {t(Keys.NEW)}" if abs(pct_change - 999.0) < 0.01 else f"{pct_change:+.1f}%"
+        title = f"{indicator} **{display_label}** | {current_qty:,} units ({pct_display} YoY)"
+
+        with st.expander(title, expanded=False):
+            _render_color_model_table(color_code, color_details)
+
+    if metadata is not None:
+        _render_color_downloads(color_summary, color_details, color_aliases, metadata)
+
+
+def _render_color_model_table(color_code: str, color_details: pd.DataFrame) -> None:
+    color_models = pd.DataFrame(color_details[color_details["color"] == color_code]).copy()
+
+    if color_models.empty:
+        st.info(t(Keys.NO_DATA_COLOR))
+        return
+
+    display_df = color_models.copy()
+    display_df = pd.DataFrame(display_df).rename(columns={
+        "model": t(Keys.MODEL),
+        "current_qty": t(Keys.CURRENT_SALES),
+        "prior_qty": t(Keys.PRIOR_YEAR_SALES),
+        "difference": t(Keys.DIFFERENCE),
+        "percent_change": t(Keys.CHANGE_PCT),
+    })
+
+    display_df[t(Keys.CURRENT_SALES)] = display_df[t(Keys.CURRENT_SALES)].apply(lambda x: f"{int(x):,}")
+    display_df[t(Keys.PRIOR_YEAR_SALES)] = display_df[t(Keys.PRIOR_YEAR_SALES)].apply(lambda x: f"{int(x):,}")
+    display_df[t(Keys.DIFFERENCE)] = display_df[t(Keys.DIFFERENCE)].apply(lambda x: f"{int(x):+,}")
+    display_df[t(Keys.CHANGE_PCT)] = display_df[t(Keys.CHANGE_PCT)].apply(
+        lambda x: f"{Icons.NEW} {t(Keys.NEW)}" if abs(x - 999.0) < 0.01 else f"{x:+.1f}%"
+    )
+
+    table_df = display_df[[
+        t(Keys.MODEL),
+        t(Keys.CURRENT_SALES),
+        t(Keys.PRIOR_YEAR_SALES),
+        t(Keys.DIFFERENCE),
+        t(Keys.CHANGE_PCT),
+    ]].reset_index(drop=True)
+    table_df.index = [""] * len(table_df)
+    st.table(table_df)
+
+
+def _render_color_downloads(
+        color_summary: pd.DataFrame,
+        color_details: pd.DataFrame,
+        color_aliases: dict[str, str],
+        metadata: dict,
+) -> None:
+    col1, col2 = st.columns(2)
+
+    with col1:
+        summary_csv = color_summary.copy()
+        summary_csv["color_name"] = summary_csv["color"].map(lambda x: color_aliases.get(x, x))
+        summary_csv = summary_csv.rename(columns={
+            "color": t(Keys.COLOR_NAME),
+            "color_name": t(Keys.FILTER_COLOR),
+            "current_qty": t(Keys.METRIC_CURRENT_PERIOD),
+            "prior_qty": t(Keys.PRIOR_PERIOD),
+            "difference": t(Keys.DIFFERENCE),
+            "percent_change": t(Keys.CHANGE_PCT),
+        })
+        csv_buffer = summary_csv.to_csv(index=False)
+        st.download_button(
+            label=t(Keys.DOWNLOAD_COLOR_SUMMARY),
+            data=csv_buffer,
+            file_name=f"monthly_yoy_color_{metadata['current_label']}.csv",
+            mime=MimeTypes.TEXT_CSV,
+            key="download_color_summary",
+        )
+
+    with col2:
+        details_csv = color_details.copy()
+        details_csv["color_name"] = details_csv["color"].map(lambda x: color_aliases.get(x, x))
+        details_csv = details_csv.rename(columns={
+            "color": t(Keys.COLOR_NAME),
+            "color_name": t(Keys.FILTER_COLOR),
+            "model": t(Keys.MODEL),
+            "current_qty": t(Keys.METRIC_CURRENT_PERIOD),
+            "prior_qty": t(Keys.PRIOR_PERIOD),
+            "difference": t(Keys.DIFFERENCE),
+            "percent_change": t(Keys.CHANGE_PCT),
+        })
+        csv_buffer = details_csv.to_csv(index=False)
+        st.download_button(
+            label=t(Keys.DOWNLOAD_COLOR_DETAILS),
+            data=csv_buffer,
+            file_name=f"monthly_yoy_color_details_{metadata['current_label']}.csv",
+            mime=MimeTypes.TEXT_CSV,
+            key="download_color_details",
+        )

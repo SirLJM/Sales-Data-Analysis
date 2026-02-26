@@ -17,7 +17,8 @@ CREATE TABLE orders (
     material VARCHAR(200),
     status VARCHAR(20) NOT NULL DEFAULT 'active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    archived_at TIMESTAMP
 );
 
 CREATE INDEX idx_orders_model ON orders(model);

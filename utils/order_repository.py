@@ -17,12 +17,17 @@ logger = get_logger("order_repository")
 
 DATA_ORDERS = str(Path(__file__).parent.parent / "data" / "orders")
 
-ORDER_FIELDS = ["order_id", "order_date", "model", "product_name", "total_quantity", "facility", "operation", "material", "status"]
+ORDER_FIELDS = ["order_id", "order_date", "model", "product_name", "total_quantity", "facility", "operation",
+                "material", "status"]
 
 PDF_FIELDS = ["pdf_data", "pdf_filename"]
 
 
-def _extract_order_fields(order_data: dict[str, Any], include_pdf: bool = False) -> dict[str, Any]:
+def _extract_order_fields(
+        order_data: dict[str, Any],
+        include_pdf: bool = False,
+        include_timestamps: bool = False,
+) -> dict[str, Any]:
     result = {
         "order_id": order_data.get("order_id"),
         "order_date": order_data.get("order_date"),
@@ -34,6 +39,9 @@ def _extract_order_fields(order_data: dict[str, Any], include_pdf: bool = False)
         "material": order_data.get("material") or "",
         "status": order_data.get("status", "active"),
     }
+    if include_timestamps:
+        result["created_at"] = order_data.get("created_at")
+        result["archived_at"] = order_data.get("archived_at")
     if include_pdf:
         for field in PDF_FIELDS:
             if order_data.get(field):
@@ -59,6 +67,10 @@ class OrderRepository(ABC):
         pass
 
     @abstractmethod
+    def get_archived(self) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
     def archive(self, order_id: str) -> bool:
         pass
 
@@ -67,22 +79,24 @@ class OrderRepository(ABC):
         pass
 
 
+def _read_order_file(filename: str) -> dict[str, Any] | None:
+    if not os.path.exists(filename):
+        return None
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_order_file(filename: str, order_data: dict[str, Any]) -> None:
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(order_data, f, indent=2, default=str)
+
+
 class FileOrderRepository(OrderRepository):
     def __init__(self, orders_dir: str = DATA_ORDERS):
         self.orders_dir = orders_dir
 
     def _get_order_path(self, order_id: str) -> str:
         return f"{self.orders_dir}/{order_id}.json"
-
-    def _read_order_file(self, filename: str) -> dict[str, Any] | None:
-        if not os.path.exists(filename):
-            return None
-        with open(filename, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    def _write_order_file(self, filename: str, order_data: dict[str, Any]) -> None:
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(order_data, f, indent=2, default=str)
 
     def save(self, order_data: dict[str, Any]) -> bool:
         try:
@@ -93,7 +107,7 @@ class FileOrderRepository(OrderRepository):
             order_data.setdefault("created_at", str(datetime.now()))
 
             filename = self._get_order_path(order_data["order_id"])
-            self._write_order_file(filename, order_data)
+            _write_order_file(filename, order_data)
 
             logger.info("Order saved successfully: %s", filename)
             return True
@@ -111,7 +125,7 @@ class FileOrderRepository(OrderRepository):
                 if not filename.endswith(".json"):
                     continue
                 filepath = os.path.join(self.orders_dir, filename)
-                order_data = self._read_order_file(filepath)
+                order_data = _read_order_file(filepath)
                 if order_data and order_data.get("status") == "active":
                     active_orders.append(_extract_order_fields(order_data))
 
@@ -121,17 +135,39 @@ class FileOrderRepository(OrderRepository):
             logger.error("Error reading active orders from files: %s", e)
             raise OrderError(f"Failed to read orders: {e}") from e
 
+    def get_archived(self) -> list[dict[str, Any]]:
+        try:
+            if not os.path.exists(self.orders_dir):
+                return []
+
+            archived_orders: list[dict[str, Any]] = []
+            for filename in os.listdir(self.orders_dir):
+                if not filename.endswith(".json"):
+                    continue
+                filepath = os.path.join(self.orders_dir, filename)
+                order_data = _read_order_file(filepath)
+                if order_data and order_data.get("status") == "archived":
+                    archived_orders.append(
+                        _extract_order_fields(order_data, include_timestamps=True)
+                    )
+
+            archived_orders.sort(key=lambda x: x.get("archived_at") or "", reverse=True)
+            return archived_orders
+        except (OSError, IOError, json.JSONDecodeError) as e:
+            logger.error("Error reading archived orders from files: %s", e)
+            raise OrderError(f"Failed to read archived orders: {e}") from e
+
     def archive(self, order_id: str) -> bool:
         try:
             filename = self._get_order_path(order_id)
-            order_data = self._read_order_file(filename)
+            order_data = _read_order_file(filename)
 
             if order_data is None:
                 return False
 
             order_data["status"] = "archived"
             order_data["archived_at"] = str(datetime.now())
-            self._write_order_file(filename, order_data)
+            _write_order_file(filename, order_data)
 
             return True
         except (OSError, IOError, json.JSONDecodeError) as e:
@@ -164,11 +200,11 @@ class DatabaseOrderRepository(OrderRepository):
             with engine.connect() as conn:
                 conn.execute(
                     text("""
-                        INSERT INTO orders (order_id, order_date, model, product_name,
-                                            total_quantity, facility, operation, material, status)
-                        VALUES (:order_id, :order_date, :model, :product_name,
-                                :total_quantity, :facility, :operation, :material, :status)
-                    """),
+                         INSERT INTO orders (order_id, order_date, model, product_name,
+                                             total_quantity, facility, operation, material, status)
+                         VALUES (:order_id, :order_date, :model, :product_name,
+                                 :total_quantity, :facility, :operation, :material, :status)
+                         """),
                     fields,
                 )
                 conn.commit()
@@ -185,17 +221,52 @@ class DatabaseOrderRepository(OrderRepository):
             with engine.connect() as conn:
                 result = conn.execute(
                     text("""
-                        SELECT order_id, order_date, model, product_name,
-                               total_quantity, facility, operation, material, status
-                        FROM orders
-                        WHERE status = 'active'
-                        ORDER BY order_date DESC
-                    """)
+                         SELECT order_id,
+                                order_date,
+                                model,
+                                product_name,
+                                total_quantity,
+                                facility,
+                                operation,
+                                material,
+                                status
+                         FROM orders
+                         WHERE status = 'active'
+                         ORDER BY order_date DESC
+                         """)
                 )
                 return [dict(row._mapping) for row in result]
         except SQLAlchemyError as e:
             logger.error("Database error getting active orders: %s", e)
             raise OrderError(f"Database error getting orders: {e}") from e
+
+    def get_archived(self) -> list[dict[str, Any]]:
+        engine = self._get_engine()
+
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("""
+                         SELECT order_id,
+                                order_date,
+                                model,
+                                product_name,
+                                total_quantity,
+                                facility,
+                                operation,
+                                material,
+                                status,
+                                created_at,
+                                COALESCE(archived_at, updated_at) AS archived_at
+                         FROM orders
+                         WHERE status = 'archived'
+                         ORDER BY COALESCE(archived_at, updated_at) DESC
+                         """)
+                )
+                return [dict(row._mapping) for row in result]
+        except SQLAlchemyError as e:
+            logger.error("Database error getting archived orders: %s", e)
+            raise OrderError(f"Database error getting archived orders: {e}") from e
 
     def archive(self, order_id: str) -> bool:
         engine = self._get_engine()
@@ -203,7 +274,12 @@ class DatabaseOrderRepository(OrderRepository):
         try:
             with engine.connect() as conn:
                 conn.execute(
-                    text("UPDATE orders SET status = 'archived' WHERE order_id = :order_id"),
+                    text("""
+                         UPDATE orders
+                         SET status      = 'archived',
+                             archived_at = CURRENT_TIMESTAMP
+                         WHERE order_id = :order_id
+                         """),
                     {"order_id": order_id},
                 )
                 conn.commit()

@@ -54,6 +54,9 @@ def _render_content() -> None:
     _render_active_orders()
 
     st.markdown("---")
+    _render_archived_orders()
+
+    st.markdown("---")
     _render_facility_capacity()
 
 
@@ -401,8 +404,9 @@ def _get_cached_active_orders() -> list[dict]:
 
 
 def _invalidate_orders_cache() -> None:
-    if "cached_active_orders" in st.session_state:
-        del st.session_state["cached_active_orders"]
+    for key in ("cached_active_orders", "cached_archived_orders"):
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 def _render_active_orders() -> None:
@@ -477,9 +481,13 @@ def _build_order_list(active_orders: list[dict]) -> list[dict]:
     return order_list
 
 
+def _parse_iso_datetime(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 def _parse_order_date(order_date) -> datetime:
     if isinstance(order_date, str):
-        return datetime.fromisoformat(order_date.replace("Z", "+00:00"))
+        return _parse_iso_datetime(order_date)
     if isinstance(order_date, datetime):
         return order_date
     return datetime.combine(order_date, datetime.min.time())
@@ -500,6 +508,100 @@ def _handle_dataframe_archive_selection(selected_df: pd.DataFrame) -> None:
                 st.error(f"{Icons.ERROR} {t(Keys.FAILED_ARCHIVE_ORDER).format(order_id=order_id)}")
         _invalidate_orders_cache()
         st.rerun()
+
+
+def _get_cached_archived_orders() -> list[dict]:
+    from utils.order_manager import get_archived_orders
+
+    cache_key = "cached_archived_orders"
+    if cache_key not in st.session_state:
+        st.session_state[cache_key] = get_archived_orders()
+    return st.session_state[cache_key]
+
+
+def _format_processing_time(created_at_raw, archived_at_raw) -> str:
+    if not created_at_raw or not archived_at_raw:
+        return ""
+    try:
+        if isinstance(created_at_raw, str):
+            created = _parse_iso_datetime(created_at_raw)
+        else:
+            created = created_at_raw
+        if isinstance(archived_at_raw, str):
+            archived = _parse_iso_datetime(archived_at_raw)
+        else:
+            archived = archived_at_raw
+
+        delta = archived - created
+        total_seconds = int(delta.total_seconds())
+        if total_seconds < 0:
+            return ""
+        days = delta.days
+        if days >= 1:
+            return f"{days}d"
+        hours = total_seconds // 3600
+        return f"{hours}h" if hours > 0 else "<1h"
+    except (ValueError, TypeError):
+        return ""
+
+
+def _build_archived_order_list(archived_orders: list[dict]) -> list[dict]:
+    order_list = []
+    for order in archived_orders:
+        order_date = _parse_order_date(order.get("order_date"))
+        archived_at_raw = order.get("archived_at")
+        archived_at_str = ""
+        if archived_at_raw:
+            try:
+                if isinstance(archived_at_raw, str):
+                    archived_dt = _parse_iso_datetime(archived_at_raw)
+                else:
+                    archived_dt = archived_at_raw
+                archived_at_str = archived_dt.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                archived_at_str = str(archived_at_raw)
+
+        order_list.append({
+            ColumnNames.ORDER_ID: order["order_id"],
+            ColumnNames.ORDER_DATE: order_date.strftime("%Y-%m-%d"),
+            "Model": order["model"],
+            "Product": order.get("product_name") or "",
+            "Quantity": order.get("total_quantity") or 0,
+            "Facility": order.get("facility") or "",
+            "Operation": order.get("operation") or "",
+            "Material": order.get("material") or "",
+            ColumnNames.ARCHIVED_AT: archived_at_str,
+            ColumnNames.PROCESSING_TIME: _format_processing_time(
+                order.get("created_at"), archived_at_raw
+            ),
+        })
+    return order_list
+
+
+def _render_archived_orders() -> None:
+    st.subheader(t(Keys.TITLE_ARCHIVED_ORDERS))
+
+    archived_orders = _get_cached_archived_orders()
+
+    if not archived_orders:
+        st.info(f"{Icons.INFO} {t(Keys.NO_ARCHIVED_ORDERS)}")
+        return
+
+    order_list = _build_archived_order_list(archived_orders)
+    archived_df = pd.DataFrame(order_list)
+
+    row_height = 35
+    header_height = 40
+    table_height = min(header_height + len(archived_df) * row_height, 400)
+
+    st.dataframe(
+        archived_df,
+        hide_index=True,
+        width='stretch',
+        height=table_height,
+    )
+
+    st.caption(t(Keys.TOTAL_ARCHIVED_ORDERS).format(count=len(archived_orders)))
 
 
 def _render_facility_capacity() -> None:

@@ -53,6 +53,7 @@ from .projection import (
 )
 from .reports import (
     calculate_monthly_yoy_by_category,
+    calculate_monthly_yoy_by_color,
     calculate_top_products_by_type,
     calculate_top_sales_report,
     calculate_worst_models_12m,
@@ -79,6 +80,7 @@ __all__ = [
     "calculate_last_two_years_avg_sales",
     "calculate_model_stock_projection",
     "calculate_monthly_yoy_by_category",
+    "calculate_monthly_yoy_by_color",
     "calculate_order_priority",
     "calculate_period_sales",
     "calculate_safety_stock_and_rop",
