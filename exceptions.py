@@ -19,3 +19,7 @@ class OrderError(StockMonitorError):
 
 class ValidationError(StockMonitorError):
     pass
+
+
+class MaterialConstraintError(StockMonitorError):
+    pass

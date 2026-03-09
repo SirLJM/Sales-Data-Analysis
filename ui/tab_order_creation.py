@@ -333,6 +333,9 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
     with col_img:
         _display_model_image(model)
 
+    material_constraint, facility_constraint = _resolve_material_constraint(metadata)
+    _display_material_constraint_info(material_constraint, facility_constraint, metadata)
+
     urgent_colors = _find_urgent_colors_for_model(model)
     selected_colors = [item["color"] for item in selected_items]
     all_colors = sorted(set(selected_colors + urgent_colors))
@@ -366,10 +369,61 @@ def _process_model_order(model: str, selected_items: list[dict]) -> None:
         key=SessionKeys.USE_FORECAST_FALLBACK,
     )
 
-    pattern_results = _get_cached_pattern_results(
-        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss,
-        use_forecast_fallback, treat_as_seasonal,
+    enforce_material_min = st.checkbox(
+        t(Keys.ENFORCE_MATERIAL_MIN),
+        value=st.session_state.get(SessionKeys.ENFORCE_MATERIAL_MIN, False),
+        key=SessionKeys.ENFORCE_MATERIAL_MIN,
+        disabled=facility_constraint is None,
     )
+
+    enforce_material_max = st.checkbox(
+        t(Keys.ENFORCE_MATERIAL_MAX),
+        value=st.session_state.get(SessionKeys.ENFORCE_MATERIAL_MAX, False),
+        key=SessionKeys.ENFORCE_MATERIAL_MAX,
+        disabled=facility_constraint is None,
+    )
+
+    enforce_parity = st.checkbox(
+        t(Keys.ENFORCE_MATERIAL_PARITY),
+        value=st.session_state.get(SessionKeys.ENFORCE_MATERIAL_PARITY, False),
+        key=SessionKeys.ENFORCE_MATERIAL_PARITY,
+        disabled=facility_constraint is None or not getattr(facility_constraint, "even_only", False),
+    )
+
+    cap_by_sales = st.checkbox(
+        t(Keys.CAP_COLOR_BY_SALES),
+        value=st.session_state.get(SessionKeys.CAP_COLOR_BY_SALES, False),
+        key=SessionKeys.CAP_COLOR_BY_SALES,
+    )
+
+    drop_excess = st.checkbox(
+        t(Keys.DROP_EXCESS_COLORS),
+        value=st.session_state.get(SessionKeys.DROP_EXCESS_COLORS, False),
+        key=SessionKeys.DROP_EXCESS_COLORS,
+    )
+
+    match_children = st.checkbox(
+        t(Keys.MATCH_CHILDREN_DISTRIBUTION),
+        value=st.session_state.get(SessionKeys.MATCH_CHILDREN_DISTRIBUTION, False),
+        key=SessionKeys.MATCH_CHILDREN_DISTRIBUTION,
+    )
+
+    from utils.order_post_processor import ConstraintFlags
+    constraint_flags = ConstraintFlags(
+        enforce_min=enforce_material_min,
+        enforce_max=enforce_material_max,
+        enforce_parity=enforce_parity,
+        cap_by_sales=cap_by_sales,
+        drop_excess=drop_excess,
+        match_children=match_children,
+    )
+
+    pattern_results, constraint_feedback = _get_cached_pattern_results(
+        model, all_colors, pattern_set, monthly_agg, exclude_low_sales, include_ss,
+        use_forecast_fallback, treat_as_seasonal, facility_constraint, constraint_flags,
+    )
+
+    _display_constraint_feedback(constraint_feedback)
 
     sales_history = _load_last_4_months_sales(model, all_colors, monthly_agg)
 
@@ -686,13 +740,22 @@ def _get_cached_pattern_results(
         model: str, colors: list[str], pattern_set: PatternSet, monthly_agg: pd.DataFrame | None,
         exclude_low_sales: bool = True, include_ss: bool = False, use_forecast_fallback: bool = False,
         treat_as_seasonal: bool = False,
-) -> dict:
-    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}:seasonal={treat_as_seasonal}:forecast={use_forecast_fallback}"
+        facility_constraint: object = None,
+        constraint_flags: object = None,
+) -> tuple[dict, object]:
+    from utils.order_post_processor import ConstraintFlags, ConstraintFeedback, apply_order_constraints
+    from utils.material_constraints import MaterialConstraint
+
+    flags = constraint_flags if isinstance(constraint_flags, ConstraintFlags) else ConstraintFlags()
+    fc = facility_constraint if isinstance(facility_constraint, MaterialConstraint) else None
+
+    flags_key = f":min={flags.enforce_min}:max={flags.enforce_max}:par={flags.enforce_parity}:cap={flags.cap_by_sales}:drop={flags.drop_excess}:child={flags.match_children}"
+    cache_key = f"{model}:{','.join(sorted(colors))}:excl={exclude_low_sales}:ss={include_ss}:seasonal={treat_as_seasonal}:forecast={use_forecast_fallback}{flags_key}"
     cache = st.session_state.get(SessionKeys.PATTERN_RESULTS_CACHE, {})
 
     if cache.get("key") == cache_key and cache.get("results"):
         logger.debug("Using cached pattern results for model='%s'", model)
-        return cache["results"]
+        return cache["results"], cache.get("feedback", ConstraintFeedback.empty())
 
     logger.info("Computing pattern results for model='%s', colors=%d", model, len(colors))
     pattern_results = {}
@@ -700,11 +763,28 @@ def _get_cached_pattern_results(
         result = _optimize_color_pattern(model, color, pattern_set, monthly_agg, exclude_low_sales, include_ss, use_forecast_fallback, treat_as_seasonal)
         pattern_results[color] = result
 
+    any_active = flags.enforce_min or flags.enforce_max or flags.enforce_parity or flags.cap_by_sales or flags.drop_excess or flags.match_children
+    feedback = ConstraintFeedback.empty()
+
+    if any_active:
+        recommendations_data = st.session_state.get(SessionKeys.RECOMMENDATIONS_DATA)
+        priority_skus = recommendations_data["priority_skus"] if recommendations_data else pd.DataFrame()
+        size_aliases = load_size_aliases()
+        min_per_pattern = _get_effective_min_order_for_pattern_set(pattern_set)
+        settings = get_settings()
+        algorithm_mode = settings.get("optimizer", {}).get("algorithm_mode", "greedy_overshoot")
+
+        pattern_results, feedback = apply_order_constraints(
+            pattern_results, model, colors, pattern_set, monthly_agg,
+            priority_skus, fc, flags, size_aliases, min_per_pattern, algorithm_mode,
+        )
+
     st.session_state[SessionKeys.PATTERN_RESULTS_CACHE] = {
         "key": cache_key,
         "results": pattern_results,
+        "feedback": feedback,
     }
-    return pattern_results
+    return pattern_results, feedback
 
 
 def _get_effective_min_order_for_pattern_set(pattern_set: PatternSet) -> int:
@@ -828,6 +908,80 @@ def _display_model_metadata(metadata: dict) -> None:
     for col, (label_key, field) in zip(cols, labels):
         with col:
             st.metric(t(label_key), metadata.get(field, na_value) or na_value)
+
+
+def _resolve_material_constraint(metadata: dict) -> tuple[object, object]:
+    from utils.material_constraints import (
+        find_constraint_for_model,
+        load_material_constraints,
+        resolve_facility_constraint,
+    )
+
+    gramatura = metadata.get("gramatura", "")
+    rodzaj = metadata.get("rodzaj_materialu", "")
+    szwalnia = metadata.get("szwalnia_glowna", "")
+
+    if not gramatura and not rodzaj:
+        return None, None
+
+    try:
+        import os
+        constraints_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "MIN I MAX NA MATERIALE.xlsx")
+        rows = load_material_constraints(constraints_path)
+    except Exception as e:
+        logger.warning("Could not load material constraints: %s", e)
+        return None, None
+
+    material_row = find_constraint_for_model(rows, str(gramatura), str(rodzaj))
+    if material_row is None:
+        return None, None
+
+    facility = resolve_facility_constraint(material_row, str(szwalnia))
+    return material_row, facility
+
+
+def _display_material_constraint_info(
+    material_row: object,
+    facility_constraint: object,
+    metadata: dict,
+) -> None:
+    from utils.material_constraints import MaterialConstraint, MaterialRow
+
+    with st.expander(t(Keys.MATERIAL_CONSTRAINT_HEADER), expanded=False):
+        if not isinstance(material_row, MaterialRow):
+            st.info(f"{Icons.INFO} {t(Keys.MATERIAL_CONSTRAINT_NOT_FOUND)}")
+            return
+
+        fc = facility_constraint if isinstance(facility_constraint, MaterialConstraint) else None
+        st.markdown(t(Keys.MATERIAL_CONSTRAINT_INFO).format(
+            name=material_row.material_name,
+            gsm=material_row.gsm,
+            facility=metadata.get("szwalnia_glowna", "N/A"),
+            min=fc.min_qty if fc and fc.min_qty else "—",
+            max=fc.max_qty if fc and fc.max_qty else "—",
+            even=fc.even_only if fc else False,
+        ))
+
+
+def _display_constraint_feedback(feedback: object) -> None:
+    from utils.order_post_processor import ConstraintFeedback
+    if not isinstance(feedback, ConstraintFeedback):
+        return
+
+    if feedback.capped_colors:
+        details = ", ".join(
+            f"{c}: {orig}→{new}" for c, (orig, new) in feedback.capped_colors.items()
+        )
+        st.info(f"{Icons.INFO} {t(Keys.COLORS_CAPPED).format(details=details)}")
+
+    if feedback.dropped_colors:
+        st.warning(f"{Icons.WARNING} {t(Keys.COLORS_DROPPED).format(colors=', '.join(feedback.dropped_colors))}")
+
+    if feedback.redistributed_colors:
+        details = ", ".join(
+            f"{c}: +{qty}" for c, qty in feedback.redistributed_colors.items()
+        )
+        st.info(f"{Icons.INFO} {t(Keys.COLORS_REDISTRIBUTED).format(details=details)}")
 
 
 def _load_last_4_months_sales(

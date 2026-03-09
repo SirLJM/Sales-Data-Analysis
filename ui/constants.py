@@ -44,6 +44,12 @@ class SessionKeys:
     INCLUDE_SAFETY_STOCK: Final[str] = "include_safety_stock"
     USE_FORECAST_FALLBACK: Final[str] = "use_forecast_fallback"
     TREAT_AS_SEASONAL: Final[str] = "treat_as_seasonal"
+    ENFORCE_MATERIAL_MIN: Final[str] = "enforce_material_min"
+    ENFORCE_MATERIAL_MAX: Final[str] = "enforce_material_max"
+    ENFORCE_MATERIAL_PARITY: Final[str] = "enforce_material_parity"
+    CAP_COLOR_BY_SALES: Final[str] = "cap_color_by_sales"
+    DROP_EXCESS_COLORS: Final[str] = "drop_excess_colors"
+    MATCH_CHILDREN_DISTRIBUTION: Final[str] = "match_children_distribution"
 
 
 class ColumnNames:

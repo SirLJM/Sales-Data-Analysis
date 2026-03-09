@@ -940,6 +940,19 @@ class Keys:
     PROGRESS_LOADING_METADATA: Final[str] = "progress_loading_metadata"
     PROGRESS_DONE: Final[str] = "progress_done"
 
+    ENFORCE_MATERIAL_MIN: Final[str] = "enforce_material_min"
+    ENFORCE_MATERIAL_MAX: Final[str] = "enforce_material_max"
+    ENFORCE_MATERIAL_PARITY: Final[str] = "enforce_material_parity"
+    CAP_COLOR_BY_SALES: Final[str] = "cap_color_by_sales"
+    DROP_EXCESS_COLORS: Final[str] = "drop_excess_colors"
+    MATCH_CHILDREN_DISTRIBUTION: Final[str] = "match_children_distribution"
+    MATERIAL_CONSTRAINT_INFO: Final[str] = "material_constraint_info"
+    MATERIAL_CONSTRAINT_HEADER: Final[str] = "material_constraint_header"
+    MATERIAL_CONSTRAINT_NOT_FOUND: Final[str] = "material_constraint_not_found"
+    COLORS_CAPPED: Final[str] = "colors_capped"
+    COLORS_DROPPED: Final[str] = "colors_dropped"
+    COLORS_REDISTRIBUTED: Final[str] = "colors_redistributed"
+
 
 _EN_LOADING_DATA = "Loading data..."
 _PL_LOADING_DATA = "Wczytywanie danych..."
@@ -1869,6 +1882,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.PROGRESS_LOADING_FORECAST: "Loading forecast...",
         Keys.PROGRESS_LOADING_METADATA: "Loading metadata...",
         Keys.PROGRESS_DONE: "Done!",
+
+        Keys.ENFORCE_MATERIAL_MIN: "Enforce material minimum",
+        Keys.ENFORCE_MATERIAL_MAX: "Enforce material maximum",
+        Keys.ENFORCE_MATERIAL_PARITY: "Enforce even quantities (parzyście)",
+        Keys.CAP_COLOR_BY_SALES: "Cap colors by 12-month sales",
+        Keys.DROP_EXCESS_COLORS: "Drop colors where stock ≥ 12m sales",
+        Keys.MATCH_CHILDREN_DISTRIBUTION: "Match children size/color distribution (4m)",
+        Keys.MATERIAL_CONSTRAINT_INFO: "Material: {name} | GSM: {gsm} | Facility: {facility} | Min: {min} | Max: {max} | Even: {even}",
+        Keys.MATERIAL_CONSTRAINT_HEADER: "Material Constraints",
+        Keys.MATERIAL_CONSTRAINT_NOT_FOUND: "No material constraint found for this model",
+        Keys.COLORS_CAPPED: "Colors capped by 12m sales: {details}",
+        Keys.COLORS_DROPPED: "Colors dropped (stock ≥ 12m sales): {colors}",
+        Keys.COLORS_REDISTRIBUTED: "Excess redistributed to: {details}",
     },
 
     "pl": {
@@ -2790,6 +2816,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.PROGRESS_LOADING_FORECAST: "Ładowanie prognozy...",
         Keys.PROGRESS_LOADING_METADATA: "Ładowanie metadanych...",
         Keys.PROGRESS_DONE: "Gotowe!",
+
+        Keys.ENFORCE_MATERIAL_MIN: "Wymuś minimum materiałowe",
+        Keys.ENFORCE_MATERIAL_MAX: "Wymuś maksimum materiałowe",
+        Keys.ENFORCE_MATERIAL_PARITY: "Wymuś parzyste ilości (parzyście)",
+        Keys.CAP_COLOR_BY_SALES: "Ogranicz kolory wg sprzedaży 12m",
+        Keys.DROP_EXCESS_COLORS: "Usuń kolory gdzie stan ≥ sprzedaż 12m",
+        Keys.MATCH_CHILDREN_DISTRIBUTION: "Dopasuj rozkład rozmiarów/kolorów dziecięcych (4m)",
+        Keys.MATERIAL_CONSTRAINT_INFO: "Materiał: {name} | GSM: {gsm} | Szwalnia: {facility} | Min: {min} | Maks: {max} | Parzyście: {even}",
+        Keys.MATERIAL_CONSTRAINT_HEADER: "Ograniczenia materiałowe",
+        Keys.MATERIAL_CONSTRAINT_NOT_FOUND: "Nie znaleziono ograniczeń materiałowych dla tego modelu",
+        Keys.COLORS_CAPPED: "Kolory ograniczone wg sprzedaży 12m: {details}",
+        Keys.COLORS_DROPPED: "Kolory usunięte (stan ≥ sprzedaż 12m): {colors}",
+        Keys.COLORS_REDISTRIBUTED: "Nadwyżka rozdzielona do: {details}",
     },
 }
 

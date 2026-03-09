@@ -47,3 +47,4 @@ utils/optimizer_pattern_sets.json
 .coverage
 tasks.json
 tmpclaude-*
+/itertuples_test.txt
