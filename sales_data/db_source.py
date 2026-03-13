@@ -364,13 +364,15 @@ class DatabaseSource(DataSource):
     def load_model_metadata(self) -> pd.DataFrame | None:
         logger.info("Loading model metadata from database")
         query = """
-                SELECT model,
-                       primary_production,
-                       secondary_production,
-                       material_type,
-                       material_weight
-                FROM model_metadata
-                ORDER BY model \
+                SELECT m.model,
+                       m.primary_production,
+                       m.secondary_production,
+                       m.material_type,
+                       m.material_weight,
+                       b.main_material_name
+                FROM model_metadata m
+                LEFT JOIN bom b ON m.model = b.model
+                ORDER BY m.model \
                 """
 
         try:
@@ -387,6 +389,7 @@ class DatabaseSource(DataSource):
                 "SZWALNIA DRUGA",
                 "RODZAJ MATERIAŁU",
                 "GRAMATURA",
+                "u Martyny nazwa",
             ]
 
             logger.info("Loaded %d model metadata rows from database", len(df))

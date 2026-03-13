@@ -893,6 +893,7 @@ def _load_model_metadata_for_model(model: str) -> dict:
         "szwalnia_druga": row.iloc[0].get(ColumnNames.SZWALNIA_D, ""),
         "rodzaj_materialu": row.iloc[0].get(ColumnNames.MATERIAL, ""),
         "gramatura": row.iloc[0].get(ColumnNames.GRAMATURA, ""),
+        "martyny_nazwa": row.iloc[0].get("u Martyny nazwa", ""),
     }
 
 
@@ -918,10 +919,10 @@ def _resolve_material_constraint(metadata: dict) -> tuple[object, object]:
     )
 
     gramatura = metadata.get("gramatura", "")
-    rodzaj = metadata.get("rodzaj_materialu", "")
+    martyny_nazwa = metadata.get("martyny_nazwa", "")
     szwalnia = metadata.get("szwalnia_glowna", "")
 
-    if not gramatura and not rodzaj:
+    if not gramatura and not martyny_nazwa:
         return None, None
 
     try:
@@ -932,7 +933,7 @@ def _resolve_material_constraint(metadata: dict) -> tuple[object, object]:
         logger.warning("Could not load material constraints: %s", e)
         return None, None
 
-    material_row = find_constraint_for_model(rows, str(gramatura), str(rodzaj))
+    material_row = find_constraint_for_model(rows, str(gramatura), str(martyny_nazwa))
     if material_row is None:
         return None, None
 

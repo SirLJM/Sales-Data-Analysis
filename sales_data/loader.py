@@ -492,7 +492,9 @@ class SalesDataLoader:
             "RODZAJ MATERIAŁU",
             "GRAMATURA",
         ]
-        df = pd.DataFrame(df[required_cols].copy())
+        optional_cols = ["u Martyny nazwa"]
+        available_optional = [c for c in optional_cols if c in df.columns]
+        df = pd.DataFrame(df[required_cols + available_optional].copy())
         df = pd.DataFrame(df.dropna(subset=["Model"]))
         return df
 

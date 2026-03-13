@@ -104,37 +104,111 @@ def load_material_constraints(path: str | Path) -> list[MaterialRow]:
     return rows
 
 
-def find_constraint_for_model(
-    rows: list[MaterialRow],
-    gramatura: str,
-    rodzaj_materialu: str,
-) -> MaterialRow | None:
-    if not gramatura and not rodzaj_materialu:
-        return None
+_MATERIAL_KEYWORDS: list[tuple[str, str]] = [
+    ("single jersey", "single_jersey"),
+    ("singiel", "single_jersey"),
+    ("dresówka", "dresowka"),
+    ("dres ", "dresowka"),
+    ("pętelkowa", "petelka"),
+    ("pętelka", "petelka"),
+    ("drapana", "drapana"),
+    ("diagonal", "diagonal"),
+    ("diagonalna", "diagonal"),
+    ("bawełna", "bawelna"),
+    ("interlock", "interlock"),
+    ("muślin", "muslin"),
+    ("softshell", "softshell"),
+    ("wiskoz", "wiskoza"),
+    ("bambusow", "bambus"),
+    ("bambus", "bambus"),
+    ("lacosta", "lacosta"),
+    ("pika", "lacosta"),
+    ("ściągacz", "sciagacz"),
+    ("prązkowana", "sciagacz"),
+    ("ściągaczowa", "sciagacz"),
+    ("len ", "len"),
+    ("len\xa0", "len"),
+    ("eko", "eko"),
+    ("peach", "peach"),
+    ("premium", "premium"),
+]
 
-    target_gsm = _normalize_gsm(gramatura) if gramatura else ""
-    target_name = rodzaj_materialu.strip().lower() if rodzaj_materialu else ""
 
+def _extract_material_keywords(name: str) -> set[str]:
+    text = name.lower().replace("\xa0", " ").strip() + " "
+    keywords: set[str] = set()
+    for pattern, keyword in _MATERIAL_KEYWORDS:
+        if pattern in text:
+            keywords.add(keyword)
+    return keywords
+
+
+def _keyword_score(name_a: str, name_b: str) -> float:
+    kw_a = _extract_material_keywords(name_a)
+    kw_b = _extract_material_keywords(name_b)
+    if not kw_a or not kw_b:
+        return 0.0
+    overlap = len(kw_a & kw_b)
+    total = max(len(kw_a), len(kw_b))
+    return overlap / total if total > 0 else 0.0
+
+
+def _filter_by_gsm(rows: list[MaterialRow], target_gsm: str) -> list[MaterialRow]:
+    if not target_gsm:
+        return []
+    candidates = []
     for row in rows:
-        if _matches_material_row(row, target_gsm, target_name):
-            return row
+        row_gsm = _normalize_gsm(row.gsm) if row.gsm else ""
+        if not row_gsm or row_gsm == "-":
+            continue
+        if row_gsm == target_gsm:
+            candidates.append(row)
+    return candidates
 
+
+def _best_keyword_match(
+    candidates: list[MaterialRow], martyny_nazwa: str
+) -> MaterialRow | None:
+    best_row: MaterialRow | None = None
+    best_score = -1.0
+    for row in candidates:
+        score = _keyword_score(martyny_nazwa, row.material_name)
+        if score > best_score:
+            best_score = score
+            best_row = row
+    if best_score > 0:
+        logger.debug(
+            "Matched '%s' -> '%s' (score=%.2f)",
+            martyny_nazwa,
+            best_row.material_name if best_row else "?",
+            best_score,
+        )
+        return best_row
     return None
 
 
-def _matches_material_row(row: MaterialRow, target_gsm: str, target_name: str) -> bool:
-    row_gsm = _normalize_gsm(row.gsm) if row.gsm else ""
-    row_name = row.material_name.strip().lower() if row.material_name else ""
+def find_constraint_for_model(
+    rows: list[MaterialRow],
+    gramatura: str,
+    martyny_nazwa: str,
+) -> MaterialRow | None:
+    if not gramatura and not martyny_nazwa:
+        return None
 
-    gsm_matches = target_gsm and row_gsm and target_gsm == row_gsm
-    gsm_conflicts = target_gsm and row_gsm and target_gsm != row_gsm
-    name_matches = target_name and row_name and target_name == row_name
-    name_conflicts = target_name and row_name and target_name != row_name
+    target_gsm = _normalize_gsm(gramatura) if gramatura else ""
+    candidates = _filter_by_gsm(rows, target_gsm)
 
-    if gsm_conflicts or name_conflicts:
-        return False
+    if not candidates:
+        return None
 
-    return bool(gsm_matches or name_matches)
+    if len(candidates) == 1:
+        return candidates[0]
+
+    if not martyny_nazwa:
+        return candidates[0]
+
+    match = _best_keyword_match(candidates, martyny_nazwa)
+    return match if match else candidates[0]
 
 
 def resolve_facility_constraint(
