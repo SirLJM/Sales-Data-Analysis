@@ -25,6 +25,7 @@ from .internal_forecast import (
 from .inventory_metrics import (
     calculate_forecast_date_range,
     calculate_forecast_metrics,
+    calculate_out_of_stock_streaks,
     calculate_safety_stock_and_rop,
 )
 from .material_planning import (
@@ -81,6 +82,7 @@ __all__ = [
     "calculate_model_stock_projection",
     "calculate_monthly_yoy_by_category",
     "calculate_monthly_yoy_by_color",
+    "calculate_out_of_stock_streaks",
     "calculate_order_priority",
     "calculate_period_sales",
     "calculate_safety_stock_and_rop",

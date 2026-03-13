@@ -17,6 +17,7 @@ from sales_data.analysis import (
     calculate_monthly_yoy_by_category,
     calculate_monthly_yoy_by_color,
     calculate_order_priority,
+    calculate_out_of_stock_streaks,
     calculate_period_sales,
     calculate_safety_stock_and_rop,
     calculate_size_priorities,
@@ -95,6 +96,12 @@ class SalesAnalyzer:
             forecast_df: pd.DataFrame, forecast_time_months: float | None = None
     ) -> pd.DataFrame:
         return calculate_forecast_metrics(forecast_df, forecast_time_months)
+
+    @staticmethod
+    def calculate_out_of_stock_streaks(
+            stock_history: pd.DataFrame, entity_type: str = "sku"
+    ) -> pd.DataFrame:
+        return calculate_out_of_stock_streaks(stock_history, entity_type)
 
     @staticmethod
     def calculate_stock_projection(

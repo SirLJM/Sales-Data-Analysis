@@ -246,6 +246,13 @@ def load_yearly_forecast(include_color: bool = False) -> pd.DataFrame | None:
     return aggregate_forecast_yearly(forecast_df, include_color=include_color)
 
 
+@st.cache_data(ttl=Config.CACHE_TTL)
+def load_stock_history() -> pd.DataFrame | None:
+    data_source = get_data_source()
+    df = data_source.load_stock_history()
+    return df if df is not None and not df.empty else None
+
+
 def _add_default_stock_columns(df: pd.DataFrame, stock_column: str) -> pd.DataFrame:
     if stock_column not in df.columns:
         df[stock_column] = 0

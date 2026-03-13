@@ -9,14 +9,14 @@ AVERAGE_SALES = "AVERAGE SALES"
 
 
 def calculate_safety_stock_and_rop(
-    sku_summary: pd.DataFrame,
-    seasonal_data: pd.DataFrame,
-    z_basic: float,
-    z_regular: float,
-    z_seasonal_in: float,
-    z_seasonal_out: float,
-    z_new: float,
-    lead_time_months: float = 1.36,
+        sku_summary: pd.DataFrame,
+        seasonal_data: pd.DataFrame,
+        z_basic: float,
+        z_regular: float,
+        z_seasonal_in: float,
+        z_seasonal_out: float,
+        z_new: float,
+        lead_time_months: float = 1.36,
 ) -> pd.DataFrame:
     df = sku_summary.copy()
 
@@ -43,7 +43,7 @@ def calculate_safety_stock_and_rop(
         seasonal_current = seasonal_data[
             (seasonal_data["SKU"].isin(seasonal_items))
             & (seasonal_data["month"] == current_month)
-        ][["SKU", "is_in_season"]]
+            ][["SKU", "is_in_season"]]
 
         df = df.merge(pd.DataFrame(seasonal_current), left_on=id_column, right_on="SKU", how="left")
         if id_column == "MODEL":
@@ -102,7 +102,7 @@ def calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Times
 
 
 def calculate_forecast_metrics(
-    forecast_df: pd.DataFrame, forecast_time_months: float | None = None
+        forecast_df: pd.DataFrame, forecast_time_months: float | None = None
 ) -> pd.DataFrame:
     if forecast_df.empty:
         columns = ["sku"]
@@ -118,7 +118,7 @@ def calculate_forecast_metrics(
 
         forecast_leadtime = forecast_df[
             (forecast_df["data"] >= forecast_start) & (forecast_df["data"] < forecast_end)
-        ]
+            ]
 
         result = pd.DataFrame(forecast_leadtime.groupby("sku", as_index=False, observed=True).agg({"forecast": "sum"}))
         result = pd.DataFrame(result.rename(columns={"forecast": "FORECAST_LEADTIME"}))
@@ -127,3 +127,69 @@ def calculate_forecast_metrics(
         result = pd.DataFrame({"sku": forecast_df["sku"].unique()})
 
     return result
+
+
+def calculate_out_of_stock_streaks(
+        stock_history: pd.DataFrame, entity_type: str = "sku"
+) -> pd.DataFrame:
+    if stock_history.empty:
+        return pd.DataFrame(columns=pd.Index(["SKU", "DAYS_OUT_OF_STOCK", "LAST_IN_STOCK_DATE", "LATEST_SNAPSHOT"]))
+
+    df = stock_history.copy()
+    df["snapshot_date"] = pd.to_datetime(df["snapshot_date"])
+
+    if entity_type == "model":
+        df["entity"] = pd.Series(df["sku"]).astype(str).str[:5]
+        stock_by_entity = (
+            df.groupby(["entity", "snapshot_date"], as_index=False, observed=True)
+            .agg(available_stock=("available_stock", "sum"))
+        )
+        id_column = "MODEL"
+    else:
+        df["entity"] = df["sku"]
+        stock_by_entity = df[["entity", "snapshot_date", "available_stock"]].copy()
+        id_column = "SKU"
+
+    latest_snapshot = stock_by_entity["snapshot_date"].max()
+
+    current_stock = stock_by_entity[stock_by_entity["snapshot_date"] == latest_snapshot]
+    zero_stock_entities = set(
+        current_stock[current_stock["available_stock"] <= 0]["entity"].unique()
+    )
+
+    entities_never_in_latest = (
+            set(stock_by_entity["entity"].unique()) - set(current_stock["entity"].unique())
+    )
+    zero_stock_entities.update(entities_never_in_latest)
+
+    if not zero_stock_entities:
+        return pd.DataFrame(columns=pd.Index([id_column, "DAYS_OUT_OF_STOCK", "LAST_IN_STOCK_DATE", "LATEST_SNAPSHOT"]))
+
+    in_stock_snapshots = stock_by_entity[
+        (stock_by_entity["entity"].isin(zero_stock_entities))
+        & (stock_by_entity["available_stock"] > 0)
+        ]
+
+    last_in_stock = (
+        in_stock_snapshots.groupby("entity", observed=True)["snapshot_date"]
+        .max()
+        .reset_index()
+        .rename(columns={"snapshot_date": "LAST_IN_STOCK_DATE"})
+    )
+
+    result = pd.DataFrame({"entity": list(zero_stock_entities)})
+    result = result.merge(last_in_stock, on="entity", how="left", validate="one_to_one")
+
+    result["LATEST_SNAPSHOT"] = latest_snapshot
+    result["DAYS_OUT_OF_STOCK"] = result.apply(
+        lambda row: (latest_snapshot - row["LAST_IN_STOCK_DATE"]).days
+        if pd.notna(row["LAST_IN_STOCK_DATE"])
+        else (latest_snapshot - stock_by_entity["snapshot_date"].min()).days,
+        axis=1,
+    )
+
+    result = result.rename(columns={"entity": id_column})
+    result = result.sort_values("DAYS_OUT_OF_STOCK", ascending=False).reset_index(drop=True)
+    result = result[result["DAYS_OUT_OF_STOCK"] > 0]
+
+    return result[[id_column, "DAYS_OUT_OF_STOCK", "LAST_IN_STOCK_DATE", "LATEST_SNAPSHOT"]]

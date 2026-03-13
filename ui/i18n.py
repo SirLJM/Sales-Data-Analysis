@@ -214,6 +214,13 @@ class Keys:
     YEARLY_SALES_TREND_FOR: Final[str] = "yearly_sales_trend_for"
     STOCK_STATUS_DISTRIBUTION: Final[str] = "stock_status_distribution"
 
+    TITLE_OUT_OF_STOCK: Final[str] = "title_out_of_stock"
+    OOS_ITEMS_AT_ZERO: Final[str] = "oos_items_at_zero"
+    OOS_LONGEST_STREAK: Final[str] = "oos_longest_streak"
+    OOS_DAYS: Final[str] = "oos_days"
+    OOS_NO_DATA: Final[str] = "oos_no_data"
+    OOS_NO_ITEMS: Final[str] = "oos_no_items"
+
     WARN_ROP_IN_DAYS: Final[str] = "warn_rop_in_days"
     ERR_STOCKOUT_IN_DAYS: Final[str] = "err_stockout_in_days"
 
@@ -1156,6 +1163,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.YEARLY_SALES_TREND_FOR: "Yearly Sales Trend: {entity} {id}",
         Keys.STOCK_STATUS_DISTRIBUTION: "Stock Status Distribution (Overstock threshold: {threshold}%)",
 
+        Keys.TITLE_OUT_OF_STOCK: "Longest Out of Stock",
+        Keys.OOS_ITEMS_AT_ZERO: "Items at Zero Stock",
+        Keys.OOS_LONGEST_STREAK: "Longest Streak",
+        Keys.OOS_DAYS: "{days} days",
+        Keys.OOS_NO_DATA: "No stock history data available",
+        Keys.OOS_NO_ITEMS: "No items currently out of stock",
+
         Keys.WARN_ROP_IN_DAYS: "Stock will reach ROP in {days} days ({date})",
         Keys.ERR_STOCKOUT_IN_DAYS: "🚨 Stockout predicted in {days} days ({date})",
 
@@ -2089,6 +2103,13 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.STOCK_PROJECTION_FOR: "Projekcja Stanu dla {entity} {id}",
         Keys.YEARLY_SALES_TREND_FOR: "Roczny Trend Sprzedaży: {entity} {id}",
         Keys.STOCK_STATUS_DISTRIBUTION: "Rozkład Stanu Magazynu (Próg nadstanu: {threshold}%)",
+
+        Keys.TITLE_OUT_OF_STOCK: "Najdłużej Brak na Stanie",
+        Keys.OOS_ITEMS_AT_ZERO: "Produkty z zerowym stanem",
+        Keys.OOS_LONGEST_STREAK: "Najdłuższa seria",
+        Keys.OOS_DAYS: "{days} dni",
+        Keys.OOS_NO_DATA: "Brak danych historii stanów magazynowych",
+        Keys.OOS_NO_ITEMS: "Brak produktów obecnie bez stanu",
 
         Keys.WARN_ROP_IN_DAYS: "Stan osiągnie ROP za {days} dni ({date})",
         Keys.ERR_STOCKOUT_IN_DAYS: "🚨 Przewidywany brak towaru za {days} dni ({date})",

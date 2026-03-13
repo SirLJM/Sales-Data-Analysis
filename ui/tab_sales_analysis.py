@@ -8,7 +8,7 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.i18n import t, Keys
-from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_yearly_sales, load_yearly_forecast
+from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_stock_history, load_yearly_sales, load_yearly_forecast
 from ui.shared.session_manager import get_settings
 from ui.shared.sku_utils import extract_model
 from ui.shared.styles import SIDEBAR_STYLE
@@ -61,6 +61,7 @@ def _render_content(context: dict) -> None:
     _render_data_table(filtered_summary, summary, group_by_model)
     _render_type_metrics(filtered_summary)
     _render_stock_metrics(filtered_summary, stock_df, stock_loaded)
+    _render_out_of_stock_section(group_by_model)
     _render_download_button(filtered_summary, group_by_model)
 
     if stock_loaded and use_forecast and forecast_df is not None and forecast_date is not None:
@@ -517,6 +518,28 @@ def _render_stock_metrics(
         total_value = stock_df[ColumnNames.VALUE].sum()
         col2.metric(t(Keys.METRIC_TOTAL_STOCK), f"{total_stock:,.0f}")
         col3.metric(t(Keys.METRIC_TOTAL_STOCK_VALUE), f"{total_value:,.2f}")
+
+
+def _render_out_of_stock_section(group_by_model: bool) -> None:
+    entity_type = "model" if group_by_model else "sku"
+
+    with st.expander(t(Keys.TITLE_OUT_OF_STOCK), expanded=False):
+        stock_history = load_stock_history()
+        if stock_history is None:
+            st.info(t(Keys.OOS_NO_DATA))
+            return
+
+        streaks = SalesAnalyzer.calculate_out_of_stock_streaks(stock_history, entity_type)
+        if streaks.empty:
+            st.info(t(Keys.OOS_NO_ITEMS))
+            return
+
+        col1, col2 = st.columns(2)
+        col1.metric(t(Keys.OOS_ITEMS_AT_ZERO), len(streaks))
+        longest = int(streaks["DAYS_OUT_OF_STOCK"].max())
+        col2.metric(t(Keys.OOS_LONGEST_STREAK), t(Keys.OOS_DAYS).format(days=longest))
+
+        st.dataframe(streaks, hide_index=True, use_container_width=True)
 
 
 def _render_download_button(display_data: pd.DataFrame, group_by_model: bool) -> None:
