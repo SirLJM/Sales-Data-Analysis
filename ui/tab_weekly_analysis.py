@@ -10,8 +10,8 @@ from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_data, load_stock
 from ui.shared.display_helpers import display_star_product
-from ui.shared.session_manager import get_settings
-from ui.shared.sku_utils import extract_color, extract_model
+from ui.shared.session_manager import get_excluded_skus, get_settings
+from ui.shared.sku_utils import extract_color, extract_model, filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_weekly_analysis")
@@ -33,10 +33,11 @@ def _render_content(context: dict) -> None:
         st.cache_data.clear()
         st.rerun()
 
-    df = load_data()
+    df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
     stock_df = None
     if context.get("stock_loaded"):
-        stock_df, _ = load_stock()
+        stock_result, _ = load_stock()
+        stock_df = filter_excluded_skus(stock_result, get_excluded_skus()) if stock_result is not None else None
 
     st.markdown("---")
     _render_top_sales_report(df)
@@ -209,7 +210,9 @@ def _display_weekly_table(weekly_df: pd.DataFrame) -> None:
 def _display_zero_sales_warning(weekly_df: pd.DataFrame) -> None:
     week_cols = [col for col in weekly_df.columns if col not in ["SALES_START_DATE", "MODEL", "DESCRIPTION"]]
     weekly_df_with_total = weekly_df.copy()
-    numeric_week_data = weekly_df_with_total[week_cols].apply(pd.to_numeric, errors="coerce").fillna(0)
+    numeric_week_data = weekly_df_with_total[week_cols].apply(  # type: ignore[arg-type]
+        pd.to_numeric, errors="coerce"
+    ).fillna(0)
     weekly_df_with_total["TOTAL_SALES"] = numeric_week_data.sum(axis=1)
     zero_sales = weekly_df_with_total[weekly_df_with_total["TOTAL_SALES"] == 0]
 

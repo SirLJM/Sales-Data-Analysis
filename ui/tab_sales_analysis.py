@@ -9,8 +9,8 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_stock_history, load_yearly_sales, load_yearly_forecast
-from ui.shared.session_manager import get_settings
-from ui.shared.sku_utils import extract_model
+from ui.shared.session_manager import get_excluded_skus, get_settings
+from ui.shared.sku_utils import extract_model, filter_excluded_skus
 from ui.shared.styles import SIDEBAR_STYLE
 from utils.logging_config import get_logger
 
@@ -38,8 +38,8 @@ def _render_content(context: dict) -> None:
     use_stock = context.get("use_stock", True)
     use_forecast = context.get("use_forecast", True)
 
-    df = load_data()
-    logger.info("Sales data loaded: %d rows, group_by_model=%s", len(df) if df is not None else 0, group_by_model)
+    df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
+    logger.info("Sales data loaded: %d rows, group_by_model=%s", len(df), group_by_model)
     analyzer = SalesAnalyzer(df)
 
     summary, id_column = _build_summary(analyzer, group_by_model, settings)
@@ -156,6 +156,7 @@ def _process_stock_data(
         st.info(f"{Icons.INFO} {t(Keys.MSG_NO_STOCK_FILE)}")
         return None, None, False
 
+    stock_df = filter_excluded_skus(stock_df, get_excluded_skus())
     stock_df = stock_df.rename(columns={
         "sku": "SKU",
         "nazwa": "DESCRIPTION",
@@ -373,7 +374,7 @@ def _render_filters(
 
     return _apply_filters(
         summary, id_column,
-        search_term=search_term,
+        search_term=search_term or "",
         show_only_below_rop=show_only_below_rop,
         show_bestsellers=show_bestsellers,
         show_overstocked=stock_loaded and show_overstocked,
@@ -789,8 +790,14 @@ def _render_yearly_sales_trend() -> None:
     include_color = view_mode == t(Keys.GROUP_MODEL_COLOR)
     id_col = "MODEL_COLOR" if include_color else "MODEL"
 
+    excluded = get_excluded_skus()
+    excluded_models = list({sku[:5] for sku in excluded}) if excluded else []
     yearly_sales = load_yearly_sales(include_color=include_color)
+    if excluded_models and not yearly_sales.empty:
+        yearly_sales = pd.DataFrame(yearly_sales[~yearly_sales["MODEL"].isin(excluded_models)])
     yearly_forecast = load_yearly_forecast(include_color=include_color)
+    if yearly_forecast is not None and excluded_models and not yearly_forecast.empty:
+        yearly_forecast = pd.DataFrame(yearly_forecast[~yearly_forecast["MODEL"].isin(excluded_models)])
 
     available_ids = sorted(yearly_sales[id_col].unique())
 
@@ -873,7 +880,7 @@ def _render_yearly_summary_table(
                 filtered_data[id_col].str.contains(search_filter.upper(), na=False)
             ]
 
-        filtered_data = _sort_yearly_summary(filtered_data, sort_by, prev_year)
+        filtered_data = _sort_yearly_summary(filtered_data, str(sort_by), prev_year)
 
         st.dataframe(
             filtered_data,
@@ -1056,11 +1063,11 @@ def _render_trend_metrics(
     complete_years_data = sales_data[sales_data["YEAR"] < current_year]
     if len(complete_years_data) >= 2:
         recent_years = complete_years_data.tail(2).reset_index(drop=True)
-        prev_year = int(recent_years.loc[0, "YEAR"])
-        last_year = int(recent_years.loc[1, "YEAR"])
+        prev_year = int(str(recent_years.loc[0, "YEAR"]))
+        last_year = int(str(recent_years.loc[1, "YEAR"]))
         if last_year - prev_year == 1:
-            prev_year_qty = float(recent_years.loc[0, "QUANTITY"])
-            last_year_qty = float(recent_years.loc[1, "QUANTITY"])
+            prev_year_qty = float(str(recent_years.loc[0, "QUANTITY"]))
+            last_year_qty = float(str(recent_years.loc[1, "QUANTITY"]))
             if prev_year_qty > 0:
                 yoy_change = ((last_year_qty - prev_year_qty) / prev_year_qty) * 100
                 trend_icon, trend_color = _get_trend_indicator(yoy_change)

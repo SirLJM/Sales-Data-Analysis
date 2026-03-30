@@ -16,8 +16,8 @@ from ui.shared.data_loaders import (
     load_size_aliases_reverse,
     merge_stock_into_summary,
 )
-from ui.shared.session_manager import get_data_source, get_session_value, get_settings, set_session_value
-from ui.shared.sku_utils import ADULT_PREFIXES, extract_color, extract_model, extract_size, get_size_sort_key
+from ui.shared.session_manager import get_data_source, get_excluded_skus, get_session_value, get_settings, set_session_value
+from ui.shared.sku_utils import ADULT_PREFIXES, extract_color, extract_model, extract_size, filter_excluded_skus, get_size_sort_key
 from ui.shared.styles import ROTATED_TABLE_STYLE
 from utils.logging_config import get_logger
 from utils.pattern_optimizer import PatternSet, load_pattern_sets
@@ -58,7 +58,7 @@ def _render_manual_order_input(context: dict) -> None:
         )
         create_clicked = st.form_submit_button(t(Keys.BTN_CREATE_ORDER), type="primary")
 
-    if create_clicked:
+    if create_clicked and manual_model:
         _process_manual_order(manual_model, context)
 
 
@@ -194,11 +194,13 @@ def _load_cached_data(data_type: str) -> pd.DataFrame | None:
 
 
 def _load_stock_data() -> pd.DataFrame | None:
-    return _load_cached_data("stock")
+    df = _load_cached_data("stock")
+    return filter_excluded_skus(df, get_excluded_skus()) if df is not None else None
 
 
 def _load_forecast_data() -> pd.DataFrame | None:
-    return _load_cached_data("forecast")
+    df = _load_cached_data("forecast")
+    return filter_excluded_skus(df, get_excluded_skus(), sku_column="sku") if df is not None else None
 
 
 def _add_forecast_data(sku_summary: pd.DataFrame, forecast_df: pd.DataFrame, lead_time: float) -> pd.DataFrame:
@@ -543,7 +545,7 @@ def _render_size_color_table(
         scale = st.slider("Scale %", min_value=50, max_value=100, value=100, step=10, key="size_color_scale")
 
     active_colors = list(pattern_results.keys())
-    size_color_table = _build_color_size_table(pattern_results, pattern_set, color_filter, model_colors, active_colors)
+    size_color_table = _build_color_size_table(pattern_results, pattern_set, str(color_filter), model_colors, active_colors)
 
     tsv_data = size_color_table.to_csv(sep="\t", index=False)
     _render_copy_button(tsv_data)
@@ -727,13 +729,18 @@ def _find_urgent_colors_for_model(model: str) -> list[str]:
 
 
 @st.cache_data(ttl=3600)
-def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+def _load_monthly_aggregations_raw() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
         return data_source.get_monthly_aggregations(entity_type="sku")
     except Exception as e:
         logger.warning("Could not load monthly aggregations: %s", e)
         return None
+
+
+def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+    df = _load_monthly_aggregations_raw()
+    return filter_excluded_skus(df, get_excluded_skus(), sku_column="sku") if df is not None else None
 
 
 def _get_cached_pattern_results(
@@ -926,8 +933,8 @@ def _resolve_material_constraint(metadata: dict) -> tuple[object, object]:
         return None, None
 
     try:
-        import os
-        constraints_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "MIN I MAX NA MATERIALE.xlsx")
+        from pathlib import Path
+        constraints_path = str(Path(__file__).parent.parent / "data" / "MIN I MAX NA MATERIALE.xlsx")
         rows = load_material_constraints(constraints_path)
     except Exception as e:
         logger.warning("Could not load material constraints: %s", e)

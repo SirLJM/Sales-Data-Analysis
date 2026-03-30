@@ -50,6 +50,7 @@ class SessionKeys:
     CAP_COLOR_BY_SALES: Final[str] = "cap_color_by_sales"
     DROP_EXCESS_COLORS: Final[str] = "drop_excess_colors"
     MATCH_CHILDREN_DISTRIBUTION: Final[str] = "match_children_distribution"
+    EXCLUDED_SKUS: Final[str] = "excluded_skus"
 
 
 class ColumnNames:

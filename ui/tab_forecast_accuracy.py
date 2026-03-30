@@ -21,7 +21,8 @@ from ui.shared.forecast_accuracy_loader import (
     load_sales_for_accuracy,
     load_stock_history_for_accuracy,
 )
-from ui.shared.session_manager import get_settings
+from ui.shared.session_manager import get_excluded_skus, get_settings
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_forecast_accuracy")
@@ -120,32 +121,40 @@ def _render_parameter_controls() -> dict | None:
                 horizontal=True,
             )
 
+        from datetime import date as date_type
+        if not isinstance(analysis_start, date_type) or not isinstance(analysis_end, date_type):
+            return None
+
         analysis_start_dt = datetime.combine(analysis_start, datetime.min.time())
         analysis_end_dt = datetime.combine(analysis_end, datetime.max.time())
 
         days_diff = (analysis_end_dt - analysis_start_dt).days
-        min_days = int(lead_time * 30.44)
+        lead_time_val = float(lead_time) if lead_time is not None else 0.0
+        min_days = int(lead_time_val * 30.44)
 
         if days_diff < min_days:
             st.error(
-                f"{Icons.ERROR} {t(Keys.ERR_ANALYSIS_PERIOD_TOO_SHORT).format(days=days_diff, min_days=min_days, lead_time=lead_time)}"
+                f"{Icons.ERROR} {t(Keys.ERR_ANALYSIS_PERIOD_TOO_SHORT).format(days=days_diff, min_days=min_days, lead_time=lead_time_val)}"
             )
             return None
 
-        forecast_date = (analysis_start_dt - timedelta(days=int(lookback_months * 30.44))).strftime('%Y-%m-%d')
+        lookback_val = int(lookback_months) if lookback_months is not None else 4
+        forecast_date = (analysis_start_dt - timedelta(days=int(lookback_val * 30.44))).strftime('%Y-%m-%d')
         st.info(t(Keys.INFO_ANALYSIS_PERIOD).format(days=days_diff, date=forecast_date))
 
     return {
         "analysis_start": analysis_start_dt,
         "analysis_end": analysis_end_dt,
-        "lookback_months": lookback_months,
+        "lookback_months": lookback_val,
         "entity_type": entity_type,
     }
 
 
 def _generate_accuracy_report(params: dict, context: dict) -> None:
     with st.spinner(t(Keys.LOADING_ACCURACY_METRICS)):  # type: ignore[attr-defined]
+        excluded = get_excluded_skus()
         sales_df = load_sales_for_accuracy(params["analysis_start"], params["analysis_end"])
+        sales_df = filter_excluded_skus(sales_df, excluded, sku_column="sku") if sales_df is not None else None
         if sales_df is None or sales_df.empty:
             st.error(f"{Icons.ERROR} {t(Keys.ERR_NO_SALES_FOR_PERIOD)}")
             return
@@ -153,6 +162,7 @@ def _generate_accuracy_report(params: dict, context: dict) -> None:
         forecast_df, forecast_date = load_forecast_for_accuracy(
             params["analysis_start"], params["lookback_months"]
         )
+        forecast_df = filter_excluded_skus(forecast_df, excluded, sku_column="sku") if forecast_df is not None else None
         if forecast_df is None or forecast_df.empty:
             st.error(
                 f"{Icons.ERROR} {t(Keys.ERR_NO_FORECAST_FOUND).format(months=params['lookback_months'], date=params['analysis_start'].strftime('%Y-%m-%d'))}"
@@ -177,7 +187,8 @@ def _generate_accuracy_report(params: dict, context: dict) -> None:
             st.error(f"{Icons.ERROR} {t(Keys.ERR_ACCURACY_CALCULATION)}")
             return
 
-        sku_summary = context.get("summary")
+        sku_summary_raw = context.get("summary")
+        sku_summary: pd.DataFrame | None = sku_summary_raw if isinstance(sku_summary_raw, pd.DataFrame) else None
         type_summary = pd.DataFrame()
         if sku_summary is not None and not sku_summary.empty:
             type_summary = aggregate_accuracy_by_product_type(

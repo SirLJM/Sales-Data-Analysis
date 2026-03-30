@@ -71,6 +71,12 @@ class Keys:
     BTN_GENERATE_COMPARISON: Final[str] = "btn_generate_comparison"
     BTN_GENERATE_FORECASTS: Final[str] = "btn_generate_forecasts"
     BTN_SEARCH: Final[str] = "btn_search"
+    BTN_EXCLUDED_SKUS: Final[str] = "btn_excluded_skus"
+    EXCLUDED_SKUS_SEARCH: Final[str] = "excluded_skus_search"
+    EXCLUDED_SKUS_COUNT: Final[str] = "excluded_skus_count"
+    EXCLUDED_SKUS_CLEAR_ALL: Final[str] = "excluded_skus_clear_all"
+    EXCLUDED_SKUS_SAVE: Final[str] = "excluded_skus_save"
+    EXCLUDED_SKUS_TITLE: Final[str] = "excluded_skus_title"
 
     LEAD_TIME_MONTHS: Final[str] = "lead_time_months"
     LEAD_TIME_HELP: Final[str] = "lead_time_help"
@@ -1020,6 +1026,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_COMPARISON: "Generate Comparison",
         Keys.BTN_GENERATE_FORECASTS: "Generate Forecasts",
         Keys.BTN_SEARCH: "Search",
+        Keys.BTN_EXCLUDED_SKUS: "Excluded SKUs",
+        Keys.EXCLUDED_SKUS_SEARCH: "Search SKU or description...",
+        Keys.EXCLUDED_SKUS_COUNT: "{count} SKU(s) excluded",
+        Keys.EXCLUDED_SKUS_CLEAR_ALL: "Clear All",
+        Keys.EXCLUDED_SKUS_SAVE: "Save & Close",
+        Keys.EXCLUDED_SKUS_TITLE: "Manage Excluded SKUs",
 
         Keys.LEAD_TIME_MONTHS: "Lead time in months",
         Keys.LEAD_TIME_HELP: "Time between order placement and receipt (used in ROP and SS calculations)",
@@ -1961,6 +1973,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.BTN_GENERATE_COMPARISON: "Generuj Porównanie",
         Keys.BTN_GENERATE_FORECASTS: "Generuj Prognozy",
         Keys.BTN_SEARCH: "Szukaj",
+        Keys.BTN_EXCLUDED_SKUS: "Wykluczone SKU",
+        Keys.EXCLUDED_SKUS_SEARCH: "Szukaj SKU lub opis...",
+        Keys.EXCLUDED_SKUS_COUNT: "{count} SKU wykluczonych",
+        Keys.EXCLUDED_SKUS_CLEAR_ALL: "Wyczyść Wszystko",
+        Keys.EXCLUDED_SKUS_SAVE: "Zapisz i Zamknij",
+        Keys.EXCLUDED_SKUS_TITLE: "Zarządzaj Wykluczonymi SKU",
 
         Keys.LEAD_TIME_MONTHS: "Lead time w miesiącach",
         Keys.LEAD_TIME_HELP: "Czas między złożeniem zamówienia a jego otrzymaniem (używany w obliczeniach ROP i SS)",

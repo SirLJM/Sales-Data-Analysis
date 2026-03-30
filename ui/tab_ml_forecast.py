@@ -14,7 +14,8 @@ from sales_data.analysis.ml_model_selection import get_available_ml_models
 from sales_data.analysis.utils import find_column
 from ui.constants import Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import Keys, t
-from ui.shared.session_manager import get_data_source, get_settings
+from ui.shared.session_manager import get_data_source, get_excluded_skus, get_settings
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
 from utils.ml_model_repository import create_ml_model_repository
 
@@ -22,7 +23,7 @@ logger = get_logger("tab_ml_forecast")
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
-def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+def _load_monthly_aggregations_raw() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
         return data_source.get_monthly_aggregations()
@@ -30,13 +31,23 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
         return None
 
 
+def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+    df = _load_monthly_aggregations_raw()
+    return filter_excluded_skus(df, get_excluded_skus(), sku_column="sku") if df is not None else None
+
+
 @st.cache_data(ttl=Config.CACHE_TTL)
-def _load_sku_statistics_cached(entity_type: str) -> pd.DataFrame | None:
+def _load_sku_statistics_raw(entity_type: str) -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
         return data_source.get_sku_statistics(entity_type=entity_type)
     except (DataLoadError, KeyError, ValueError):
         return None
+
+
+def _load_sku_statistics_cached(entity_type: str) -> pd.DataFrame | None:
+    df = _load_sku_statistics_raw(entity_type)
+    return filter_excluded_skus(df, get_excluded_skus()) if df is not None else None
 
 
 @st.fragment
@@ -127,7 +138,7 @@ def _render_entity_settings() -> tuple[str, int]:
             key="ml_top_n",
         )
 
-    return entity_type, top_n
+    return str(entity_type), int(top_n)  # type: ignore[arg-type]
 
 
 def _render_forecast_settings() -> tuple[int, str]:
@@ -150,7 +161,7 @@ def _render_forecast_settings() -> tuple[int, str]:
             key="ml_cv_metric",
         )
 
-    return horizon, cv_metric
+    return int(horizon), str(cv_metric)  # type: ignore[arg-type]
 
 
 def _render_model_selection() -> tuple[list[str], bool]:
@@ -199,7 +210,7 @@ def _render_cv_settings() -> tuple[int, int]:
             key="ml_cv_test_size",
         )
 
-    return cv_splits, cv_test_size
+    return int(cv_splits), int(cv_test_size)  # type: ignore[arg-type]
 
 
 def _run_training(params: dict) -> None:
@@ -460,7 +471,7 @@ def _render_generate_tab() -> None:
                 st.form_submit_button("🔍", width='stretch')
 
     if st.button(t(Keys.ML_GENERATING_FORECASTS), type="primary", key="ml_gen_btn"):
-        _generate_forecasts_from_models(horizon, entity_filter)
+        _generate_forecasts_from_models(int(horizon), entity_filter)  # type: ignore[arg-type]
 
     if "ml_generated_forecasts" in st.session_state:
         st.markdown("---")
@@ -713,8 +724,8 @@ def _render_model_detail(models: list[dict], repo) -> None:
             st.write(f"**{t(Keys.ML_CV_METRIC)}:** {model_meta.get('cv_metric', 'N/A')}")
             st.write(f"**{t(Keys.ML_PRODUCT_TYPE)}:** {model_meta.get('product_type', 'N/A')}")
 
-        feature_importance = model_meta.get("feature_importance")
-        if feature_importance:
+        feature_importance: dict | None = model_meta.get("feature_importance")
+        if feature_importance is not None:
             st.markdown(f"#### {t(Keys.ML_FEATURE_IMPORTANCE)}")
             importance_df = pd.DataFrame([
                 {"Feature": k, "Importance": v}

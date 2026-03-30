@@ -15,6 +15,7 @@ def initialize_session_state() -> None:
     from sales_data.data_source_factory import DataSourceFactory
     from utils.pattern_optimizer import load_pattern_sets
     from utils.settings_manager import load_settings
+    from utils.sku_exclude_manager import load_excluded_skus
     from utils.task_manager import load_tasks
 
     defaults: dict[str, Any] = {
@@ -34,6 +35,7 @@ def initialize_session_state() -> None:
         SessionKeys.MONTHLY_YOY_PODGRUPA: None,
         SessionKeys.MONTHLY_YOY_KATEGORIA: None,
         SessionKeys.MONTHLY_YOY_METADATA: None,
+        SessionKeys.EXCLUDED_SKUS: load_excluded_skus,
         SessionKeys.TASKS: load_tasks,
         SessionKeys.TASK_FILTER_STATUS: "all",
         SessionKeys.TASK_FILTER_PRIORITY: "all",
@@ -67,6 +69,10 @@ def set_session_value(key: str, value: Any) -> None:
 
 def get_pattern_sets() -> list[PatternSet]:
     return st.session_state.get(SessionKeys.PATTERN_SETS, [])
+
+
+def get_excluded_skus() -> list[str]:
+    return st.session_state.get(SessionKeys.EXCLUDED_SKUS, [])
 
 
 def get_active_pattern_set() -> PatternSet | None:

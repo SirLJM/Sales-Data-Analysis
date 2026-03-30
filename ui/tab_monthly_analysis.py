@@ -16,7 +16,8 @@ from ui.shared.data_loaders import (
     load_model_metadata,
     load_outlet_models,
 )
-from ui.shared.session_manager import get_session_value, set_session_value
+from ui.shared.session_manager import get_excluded_skus, get_session_value, set_session_value
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_monthly_analysis")
@@ -63,7 +64,7 @@ def _render_generate_button(category_df: pd.DataFrame) -> None:
     if st.button(t(Keys.BTN_GENERATE_MONTHLY_YOY), type="primary"):
         with st.spinner(t(Keys.CALCULATING_YOY)):  # type: ignore[attr-defined]
             try:
-                sales_df = load_data()
+                sales_df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
                 if sales_df is None or sales_df.empty:
                     st.error(t(Keys.NO_SALES_DATA))
                     st.stop()
@@ -271,7 +272,7 @@ def _render_worst_models_12m_section() -> None:
 
     if st.button(t(Keys.BTN_GENERATE_WORST_MODELS), key="btn_worst_12m"):
         with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):  # type: ignore[attr-defined]
-            sales_df = load_data()
+            sales_df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
             model_metadata_df = load_model_metadata()
             outlet_models = load_outlet_models()
             new_models = _get_new_models(sales_df)
@@ -372,7 +373,7 @@ def _render_worst_rotating_section() -> None:
 
     if st.button(t(Keys.BTN_GENERATE_WORST_ROTATING), key="btn_worst_rotating"):
         with st.spinner(t(Keys.CALCULATING_WORST_MODELS)):  # type: ignore[attr-defined]
-            sales_df = load_data()
+            sales_df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
             outlet_models = load_outlet_models()
             new_models = _get_new_models(sales_df)
             exclude_models = outlet_models | new_models | {"SWWYS", "GIFT"}

@@ -9,7 +9,8 @@ from nlq import DuckDBExecutor, PostgresExecutor, QueryIntent, QueryParser
 from ui.constants import Config, Icons, MimeTypes
 from ui.i18n import Keys, t
 from ui.shared.data_loaders import load_data, load_forecast, load_stock
-from ui.shared.session_manager import get_data_source
+from ui.shared.session_manager import get_data_source, get_excluded_skus
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_nlq")
@@ -58,15 +59,18 @@ def _render_content(context: dict) -> None:
 
 
 def _load_data(context: dict) -> tuple:
-    sales_df = load_data()
+    excluded = get_excluded_skus()
+    sales_df = filter_excluded_skus(load_data(), excluded, sku_column="sku")
 
     stock_df = None
     if context.get("stock_loaded"):
-        stock_df, _ = load_stock()
+        raw_stock, _ = load_stock()
+        stock_df = filter_excluded_skus(raw_stock, excluded) if raw_stock is not None else None
 
     forecast_df = None
     if context.get("forecast_loaded"):
-        forecast_df, _, _ = load_forecast()
+        raw_forecast, _, _ = load_forecast()
+        forecast_df = filter_excluded_skus(raw_forecast, excluded, sku_column="sku") if raw_forecast is not None else None
 
     sku_summary_df = context.get("sku_summary_df")
 

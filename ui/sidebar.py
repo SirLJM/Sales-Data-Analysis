@@ -4,7 +4,8 @@ import streamlit as st
 
 from ui.constants import SessionKeys
 from ui.i18n import t, Keys, set_language, get_language
-from ui.shared.session_manager import get_settings, set_session_value
+from ui.shared.excluded_skus_dialog import show_excluded_skus_dialog
+from ui.shared.session_manager import get_excluded_skus, get_settings, set_session_value
 from utils.logging_config import get_logger
 from utils.settings_manager import reset_settings, save_settings
 
@@ -18,6 +19,7 @@ def render_sidebar() -> dict:
     st.sidebar.header(t(Keys.SIDEBAR_PARAMETERS))
 
     _render_save_reset_buttons(settings)
+    _render_excluded_skus_button()
     _render_lead_time_section(settings)
     params = _render_service_levels_section(settings)
     _render_optimizer_section(settings)
@@ -71,6 +73,14 @@ def _render_save_reset_buttons(settings: dict) -> None:
             logger.info("Reset settings button clicked")
             set_session_value(SessionKeys.SETTINGS, reset_settings())
             st.rerun()
+
+
+def _render_excluded_skus_button() -> None:
+    excluded = get_excluded_skus()
+    count = len(excluded)
+    label = t(Keys.EXCLUDED_SKUS_COUNT).format(count=count) if count > 0 else t(Keys.BTN_EXCLUDED_SKUS)
+    if st.sidebar.button(label, key="btn_excluded_skus", use_container_width=True):
+        show_excluded_skus_dialog()
 
 
 def _render_lead_time_section(settings: dict) -> None:
@@ -176,7 +186,7 @@ def _render_basic_row(settings: dict) -> float:
         settings["z_scores"]["basic"] = z_score_basic
     with basic_cols[3]:
         st.write("-")
-    return service_basic
+    return float(service_basic)  # type: ignore[arg-type]
 
 
 def _render_regular_row(settings: dict) -> float:
@@ -198,7 +208,7 @@ def _render_regular_row(settings: dict) -> float:
         settings["z_scores"]["regular"] = z_score_regular
     with regular_cols[3]:
         st.write("-")
-    return z_score_regular
+    return float(z_score_regular)  # type: ignore[arg-type]
 
 
 def _render_seasonal_row(settings: dict, service_basic: float) -> tuple[float, float, float]:
@@ -243,7 +253,7 @@ def _render_seasonal_row(settings: dict, service_basic: float) -> tuple[float, f
             placeholder="OUT of season",
         )
         settings["z_scores"]["seasonal_out"] = z_score_seasonal_2
-    return service_seasonal, z_score_seasonal_1, z_score_seasonal_2
+    return float(service_seasonal), float(z_score_seasonal_1), float(z_score_seasonal_2)  # type: ignore[arg-type]
 
 
 def _render_new_row(settings: dict) -> tuple[int, float]:
@@ -275,7 +285,7 @@ def _render_new_row(settings: dict) -> tuple[int, float]:
         settings["z_scores"]["new"] = z_score_new
     with new_cols[3]:
         st.write("-")
-    return service_new, z_score_new
+    return int(service_new), float(z_score_new)  # type: ignore[arg-type]
 
 
 def _render_optimizer_section(settings: dict) -> None:

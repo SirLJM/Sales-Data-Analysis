@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import pandas as pd
 
 CHILDREN_PREFIXES = ("ch", "ni", "dz")
@@ -41,6 +43,23 @@ def add_sku_components(df: pd.DataFrame, sku_col: str = "SKU") -> pd.DataFrame:
     df["COLOR"] = extract_color(pd.Series(df[sku_col]))
     df["SIZE"] = extract_size(pd.Series(df[sku_col]))
     return df
+
+
+def filter_excluded_skus(
+    df: pd.DataFrame,
+    excluded_skus: Collection[str],
+    sku_column: str = "SKU",
+) -> pd.DataFrame:
+    if not excluded_skus or df.empty:
+        return df
+    if sku_column in df.columns:
+        col = sku_column
+    elif "sku" in df.columns:
+        col = "sku"
+    else:
+        return df
+    excluded_list = list(excluded_skus)
+    return pd.DataFrame(df[~df[col].isin(excluded_list)])
 
 
 def get_size_sort_key(size_alias: str, size_alias_to_code: dict[str, str]) -> int:

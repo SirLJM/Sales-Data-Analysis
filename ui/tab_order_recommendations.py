@@ -7,7 +7,8 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_color_aliases, load_model_metadata, merge_stock_into_summary
-from ui.shared.session_manager import get_session_value, get_settings, set_session_value
+from ui.shared.session_manager import get_data_source, get_excluded_skus, get_session_value, get_settings, set_session_value
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_order_recommendations")
@@ -410,11 +411,12 @@ def _build_sku_summary(analyzer: SalesAnalyzer, seasonal_data: pd.DataFrame, sto
     return merge_stock_into_summary(sku_summary, stock_df, ColumnNames.STOCK)
 
 
-def _period_to_timestamp(p) -> pd.Timestamp:
+def _period_to_timestamp(p: object) -> pd.Timestamp:
+    from typing import cast
     if hasattr(p, "to_timestamp"):
         result = p.to_timestamp()
-        return pd.Timestamp(result) if not pd.isna(result) else pd.Timestamp.now()
-    return pd.Timestamp(str(p))
+        return cast(pd.Timestamp, pd.Timestamp(result)) if not pd.isna(result) else pd.Timestamp.now()
+    return cast(pd.Timestamp, pd.Timestamp(str(p)))
 
 
 def _process_single_forecast(
@@ -446,7 +448,6 @@ def _process_single_forecast(
 
 def _load_ml_forecast(settings: dict) -> pd.DataFrame | None:
     from utils.ml_model_repository import create_ml_model_repository
-    from ui.shared.session_manager import get_data_source
 
     try:
         repo = create_ml_model_repository()
@@ -457,6 +458,7 @@ def _load_ml_forecast(settings: dict) -> pd.DataFrame | None:
 
         data_source = get_data_source()
         monthly_agg = data_source.get_monthly_aggregations()
+        monthly_agg = filter_excluded_skus(monthly_agg, get_excluded_skus(), sku_column="sku") if monthly_agg is not None else None
 
         if monthly_agg is None or monthly_agg.empty:
             return None
@@ -646,7 +648,8 @@ def _render_order_selection_table(
         height=min(Config.DATAFRAME_HEIGHT, len(order_list) * 35 + 38),
     )
 
-    _process_selections(edited_df)
+    if isinstance(edited_df, pd.DataFrame):
+        _process_selections(edited_df)
 
 
 def _parse_size_quantities(sizes_str: str) -> dict[str, int]:

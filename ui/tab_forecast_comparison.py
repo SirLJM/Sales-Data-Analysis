@@ -18,7 +18,8 @@ from sales_data.analysis.internal_forecast import (
 from sales_data.analysis.utils import find_column
 from ui.constants import Icons, MimeTypes
 from ui.i18n import Keys, t
-from ui.shared.session_manager import get_data_source, get_settings
+from ui.shared.session_manager import get_data_source, get_excluded_skus, get_settings
+from ui.shared.sku_utils import filter_excluded_skus
 from utils.internal_forecast_repository import create_internal_forecast_repository
 from utils.logging_config import get_logger
 
@@ -48,12 +49,17 @@ SESSION_KEY_INTERNAL_FORECASTS = "internal_forecasts_df"
 
 
 @st.cache_data(ttl=3600)
-def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+def _load_monthly_aggregations_raw() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
         return data_source.get_monthly_aggregations()
     except (DataLoadError, KeyError, ValueError):
         return None
+
+
+def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
+    df = _load_monthly_aggregations_raw()
+    return filter_excluded_skus(df, get_excluded_skus(), sku_column="sku") if df is not None else None
 
 
 @st.cache_data(ttl=3600)
@@ -241,7 +247,9 @@ def _filter_monthly_agg_by_date(monthly_agg: pd.DataFrame, cutoff_date) -> pd.Da
     if month_col is None:
         return df
 
-    cutoff_period = pd.Period(pd.Timestamp(cutoff_date), freq="M")
+    from typing import cast
+    cutoff_ts = pd.Timestamp(cutoff_date)  # type: ignore[arg-type]
+    cutoff_period = cast(pd.Period, pd.Period(year=cutoff_ts.year, month=cutoff_ts.month, freq="M"))
     df["_period"] = pd.PeriodIndex(df[month_col].astype(str), freq="M")
     filtered = df[df["_period"] <= cutoff_period].drop(columns=["_period"])
 
@@ -400,6 +408,7 @@ def _get_entity_metadata(entity_type: str) -> pd.DataFrame:
     try:
         data_source = get_data_source()
         sku_stats = data_source.get_sku_statistics(entity_type=entity_type)
+        sku_stats = filter_excluded_skus(sku_stats, get_excluded_skus())
         return sku_stats
     except (DataLoadError, KeyError, ValueError):
         return pd.DataFrame()
@@ -440,8 +449,9 @@ def _display_results() -> None:
 def _display_all_forecasts_table(data: dict) -> None:
     st.subheader(t(Keys.FC_ALL_FORECAST_ITEMS))
 
-    comparison_df = data.get("comparison_df")
-    if comparison_df is None or comparison_df.empty:
+    comparison_raw = data.get("comparison_df")
+    comparison_df: pd.DataFrame = comparison_raw if isinstance(comparison_raw, pd.DataFrame) else pd.DataFrame()
+    if comparison_df.empty:
         st.info(t(Keys.FC_NO_FORECAST_DATA))
         return
 
@@ -471,7 +481,7 @@ def _display_all_forecasts_table(data: dict) -> None:
                 key="fc_all_order",
             )
 
-        df = df.sort_values(sort_by, ascending=(sort_order == t(Keys.FC_ASCENDING)))
+        df = df.sort_values(str(sort_by), ascending=(sort_order == t(Keys.FC_ASCENDING)))
 
         display_df = df[[
             "entity_id", "year_month", "internal_forecast", "external_forecast", "actual", "method"
@@ -642,7 +652,8 @@ def _display_detailed_table(metrics_df: pd.DataFrame) -> None:
 
 def _display_entity_chart(data: dict) -> None:
     with st.expander(t(Keys.FC_ENTITY_DETAIL_CHART), expanded=False):
-        comparison_df = data["comparison_df"]
+        comparison_raw = data["comparison_df"]
+        comparison_df: pd.DataFrame = comparison_raw if isinstance(comparison_raw, pd.DataFrame) else pd.DataFrame()
 
         if comparison_df.empty:
             st.info(t(Keys.FC_NO_DATA_FOR_CHART))
@@ -848,10 +859,11 @@ def _display_batch_details(batch: dict) -> None:
         st.caption(t(Keys.FC_NOTES).format(notes=batch['notes']))
 
 
-def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
+def _load_sales_for_period(start_period: str, end_date: object) -> pd.DataFrame | None:  # noqa: ANN001
     try:
         data_source = get_data_source()
-        sales_df = data_source.load_sales_data()
+        raw = data_source.load_sales_data()
+        sales_df = pd.DataFrame(raw) if raw is not None else None
 
         if sales_df is None or sales_df.empty:
             return None
@@ -864,7 +876,7 @@ def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
         df[date_col] = pd.to_datetime(df[date_col])
 
         start_date = pd.to_datetime(start_period).to_period("M").start_time
-        end_dt = pd.to_datetime(end_date)
+        end_dt = pd.to_datetime(str(end_date))
 
         filtered = df[(df[date_col] >= start_date) & (df[date_col] <= end_dt)]
         return pd.DataFrame(filtered)
@@ -874,11 +886,12 @@ def _load_sales_for_period(start_period: str, end_date) -> pd.DataFrame | None:
         return None
 
 
-def _load_historical_forecast(batch_id: str, batch: dict, as_of_date) -> None:
+def _load_historical_forecast(batch_id: str, batch: dict, as_of_date: object) -> None:  # noqa: ANN001
     repo = create_internal_forecast_repository()
-    forecasts_df = repo.get_forecast_batch(batch_id)
+    raw_batch = repo.get_forecast_batch(batch_id)
+    forecasts_df: pd.DataFrame = pd.DataFrame(raw_batch) if raw_batch is not None else pd.DataFrame()
 
-    if forecasts_df is None or forecasts_df.empty:
+    if forecasts_df.empty:
         st.error(t(Keys.FC_FAILED_LOAD))
         return
 
