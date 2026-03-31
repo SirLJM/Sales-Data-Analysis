@@ -19,7 +19,8 @@ from sales_data.analysis.utils import find_column
 from ui.constants import Icons, MimeTypes
 from ui.i18n import Keys, t
 from ui.shared.session_manager import get_data_source, get_excluded_skus, get_settings
-from ui.shared.sku_utils import filter_excluded_skus
+from ui.shared.data_loaders import load_active_skus
+from ui.shared.sku_utils import filter_by_active_skus, filter_excluded_skus
 from utils.internal_forecast_repository import create_internal_forecast_repository
 from utils.logging_config import get_logger
 
@@ -75,7 +76,8 @@ def _load_external_forecast_cached() -> pd.DataFrame | None:
 def _load_sales_data_cached() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
-        return data_source.load_sales_data()
+        df = data_source.load_sales_data()
+        return filter_by_active_skus(df, load_active_skus())
     except (DataLoadError, KeyError, ValueError):
         return None
 
@@ -867,6 +869,8 @@ def _load_sales_for_period(start_period: str, end_date: object) -> pd.DataFrame 
 
         if sales_df is None or sales_df.empty:
             return None
+
+        sales_df = filter_by_active_skus(sales_df, load_active_skus())
 
         date_col = find_column(sales_df, ["data", "sale_date", "date"])
         if date_col is None:

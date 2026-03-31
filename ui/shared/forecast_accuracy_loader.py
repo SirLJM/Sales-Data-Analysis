@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import cast
 
 import pandas as pd
 import streamlit as st
 
 from ui.constants import Config
+from ui.shared.data_loaders import load_active_skus
 from ui.shared.session_manager import get_data_source
+from ui.shared.sku_utils import filter_by_active_skus
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
@@ -15,7 +18,9 @@ def load_sales_for_accuracy(
 ) -> pd.DataFrame | None:
     data_source = get_data_source()
     sales_df = data_source.load_sales_data(start_date=start_date, end_date=end_date)
-    return sales_df if sales_df is not None and not sales_df.empty else None
+    if sales_df is None or sales_df.empty:
+        return None
+    return filter_by_active_skus(sales_df, load_active_skus())
 
 
 def _extract_generated_date(forecast_df: pd.DataFrame) -> datetime | None:
@@ -86,7 +91,7 @@ def get_date_range_from_sales() -> tuple[datetime | None, datetime | None]:
 
     sales_df = sales_df.copy()
     sales_df["data"] = pd.to_datetime(sales_df["data"])
-    min_date = sales_df["data"].min().to_pydatetime()
-    max_date = sales_df["data"].max().to_pydatetime()
+    min_date = cast(datetime, pd.Timestamp(sales_df["data"].min()).to_pydatetime())
+    max_date = cast(datetime, pd.Timestamp(sales_df["data"].max()).to_pydatetime())
 
     return min_date, max_date

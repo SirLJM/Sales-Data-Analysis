@@ -62,6 +62,19 @@ def filter_excluded_skus(
     return pd.DataFrame(df[~df[col].isin(excluded_list)])
 
 
+def filter_by_active_skus(
+    df: pd.DataFrame,
+    active_skus: set[str] | None,
+    sku_column: str = "sku",
+) -> pd.DataFrame:
+    if active_skus is None or df.empty:
+        return df
+    col = sku_column if sku_column in df.columns else "sku"
+    if col not in df.columns:
+        return df
+    return pd.DataFrame(df[df[col].isin(active_skus)])
+
+
 def get_size_sort_key(size_alias: str, size_alias_to_code: dict[str, str]) -> int:
     size_code = size_alias_to_code.get(size_alias, size_alias)
     try:

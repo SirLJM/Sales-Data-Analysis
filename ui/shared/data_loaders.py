@@ -66,11 +66,29 @@ def load_all_data_with_progress(
 
 
 @st.cache_data(ttl=Config.CACHE_TTL)
+def load_active_skus() -> set[str] | None:
+    stock_df, _ = load_stock()
+    if stock_df is None or stock_df.empty:
+        return None
+    sku_col = "sku" if "sku" in stock_df.columns else "SKU"
+    if sku_col not in stock_df.columns:
+        return None
+    return set(stock_df[sku_col].unique())
+
+
+@st.cache_data(ttl=Config.CACHE_TTL)
 def load_data() -> pd.DataFrame:
     logger.info("Loading sales data")
     data_source = get_data_source()
     df = data_source.load_sales_data()
     logger.info("Sales data loaded: %d rows", len(df) if df is not None else 0)
+    if df is None or df.empty:
+        return pd.DataFrame()
+    active_skus = load_active_skus()
+    if active_skus is not None:
+        before = len(df)
+        df = pd.DataFrame(df[df["sku"].isin(active_skus)])
+        logger.info("Filtered to active SKUs: %d -> %d rows", before, len(df))
     return df
 
 
