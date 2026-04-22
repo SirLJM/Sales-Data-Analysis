@@ -71,7 +71,8 @@ def aggregate_yearly_sales(data: pd.DataFrame, _by_model: bool = False, include_
 def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = False) -> pd.DataFrame:
     df = forecast_df.copy()
     df["data"] = pd.to_datetime(df["data"])
-    df = df[df["data"] >= datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)]
+    current_month_start = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    df = df[df["data"] >= current_month_start]
 
     if df.empty:
         id_col = "MODEL_COLOR" if include_color else "MODEL"
