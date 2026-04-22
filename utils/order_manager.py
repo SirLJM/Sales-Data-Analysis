@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
+from exceptions import OrderError
 from utils.logging_config import get_logger
 from utils.order_repository_factory import create_order_repository
 
@@ -12,6 +13,8 @@ def save_order(order_data: dict) -> bool:
     try:
         repository = create_order_repository()
         return repository.save(order_data)
+    except OrderError:
+        raise
     except Exception as e:
         logger.error("Failed to save order: %s", e)
         return False
@@ -21,6 +24,8 @@ def get_active_orders() -> list:
     try:
         repository = create_order_repository()
         return repository.get_active()
+    except OrderError:
+        raise
     except Exception as e:
         logger.error("Failed to get active orders: %s", e)
         return []
@@ -30,6 +35,8 @@ def get_archived_orders() -> list:
     try:
         repository = create_order_repository()
         return repository.get_archived()
+    except OrderError:
+        raise
     except Exception as e:
         logger.error("Failed to get archived orders: %s", e)
         return []
@@ -39,6 +46,8 @@ def archive_order(order_id: str) -> bool:
     try:
         repository = create_order_repository()
         return repository.archive(order_id)
+    except OrderError:
+        raise
     except Exception as e:
         logger.error("Failed to archive order %s: %s", order_id, e)
         return False
@@ -46,12 +55,14 @@ def archive_order(order_id: str) -> bool:
 
 def add_manual_order(order_id: str, order_data: dict) -> bool:
     order_date = order_data.get("order_date")
-    if order_date and not isinstance(order_date, datetime):
+    if isinstance(order_date, date) and not isinstance(order_date, datetime):
         order_data["order_date"] = datetime.combine(order_date, datetime.min.time())
 
     try:
         repository = create_order_repository()
         return repository.add_manual(order_id, order_data)
+    except OrderError:
+        raise
     except Exception as e:
         logger.error("Failed to add manual order %s: %s", order_id, e)
         return False

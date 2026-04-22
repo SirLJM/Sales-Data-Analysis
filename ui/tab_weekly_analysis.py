@@ -30,7 +30,8 @@ def _render_content(context: dict) -> None:
     st.title(t(Keys.TITLE_WEEKLY_ANALYSIS))
 
     if st.button(t(Keys.BTN_REFRESH), type="primary"):
-        st.cache_data.clear()
+        load_data.clear()  # type: ignore[union-attr]
+        load_stock.clear()  # type: ignore[union-attr]
         st.rerun()
 
     excluded = get_excluded_skus()

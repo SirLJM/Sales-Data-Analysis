@@ -33,7 +33,7 @@ def determine_seasonal_months(data: pd.DataFrame) -> pd.DataFrame:
     df["month"] = df["data"].dt.month  # type: ignore
     df["year"] = df["data"].dt.year  # type: ignore
 
-    monthly_sales = df.groupby(["sku", "year", "month"], as_index=False, observed=True)["ilosc"].sum()
+    monthly_sales = df.groupby(["sku", "year", "month"], as_index=False, observed=True).agg(ilosc=("ilosc", "sum"))
 
     agg_result: Any = monthly_sales.groupby(["sku", "month"], as_index=False, observed=True).agg(avg_sales=("ilosc", "mean"))
     avg_monthly_sales: pd.DataFrame = agg_result.rename(columns={"sku": "SKU"})

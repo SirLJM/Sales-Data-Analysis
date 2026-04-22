@@ -155,7 +155,7 @@ class DataValidator:
             excel_file = pd.ExcelFile(file_path)
             for sheet_name in excel_file.sheet_names:
                 try:
-                    df = pd.read_excel(file_path, sheet_name=sheet_name, nrows=5)
+                    df = pd.read_excel(excel_file, sheet_name=sheet_name, nrows=5)
                     if not required_columns.issubset(set(df.columns)):
                         continue
                     if required_column is None or required_column in df.columns:
@@ -267,7 +267,8 @@ class DataValidator:
         except PermissionError:
             raise PermissionError(f"Permission denied: {file_path}")
         except Exception as e:
-            raise RuntimeError(f"An error occurred: {e}")
+            from exceptions import DataLoadError
+            raise DataLoadError(f"Error reading {file_path}: {e}") from e
 
     @staticmethod
     def get_data_summary(df: pd.DataFrame, data_type: str = "sales") -> dict[str, Any]:

@@ -43,7 +43,7 @@ def _render_content(context: dict) -> None:
     logger.info("Sales data loaded: %d rows, group_by_model=%s", len(df), group_by_model)
     analyzer = SalesAnalyzer(df)
 
-    summary, id_column = _build_summary(analyzer, group_by_model, settings)
+    summary, id_column = _build_summary(group_by_model, settings)
     summary = _merge_model_metadata(summary, id_column)
     seasonal_data = analyzer.determine_seasonal_months()
 
@@ -82,7 +82,23 @@ def _render_content(context: dict) -> None:
     context["forecast_date"] = forecast_date
 
 
-def _build_summary(analyzer: SalesAnalyzer, group_by_model: bool, settings: dict) -> tuple[pd.DataFrame, str]:
+@st.cache_data(ttl=Config.CACHE_TTL)
+def _build_summary_cached(
+    _sales_data_hash: str,
+    group_by_model: bool,
+    cv_basic: float,
+    cv_seasonal: float,
+    z_basic: float,
+    z_regular: float,
+    z_seasonal_in: float,
+    z_seasonal_out: float,
+    z_new: float,
+    lead_time: float,
+    excluded_skus: tuple[str, ...],
+) -> tuple[pd.DataFrame, str]:
+    df = filter_excluded_skus(load_data(), set(excluded_skus), sku_column="sku")
+    analyzer = SalesAnalyzer(df)
+
     if group_by_model:
         summary = analyzer.aggregate_by_model()
         id_column = "MODEL"
@@ -90,22 +106,14 @@ def _build_summary(analyzer: SalesAnalyzer, group_by_model: bool, settings: dict
         summary = analyzer.aggregate_by_sku()
         id_column = "SKU"
 
-    summary = analyzer.classify_sku_type(
-        summary,
-        cv_basic=settings["cv_thresholds"]["basic"],
-        cv_seasonal=settings["cv_thresholds"]["seasonal"],
-    )
+    summary = analyzer.classify_sku_type(summary, cv_basic=cv_basic, cv_seasonal=cv_seasonal)
 
     seasonal_data = analyzer.determine_seasonal_months()
     summary = analyzer.calculate_safety_stock_and_rop(
-        summary,
-        seasonal_data,
-        z_basic=settings["z_scores"]["basic"],
-        z_regular=settings["z_scores"]["regular"],
-        z_seasonal_in=settings["z_scores"]["seasonal_in"],
-        z_seasonal_out=settings["z_scores"]["seasonal_out"],
-        z_new=settings["z_scores"]["new"],
-        lead_time_months=settings["lead_time"],
+        summary, seasonal_data,
+        z_basic=z_basic, z_regular=z_regular,
+        z_seasonal_in=z_seasonal_in, z_seasonal_out=z_seasonal_out,
+        z_new=z_new, lead_time_months=lead_time,
     )
 
     last_two_years_avg = analyzer.calculate_last_two_years_avg_sales(by_model=group_by_model)
@@ -113,6 +121,29 @@ def _build_summary(analyzer: SalesAnalyzer, group_by_model: bool, settings: dict
     summary["LAST_2_YEARS_AVG"] = summary["LAST_2_YEARS_AVG"].fillna(0)
 
     return summary, id_column
+
+
+def _build_summary(group_by_model: bool, settings: dict) -> tuple[pd.DataFrame, str]:
+    import hashlib
+    sales_data = load_data()
+    hash_values = pd.util.hash_pandas_object(sales_data).to_numpy()
+    data_hash = hashlib.md5(hash_values.tobytes()).hexdigest()
+
+    excluded = tuple(sorted(get_excluded_skus()))
+
+    return _build_summary_cached(
+        _sales_data_hash=data_hash,
+        group_by_model=group_by_model,
+        cv_basic=settings["cv_thresholds"]["basic"],
+        cv_seasonal=settings["cv_thresholds"]["seasonal"],
+        z_basic=settings["z_scores"]["basic"],
+        z_regular=settings["z_scores"]["regular"],
+        z_seasonal_in=settings["z_scores"]["seasonal_in"],
+        z_seasonal_out=settings["z_scores"]["seasonal_out"],
+        z_new=settings["z_scores"]["new"],
+        lead_time=settings["lead_time"],
+        excluded_skus=excluded,
+    )
 
 
 def _merge_model_metadata(summary: pd.DataFrame, id_column: str) -> pd.DataFrame:

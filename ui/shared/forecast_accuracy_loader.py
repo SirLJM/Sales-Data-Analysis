@@ -65,6 +65,7 @@ def load_stock_history_for_accuracy(
     return stock_df if stock_df is not None and not stock_df.empty else None
 
 
+@st.cache_data(ttl=Config.CACHE_TTL)
 def get_available_forecast_dates() -> list[datetime]:
     data_source = get_data_source()
 

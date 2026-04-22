@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -10,29 +9,17 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-_migration_logger: logging.Logger | None = None
+from utils.logging_config import get_logger
 
-
-def get_migration_logger() -> logging.Logger:
-    global _migration_logger
-    if _migration_logger is None:
-        _migration_logger = logging.getLogger("migration")
-        if not _migration_logger.handlers:
-            handler = logging.StreamHandler()
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            _migration_logger.addHandler(handler)
-            _migration_logger.setLevel(logging.INFO)
-    return _migration_logger
+logger = get_logger(__name__)
 
 
 def log_info(message: str) -> None:
-    print(message)
-    get_migration_logger().info(message)
+    logger.info(message)
 
 
 def log_error(message: str) -> None:
-    print(message)
-    get_migration_logger().error(message)
+    logger.error(message)
 
 
 def log_header(title: str) -> None:
@@ -58,7 +45,7 @@ def is_file_imported(engine: Engine, file_hash: str, file_type: str) -> bool:
     )
 
     with engine.connect() as conn:
-        result = conn.execute(query, {"file_hash": file_hash, "file_type": file_type})
+        result = conn.execute(query, {"file_hash": file_hash, "file_type": file_type})  # type: ignore[call-overload]
         row = result.fetchone()
         if row is None:
             return False
@@ -66,8 +53,8 @@ def is_file_imported(engine: Engine, file_hash: str, file_type: str) -> bool:
 
 
 def insert_sales_batch(engine: Engine, batch_data: list[dict[str, Any]]) -> int:
-    with engine.connect() as conn:
-        conn.execute(
+    with engine.begin() as conn:
+        conn.execute(  # type: ignore[call-overload]
             text(
                 """
             INSERT INTO raw_sales_transactions (
@@ -87,7 +74,6 @@ def insert_sales_batch(engine: Engine, batch_data: list[dict[str, Any]]) -> int:
             ),
             batch_data,
         )
-        conn.commit()
     return len(batch_data)
 
 
@@ -176,8 +162,8 @@ def log_file_import(
     import_trigger: str = "manual",
     import_status: str = "completed",
 ) -> None:
-    with engine.connect() as conn:
-        conn.execute(
+    with engine.begin() as conn:
+        conn.execute(  # type: ignore[call-overload]
             text(
                 """
                 INSERT INTO file_imports (file_path, file_name, file_type, file_hash, file_size,
@@ -206,7 +192,6 @@ def log_file_import(
                 "import_triggered_by": import_trigger,
             },
         )
-        conn.commit()
 
 
 def process_sales_file_in_batches(

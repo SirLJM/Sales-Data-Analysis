@@ -7,7 +7,7 @@ import streamlit as st
 
 from sales_data import SalesAnalyzer
 from sales_data.analysis import apply_priority_scoring
-from ui.constants import ColumnNames, Icons, MimeTypes, SessionKeys
+from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import Keys, t
 from ui.shared.data_loaders import (
     load_color_aliases,
@@ -181,7 +181,7 @@ def _merge_forecast_data(
     return _add_forecast_data(sku_summary, forecast_df, lead_time)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=Config.CACHE_TTL)
 def _load_cached_data(data_type: str) -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -728,7 +728,7 @@ def _find_urgent_colors_for_model(model: str) -> list[str]:
     return SalesAnalyzer.find_urgent_colors(model_color_summary, model)
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=Config.CACHE_TTL)
 def _load_monthly_aggregations_raw() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -1254,7 +1254,7 @@ def _save_order_to_database(model: str, order_table: pd.DataFrame, pattern_resul
         st.error(f"{Icons.ERROR} {t(Keys.ERR_SAVING_ORDER).format(error=str(e))}")
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=Config.CACHE_TTL, show_spinner=False)
 def _fetch_product_image_data(model: str) -> tuple[str | None, str | None]:
     from utils.product_image_fetcher import get_product_image_and_url
 

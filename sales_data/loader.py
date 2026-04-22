@@ -390,7 +390,8 @@ class SalesDataLoader:
     def load_stock_file(self, file_path: Path) -> pd.DataFrame:
         logger.info("Loading stock file: %s", file_path.name)
 
-        df = self._read_file(file_path, self.validator.find_stock_sheet)
+        stock_cols = list(self.validator.STOCK_COLUMNS)
+        df = self._read_file(file_path, self.validator.find_stock_sheet, usecols=stock_cols)
         df = self._validate_and_filter_stock_data(df)
         df = optimize_dtypes(df)
 
@@ -522,7 +523,7 @@ class SalesDataLoader:
         except PermissionError:
             logger.error(FILE_LOCKED_MSG)
             return None
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.warning("Could not load model metadata: %s", e)
             return None
 
@@ -619,7 +620,7 @@ class SalesDataLoader:
         except PermissionError:
             logger.error(FILE_LOCKED_MSG)
             return None
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.warning("Could not load BOM data: %s", e)
             return None
 
@@ -733,15 +734,12 @@ class SalesDataLoader:
         )
 
     def load_category_data(self) -> pd.DataFrame:
-        import openpyxl
-
         file_path = self.find_category_file()
 
         try:
-            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
             sheet_name = self.validator.find_category_sheet(Path(file_path))
-            wb.close()
-
+            if sheet_name is None:
+                raise ValueError("No category sheet found")
             df = pd.read_excel(file_path, sheet_name=sheet_name)
             df = pd.DataFrame(df[list(self.validator.CATEGORY_COLUMNS)])  # type: ignore[index]
             df = pd.DataFrame(df.dropna(subset=["Model"]))

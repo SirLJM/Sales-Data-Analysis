@@ -3,6 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def optimize_dtypes(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     initial_mem = df.memory_usage(deep=True).sum()
@@ -22,7 +26,7 @@ def optimize_dtypes(df: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
     if verbose:
         final_mem = df.memory_usage(deep=True).sum()
         reduction = (1 - final_mem / initial_mem) * 100
-        print(f"Memory reduced: {initial_mem / 1e6:.1f}MB -> {final_mem / 1e6:.1f}MB ({reduction:.1f}% reduction)")
+        logger.debug("Memory reduced: %.1fMB -> %.1fMB (%.1f%% reduction)", initial_mem / 1e6, final_mem / 1e6, reduction)
 
     return df
 

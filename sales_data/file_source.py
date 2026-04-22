@@ -32,14 +32,14 @@ class FileSource(DataSource):
         if self._sales_data is None:
             return pd.DataFrame()
 
-        df = self._sales_data.copy()
+        df = self._sales_data
 
         if start_date is not None:
-            df = pd.DataFrame(df[df["data"] >= start_date])
+            df = df[df["data"] >= start_date]
         if end_date is not None:
-            df = pd.DataFrame(df[df["data"] <= end_date])
+            df = df[df["data"] <= end_date]
 
-        return df
+        return pd.DataFrame(df).copy()
 
     def load_stock_data(self, snapshot_date: datetime | None = None) -> pd.DataFrame:
         stock_file = self.loader.get_latest_stock_file()

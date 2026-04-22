@@ -21,10 +21,11 @@ def calculate_size_priorities(
     if "SKU" not in df.columns:
         return {}
 
-    df["size"] = df["SKU"].astype(str).str[7:9]
+    sku_str_top = df["SKU"].astype(str)
+    df["size"] = sku_str_top.str[7:9]
 
     if model:
-        df["model"] = df["SKU"].astype(str).str[:5]
+        df["model"] = sku_str_top.str[:5]
         df = df[df["model"] == model]
 
     size_col = "FORECAST_QTY" if "FORECAST_QTY" in df.columns else "TOTAL_QUANTITY"
@@ -45,7 +46,7 @@ def calculate_size_priorities(
         return {}
 
     normalized = size_sales / size_sales.max()
-    result = normalized.to_dict()
+    result: dict[str, float] = normalized.to_dict()  # type: ignore[assignment]
     return result
 
 
@@ -65,9 +66,10 @@ def calculate_size_sales_history(
     if sku_col is None:
         return {}
 
-    df["_model"] = df[sku_col].astype(str).str[:5]
-    df["_color"] = df[sku_col].astype(str).str[5:7]
-    df["_size"] = df[sku_col].astype(str).str[7:9]
+    sku_str = df[sku_col].astype(str)
+    df["_model"] = sku_str.str[:5]
+    df["_color"] = sku_str.str[5:7]
+    df["_size"] = sku_str.str[7:9]
 
     filtered = pd.DataFrame(df[(df["_model"] == model) & (df["_color"] == color)])
     if filtered.empty:
@@ -112,8 +114,9 @@ def get_size_sales_by_month_for_model(
     if sku_col is None:
         return {}
 
-    df["_model"] = df[sku_col].astype(str).str[:5]
-    df["_size"] = df[sku_col].astype(str).str[7:9]
+    sku_str = df[sku_col].astype(str)
+    df["_model"] = sku_str.str[:5]
+    df["_size"] = sku_str.str[7:9]
 
     filtered = pd.DataFrame(df[df["_model"] == model])
     if filtered.empty:

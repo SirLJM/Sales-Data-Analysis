@@ -14,10 +14,10 @@ def _aggregate_sales_summary(df: pd.DataFrame, group_col: str, id_col: str) -> p
     df = df.copy()
     df["year_month"] = df["data"].dt.to_period("M")  # type: ignore[union-attr]
 
-    first_sale = df.groupby(group_col, observed=True)["data"].min().reset_index()
+    first_sale = df.groupby(group_col, as_index=False, observed=True).agg(first_sale=("data", "min"))
     first_sale.columns = pd.Index([id_col, "first_sale"])
 
-    monthly_sales = df.groupby([group_col, "year_month"], as_index=False, observed=True)["ilosc"].sum()
+    monthly_sales = df.groupby([group_col, "year_month"], as_index=False, observed=True).agg(ilosc=("ilosc", "sum"))
 
     summary = pd.DataFrame(
         monthly_sales.groupby(group_col, as_index=False, observed=True).agg(
@@ -29,7 +29,7 @@ def _aggregate_sales_summary(df: pd.DataFrame, group_col: str, id_col: str) -> p
     summary["CV"] = pd.Series(summary["SD"]) / pd.Series(summary[AVERAGE_SALES])
     summary["CV"] = pd.Series(summary["CV"]).fillna(0)
 
-    summary = pd.merge(summary, first_sale, on=id_col, how="left", validate="many_to_many")
+    summary = pd.merge(summary, first_sale, on=id_col, how="left", validate="one_to_one")
 
     return pd.DataFrame(summary.sort_values(id_col, ascending=False))
 
@@ -43,18 +43,20 @@ def aggregate_by_sku(data: pd.DataFrame) -> pd.DataFrame:
 def aggregate_by_model(data: pd.DataFrame) -> pd.DataFrame:
     if data is None or data.empty:
         return pd.DataFrame(columns=pd.Index(["MODEL", "MONTHS", "QUANTITY", AVERAGE_SALES, "SD", "CV", "first_sale"]))
-    df = data.copy()
-    df["model"] = df["sku"].astype(str).str[:5]
-    return _aggregate_sales_summary(df, "model", "MODEL")
+    if "model" not in data.columns:
+        data = data.copy()
+        data["model"] = data["sku"].astype(str).str[:5]
+    return _aggregate_sales_summary(data, "model", "MODEL")
 
 
 def aggregate_yearly_sales(data: pd.DataFrame, _by_model: bool = False, include_color: bool = False) -> pd.DataFrame:
     df = data.copy()
     df["year"] = df["data"].dt.year  # type: ignore[union-attr]
-    df["model"] = df["sku"].astype(str).str[:5]
+    sku_str = df["sku"].astype(str)
+    df["model"] = sku_str.str[:5]
 
     if include_color:
-        df["color"] = df["sku"].astype(str).str[5:7]
+        df["color"] = sku_str.str[5:7]
         df["model_color"] = df["model"] + df["color"]
         group_cols = ["model_color", "year"]
         id_col = "MODEL_COLOR"
@@ -94,10 +96,8 @@ def aggregate_forecast_yearly(forecast_df: pd.DataFrame, include_color: bool = F
 
 
 def calculate_last_two_years_avg_sales(data: pd.DataFrame, by_model: bool = False) -> pd.DataFrame:
-    df = data.copy()
-
     two_years_ago = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=730)
-    df_last_2_years = df[df["data"] >= two_years_ago].copy()
+    df_last_2_years = data[data["data"] >= two_years_ago].copy()
 
     if df_last_2_years.empty:
         col_name = "MODEL" if by_model else "SKU"

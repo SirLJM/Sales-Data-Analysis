@@ -96,7 +96,7 @@ def calculate_forecast_date_range(forecast_time_months: float) -> tuple[pd.Times
         next_month_dt = today.replace(day=1) + pd.DateOffset(months=1)
         forecast_start = pd.Timestamp(next_month_dt)  # type: ignore[arg-type]
 
-    forecast_end_dt = forecast_start + pd.DateOffset(months=int(forecast_time_months))
+    forecast_end_dt = forecast_start + pd.DateOffset(months=int(forecast_time_months))  # type: ignore[operator]
     forecast_end = pd.Timestamp(forecast_end_dt)  # type: ignore[arg-type]
     return forecast_start, forecast_end  # type: ignore[return-value]
 
@@ -150,7 +150,7 @@ def calculate_out_of_stock_streaks(
         stock_by_entity = df[["entity", "snapshot_date", "available_stock"]].copy()
         id_column = "SKU"
 
-    latest_snapshot = stock_by_entity["snapshot_date"].max()
+    latest_snapshot = pd.Timestamp(stock_by_entity["snapshot_date"].max())
 
     current_stock = stock_by_entity[stock_by_entity["snapshot_date"] == latest_snapshot]
     zero_stock_entities = set(
@@ -181,11 +181,13 @@ def calculate_out_of_stock_streaks(
     result = result.merge(last_in_stock, on="entity", how="left", validate="one_to_one")
 
     result["LATEST_SNAPSHOT"] = latest_snapshot
-    result["DAYS_OUT_OF_STOCK"] = result.apply(
-        lambda row: (latest_snapshot - row["LAST_IN_STOCK_DATE"]).days
-        if pd.notna(row["LAST_IN_STOCK_DATE"])
-        else (latest_snapshot - stock_by_entity["snapshot_date"].min()).days,
-        axis=1,
+    min_snapshot = pd.Timestamp(stock_by_entity["snapshot_date"].min())
+    has_last_date = result["LAST_IN_STOCK_DATE"].notna()
+    result["DAYS_OUT_OF_STOCK"] = pd.Series(
+        (latest_snapshot - result["LAST_IN_STOCK_DATE"]).dt.days.where(  # type: ignore[union-attr]
+            has_last_date,
+            (latest_snapshot - min_snapshot).days,
+        )
     )
 
     result = result.rename(columns={"entity": id_column})

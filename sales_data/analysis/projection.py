@@ -18,27 +18,18 @@ def build_projection_from_forecast(
     safety_stock: float,
     start_date: datetime,
 ) -> pd.DataFrame:
-    projection = [{
-        "date": start_date,
-        "projected_stock": current_stock,
-        "rop_reached": current_stock <= rop,
-        "zero_reached": current_stock <= 0,
-    }]
+    dates = pd.concat([pd.Series([start_date]), forecast_data["data"]], ignore_index=True)
+    forecasts = pd.concat([pd.Series([0.0]), forecast_data["forecast"]], ignore_index=True)
+    projected_stock = current_stock - forecasts.cumsum()
 
-    running_stock = current_stock
-    for _, row in forecast_data.iterrows():
-        running_stock -= row["forecast"]
-        projection.append({
-            "date": row["data"],
-            "projected_stock": running_stock,
-            "rop_reached": running_stock <= rop,
-            "zero_reached": running_stock <= 0,
-        })
-
-    projection_df = pd.DataFrame(projection)
-    projection_df["date"] = pd.to_datetime(projection_df["date"])
-    projection_df["rop"] = rop
-    projection_df["safety_stock"] = safety_stock
+    projection_df = pd.DataFrame({
+        "date": pd.to_datetime(dates),
+        "projected_stock": projected_stock,
+        "rop_reached": projected_stock <= rop,
+        "zero_reached": projected_stock <= 0,
+        "rop": rop,
+        "safety_stock": safety_stock,
+    })
 
     return projection_df
 
@@ -48,16 +39,16 @@ def filter_and_prepare_forecast(
     start_date: datetime,
     projection_months: int
 ) -> pd.DataFrame:
-    df = forecast_df.copy()
-    df["data"] = pd.to_datetime(df["data"])
+    dates = pd.to_datetime(forecast_df["data"])
 
     if start_date is None:
-        start_date = df["data"].min()
+        start_date = dates.min()
 
     end_date = start_date + pd.DateOffset(months=projection_months)
 
-    mask = (df["data"] >= start_date) & (df["data"] <= end_date)
-    filtered = df.loc[mask, :]
+    mask = (dates >= start_date) & (dates <= end_date)
+    filtered = forecast_df.loc[mask, :].copy()
+    filtered["data"] = dates[mask]
 
     return filtered.sort_values(by="data")
 
@@ -94,10 +85,8 @@ def calculate_model_stock_projection(
     if forecast_df.empty:
         return _empty_projection()
 
-    df = forecast_df.copy()
-    df["model"] = df["sku"].astype(str).str[:5]
-
-    model_forecast = pd.DataFrame(df[df["model"] == model])
+    mask = forecast_df["sku"].astype(str).str.startswith(model)
+    model_forecast = forecast_df[mask].copy()
     if model_forecast.empty:
         return _empty_projection()
 

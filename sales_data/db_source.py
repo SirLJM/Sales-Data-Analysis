@@ -35,11 +35,12 @@ class DatabaseSource(DataSource):
         )
         self._is_available = self._test_connection()
         self._cached_settings_hash: str | None = None
+        self._cached_settings: dict | None = None
 
     def _test_connection(self) -> bool:
         try:
             with self.engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
+                conn.execute(text("SELECT 1"))  # type: ignore[call-overload]
             return True
         except Exception as e:
             logger.error("Database connection failed: %s", e)
@@ -313,8 +314,9 @@ class DatabaseSource(DataSource):
         with self.engine.connect() as conn:
             df = pd.read_sql_query(text(query), conn, params={"entity_type": entity_type})
 
-        if df.empty and not force_recompute:
-            logger.warning("Materialized view mv_valid_monthly_aggs is empty, falling back to file computation")
+        if df.empty or not self._is_cache_valid(df):
+            if not force_recompute:
+                logger.warning("Cache invalid or empty for monthly aggregations, falling back to file computation")
             return self._compute_monthly_aggregations(entity_type)
 
         logger.info("Loaded %d monthly aggregation rows from database", len(df))
@@ -322,18 +324,19 @@ class DatabaseSource(DataSource):
 
     @staticmethod
     def _compute_settings_hash(settings: dict) -> str:
-        relevant_keys = [
-            "lead_time",
-            "forecast_time",
-            "cv_threshold_basic",
-            "cv_threshold_seasonal",
-            "z_score_basic",
-            "z_score_regular",
-            "z_score_seasonal_in",
-            "z_score_seasonal_out",
-            "z_score_new",
-        ]
-        settings_subset = {k: settings.get(k) for k in relevant_keys if k in settings}
+        cv = settings.get("cv_thresholds", {})
+        zs = settings.get("z_scores", {})
+        settings_subset = {
+            "lead_time": settings.get("lead_time"),
+            "forecast_time": settings.get("forecast_time"),
+            "cv_basic": cv.get("basic"),
+            "cv_seasonal": cv.get("seasonal"),
+            "z_basic": zs.get("basic"),
+            "z_regular": zs.get("regular"),
+            "z_seasonal_in": zs.get("seasonal_in"),
+            "z_seasonal_out": zs.get("seasonal_out"),
+            "z_new": zs.get("new"),
+        }
         settings_json = json.dumps(settings_subset, sort_keys=True)
         return hashlib.md5(settings_json.encode()).hexdigest()
 
@@ -341,7 +344,9 @@ class DatabaseSource(DataSource):
         from utils.settings_manager import load_settings
         settings = load_settings()
         current_hash = self._compute_settings_hash(settings)
-        self._cached_settings_hash = current_hash
+        if current_hash != self._cached_settings_hash:
+            self._cached_settings_hash = current_hash
+            self._cached_settings = settings
         return current_hash
 
     @staticmethod
@@ -371,7 +376,7 @@ class DatabaseSource(DataSource):
                        m.material_weight,
                        b.main_material_name
                 FROM model_metadata m
-                LEFT JOIN bom b ON m.model = b.model
+                LEFT JOIN bom_components b ON m.model = b.model
                 ORDER BY m.model \
                 """
 

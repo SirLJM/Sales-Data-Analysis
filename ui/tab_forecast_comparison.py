@@ -16,7 +16,7 @@ from sales_data.analysis.internal_forecast import (
     get_available_methods,
 )
 from sales_data.analysis.utils import find_column
-from ui.constants import Icons, MimeTypes
+from ui.constants import Config, Icons, MimeTypes
 from ui.i18n import Keys, t
 from ui.shared.session_manager import get_data_source, get_excluded_skus, get_settings
 from ui.shared.data_loaders import load_active_skus
@@ -49,7 +49,7 @@ SESSION_KEY_PARAMS = "forecast_comparison_params"
 SESSION_KEY_INTERNAL_FORECASTS = "internal_forecasts_df"
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=Config.CACHE_TTL)
 def _load_monthly_aggregations_raw() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -63,7 +63,7 @@ def _load_monthly_aggregations_cached() -> pd.DataFrame | None:
     return filter_excluded_skus(df, get_excluded_skus(), sku_column="sku") if df is not None else None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=Config.CACHE_TTL)
 def _load_external_forecast_cached() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()
@@ -72,7 +72,7 @@ def _load_external_forecast_cached() -> pd.DataFrame | None:
         return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=Config.CACHE_TTL)
 def _load_sales_data_cached() -> pd.DataFrame | None:
     try:
         data_source = get_data_source()

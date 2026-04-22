@@ -18,9 +18,11 @@ def calculate_order_priority(
     logger.info("Calculating order priority for %d items", len(summary_df))
     if settings is None:
         from utils.settings_manager import load_settings
-        settings = load_settings()
+        resolved_settings = load_settings()
+    else:
+        resolved_settings = settings
 
-    config = _extract_priority_config(settings)
+    config = _extract_priority_config(resolved_settings)
     df = summary_df.copy()
 
     _validate_required_columns(df)
@@ -76,8 +78,8 @@ def _add_forecast_leadtime(
         df["FORECAST_LEADTIME"] = 0
         return df
 
-    forecast_sum = forecast_window.groupby("sku", observed=True)["forecast"].sum().reset_index()
-    forecast_sum.columns = ["SKU", "FORECAST_LEADTIME"]
+    forecast_sum = forecast_window.groupby("sku", as_index=False, observed=True).agg(FORECAST_LEADTIME=("forecast", "sum"))
+    forecast_sum.columns = pd.Index(["SKU", "FORECAST_LEADTIME"])
 
     df = df.merge(forecast_sum, on="SKU", how="left")
     df["FORECAST_LEADTIME"] = df["FORECAST_LEADTIME"].fillna(0)
@@ -108,10 +110,10 @@ def _calculate_stockout_risk(df: pd.DataFrame, config: dict) -> pd.DataFrame:
 def _calculate_revenue_impact(df: pd.DataFrame) -> pd.DataFrame:
     if "PRICE" in df.columns:
         df["REVENUE_AT_RISK"] = df["FORECAST_LEADTIME"] * df["PRICE"]
-        max_revenue = df["REVENUE_AT_RISK"].max()
+        max_revenue = float(df["REVENUE_AT_RISK"].max())
         df["REVENUE_IMPACT"] = (df["REVENUE_AT_RISK"] / max_revenue * 100) if max_revenue > 0 else 0
     else:
-        max_forecast = df["FORECAST_LEADTIME"].max()
+        max_forecast = float(df["FORECAST_LEADTIME"].max())
         df["REVENUE_IMPACT"] = (df["FORECAST_LEADTIME"] / max_forecast * 100) if max_forecast > 0 else 0
     return df
 
@@ -141,9 +143,11 @@ def apply_priority_scoring(df: pd.DataFrame, settings: dict | None = None) -> pd
 
     if settings is None:
         from utils.settings_manager import load_settings
-        settings = load_settings()
+        resolved_settings = load_settings()
+    else:
+        resolved_settings = settings
 
-    config = _extract_priority_config(settings)
+    config = _extract_priority_config(resolved_settings)
     result = df.copy()
 
     result = _calculate_stockout_risk(result, config)
@@ -193,17 +197,15 @@ def get_size_quantities_for_model_color(
     priority_df: pd.DataFrame, model: str, color: str
 ) -> dict[str, int]:
     filtered = priority_df[(priority_df["MODEL"] == model) & (priority_df["COLOR"] == color)]
+    if filtered.empty:
+        return {}
 
-    size_quantities = {}
-    for _, row in filtered.iterrows():
-        size = str(row["SIZE"])
-        if not size:
-            continue
-        deficit = _safe_get_numeric(pd.Series(row), "DEFICIT")
-        forecast = _safe_get_numeric(pd.Series(row), "FORECAST_LEADTIME")
-        size_quantities[size] = int(max(deficit, forecast))
-
-    return size_quantities
+    deficit = filtered["DEFICIT"].fillna(0)
+    forecast = filtered["FORECAST_LEADTIME"].fillna(0)
+    qty = deficit.combine(forecast, max).astype(int)
+    sizes = filtered["SIZE"].astype(str)
+    valid = sizes != ""
+    return dict(zip(sizes[valid], qty[valid]))
 
 
 def generate_order_recommendations(
@@ -221,12 +223,23 @@ def generate_order_recommendations(
 
     top_model_colors = model_color_summary.head(top_n)
 
+    top_keys = set(zip(top_model_colors["MODEL"].astype(str), top_model_colors["COLOR"].astype(str)))
+    relevant = priority_df[
+        priority_df.apply(lambda r: (str(r["MODEL"]), str(r["COLOR"])) in top_keys, axis=1)
+    ]
+    grouped_sizes = {}
+    for (m, c), group in relevant.groupby(["MODEL", "COLOR"], observed=True):
+        deficit = group["DEFICIT"].fillna(0)
+        forecast = group["FORECAST_LEADTIME"].fillna(0)
+        qty = deficit.combine(forecast, max).astype(int)
+        sizes = group["SIZE"].astype(str)
+        valid = sizes != ""
+        grouped_sizes[(str(m), str(c))] = dict(zip(sizes[valid], qty[valid]))
+
     top_recommendations = []
-    for _, row in top_model_colors.iterrows():
+    for row in top_model_colors.to_dict("records"):
         model = str(row["MODEL"])
         color = str(row["COLOR"])
-        size_breakdown = get_size_quantities_for_model_color(priority_df, model, color)
-
         top_recommendations.append(
             {
                 "model": model,
@@ -236,7 +249,7 @@ def generate_order_recommendations(
                 "forecast_demand": row["FORECAST_LEADTIME"],
                 "coverage_gap": row["COVERAGE_GAP"],
                 "urgent": row["URGENT"],
-                "size_quantities": size_breakdown,
+                "size_quantities": grouped_sizes.get((model, color), {}),
             }
         )
 
