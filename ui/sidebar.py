@@ -79,7 +79,7 @@ def _render_excluded_skus_button() -> None:
     excluded = get_excluded_skus()
     count = len(excluded)
     label = t(Keys.EXCLUDED_SKUS_COUNT).format(count=count) if count > 0 else t(Keys.BTN_EXCLUDED_SKUS)
-    if st.sidebar.button(label, key="btn_excluded_skus", use_container_width=True):
+    if st.sidebar.button(label, key="btn_excluded_skus", width='stretch'):
         show_excluded_skus_dialog()
 
 

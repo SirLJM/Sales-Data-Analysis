@@ -52,14 +52,46 @@ def filter_excluded_skus(
 ) -> pd.DataFrame:
     if not excluded_skus or df.empty:
         return df
-    if sku_column in df.columns:
-        col = sku_column
-    elif "sku" in df.columns:
-        col = "sku"
-    else:
+    col = _resolve_sku_column(df, sku_column)
+    if col is None:
         return df
-    excluded_list = list(excluded_skus)
-    return pd.DataFrame(df[~df[col].isin(excluded_list)])
+    return pd.DataFrame(df[~df[col].isin(list(excluded_skus))])
+
+
+def _resolve_sku_column(df: pd.DataFrame, sku_column: str) -> str | None:
+    if sku_column in df.columns:
+        return sku_column
+    if "sku" in df.columns:
+        return "sku"
+    return None
+
+
+def filter_excluded_models(
+    df: pd.DataFrame,
+    excluded_skus: Collection[str],
+    sku_column: str = "sku",
+) -> pd.DataFrame:
+    if not excluded_skus or df.empty:
+        return df
+    col = _resolve_sku_column(df, sku_column)
+    if col is None:
+        return df
+    excluded_models = list({sku[:5] for sku in excluded_skus})
+    return pd.DataFrame(df[~df[col].astype(str).str[:5].isin(excluded_models)])
+
+
+def filter_excluded_model_colors(
+    df: pd.DataFrame,
+    excluded_skus: Collection[str],
+    sku_column: str = "sku",
+) -> pd.DataFrame:
+    if not excluded_skus or df.empty:
+        return df
+    col = _resolve_sku_column(df, sku_column)
+    if col is None:
+        return df
+    excluded_mc = list({sku[:7] for sku in excluded_skus})
+    return pd.DataFrame(df[~df[col].astype(str).str[:7].isin(excluded_mc)])
 
 
 def filter_by_active_skus(

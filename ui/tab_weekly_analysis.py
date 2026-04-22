@@ -11,7 +11,7 @@ from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_data, load_stock
 from ui.shared.display_helpers import display_star_product
 from ui.shared.session_manager import get_excluded_skus, get_settings
-from ui.shared.sku_utils import extract_color, extract_model, filter_excluded_skus
+from ui.shared.sku_utils import extract_color, extract_model, filter_excluded_model_colors, filter_excluded_models, filter_excluded_skus
 from utils.logging_config import get_logger
 
 logger = get_logger("tab_weekly_analysis")
@@ -33,20 +33,24 @@ def _render_content(context: dict) -> None:
         st.cache_data.clear()
         st.rerun()
 
-    df = filter_excluded_skus(load_data(), get_excluded_skus(), sku_column="sku")
+    excluded = get_excluded_skus()
+    raw_df = load_data()
+    df_by_model = filter_excluded_models(raw_df, excluded, sku_column="sku")
+    df_by_model_color = filter_excluded_model_colors(raw_df, excluded, sku_column="sku")
+
     stock_df = None
     if context.get("stock_loaded"):
         stock_result, _ = load_stock()
-        stock_df = filter_excluded_skus(stock_result, get_excluded_skus()) if stock_result is not None else None
+        stock_df = filter_excluded_skus(stock_result, excluded) if stock_result is not None else None
 
     st.markdown("---")
-    _render_top_sales_report(df)
+    _render_top_sales_report(df_by_model)
 
     st.markdown("---")
-    _render_top_by_type(df, stock_df)
+    _render_top_by_type(df_by_model_color, stock_df)
 
     st.markdown("---")
-    _render_new_products_monitoring(df, stock_df)
+    _render_new_products_monitoring(df_by_model, stock_df)
 
 
 def _render_top_sales_report(df: pd.DataFrame) -> None:

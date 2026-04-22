@@ -27,8 +27,8 @@ def show_excluded_skus_dialog() -> None:
     if search:
         search_lower = search.lower()
         mask = (
-            all_skus_df["SKU"].str.lower().str.contains(search_lower, na=False)
-            | all_skus_df["Description"].str.lower().str.contains(search_lower, na=False)
+                all_skus_df["SKU"].str.lower().str.contains(search_lower, na=False)
+                | all_skus_df["Description"].str.lower().str.contains(search_lower, na=False)
         )
         display_df = pd.DataFrame(all_skus_df[mask])
     else:
@@ -46,7 +46,7 @@ def show_excluded_skus_dialog() -> None:
             "SKU": st.column_config.TextColumn("SKU", disabled=True),
             "Description": st.column_config.TextColumn("Description", disabled=True),
         },
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         key="excluded_skus_editor",
         height=500,
@@ -54,16 +54,19 @@ def show_excluded_skus_dialog() -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button(t(Keys.EXCLUDED_SKUS_CLEAR_ALL), use_container_width=True):
+        if st.button(t(Keys.EXCLUDED_SKUS_CLEAR_ALL), width='stretch'):
             st.session_state[SessionKeys.EXCLUDED_SKUS] = []
             save_excluded_skus([])
             st.rerun()
 
     with col2:
-        if st.button(t(Keys.EXCLUDED_SKUS_SAVE), type="primary", use_container_width=True):
+        if st.button(t(Keys.EXCLUDED_SKUS_SAVE), type="primary", width='stretch'):
             if not isinstance(edited, pd.DataFrame):
                 return
-            new_excluded: list[str] = edited.loc[edited["Excluded"] == True, "SKU"].tolist()  # noqa: E712
+            visible_skus: set[str] = {str(s) for s in edited["SKU"].tolist()}
+            newly_checked: list[str] = [str(s) for s in edited.loc[edited["Excluded"] == True, "SKU"].tolist()]  # noqa: E712
+            preserved = [s for s in excluded if s not in visible_skus]
+            new_excluded = preserved + sorted(newly_checked)
             st.session_state[SessionKeys.EXCLUDED_SKUS] = new_excluded
             save_excluded_skus(new_excluded)
             st.rerun()
@@ -90,7 +93,7 @@ def _build_sku_list(excluded: list[str]) -> pd.DataFrame:
 
 
 def _rows_from_stock(
-    stock_df: pd.DataFrame | None, excluded_set: set[str]
+        stock_df: pd.DataFrame | None, excluded_set: set[str]
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     if stock_df is None or stock_df.empty:

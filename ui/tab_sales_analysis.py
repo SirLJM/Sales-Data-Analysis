@@ -8,7 +8,8 @@ import streamlit as st
 from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes
 from ui.i18n import t, Keys
-from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_stock_history, load_yearly_sales, load_yearly_forecast
+from ui.shared.data_loaders import load_data, load_forecast, load_model_metadata, load_stock, load_stock_history, \
+    load_yearly_sales, load_yearly_forecast
 from ui.shared.session_manager import get_excluded_skus, get_settings
 from ui.shared.sku_utils import extract_model, filter_excluded_skus
 from ui.shared.styles import SIDEBAR_STYLE
@@ -540,7 +541,7 @@ def _render_out_of_stock_section(group_by_model: bool) -> None:
         longest = int(streaks["DAYS_OUT_OF_STOCK"].max())
         col2.metric(t(Keys.OOS_LONGEST_STREAK), t(Keys.OOS_DAYS).format(days=longest))
 
-        st.dataframe(streaks, hide_index=True, use_container_width=True)
+        st.dataframe(streaks, hide_index=True, width='stretch')
 
 
 def _render_download_button(display_data: pd.DataFrame, group_by_model: bool) -> None:
