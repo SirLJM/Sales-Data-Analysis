@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime
 
 import pandas as pd
@@ -80,8 +82,7 @@ def _process_manual_order(manual_model: str, context: dict) -> None:
         return
 
     with st.spinner(t(Keys.LOADING_DATA_FOR_MODEL).format(model=model_code)):  # type: ignore[attr-defined]
-        sku_summary = _prepare_sku_summary(analyzer, context, settings)
-        sku_summary = _add_sku_components(sku_summary)
+        sku_summary = _get_or_build_sku_summary(analyzer, context, settings)
         model_data = pd.DataFrame(sku_summary[sku_summary["MODEL"] == model_code]).copy()
 
         if model_data.empty:
@@ -146,6 +147,32 @@ def _prepare_sku_summary(analyzer: SalesAnalyzer, context: dict, settings: dict)
         sku_summary["PERIOD_SALES_SEASONAL"] = 0
 
     sku_summary = _apply_forecast_fallback_for_new_adults(sku_summary)
+
+    return sku_summary
+
+
+def _settings_hash(settings: dict) -> str:
+    raw = json.dumps(settings, sort_keys=True, default=str)
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _get_or_build_sku_summary(
+        analyzer: SalesAnalyzer, context: dict, settings: dict,
+) -> pd.DataFrame:
+    current_hash = _settings_hash(settings)
+    cached_hash = st.session_state.get(SessionKeys.ORDER_SKU_SUMMARY_HASH)
+    cached_summary = st.session_state.get(SessionKeys.ORDER_SKU_SUMMARY_CACHE)
+
+    if cached_summary is not None and cached_hash == current_hash:
+        logger.info("Using cached SKU summary for order creation")
+        return cached_summary
+
+    logger.info("Building SKU summary for order creation (settings changed or first run)")
+    sku_summary = _prepare_sku_summary(analyzer, context, settings)
+    sku_summary = _add_sku_components(sku_summary)
+
+    st.session_state[SessionKeys.ORDER_SKU_SUMMARY_CACHE] = sku_summary
+    st.session_state[SessionKeys.ORDER_SKU_SUMMARY_HASH] = current_hash
 
     return sku_summary
 

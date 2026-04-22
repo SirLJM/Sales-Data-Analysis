@@ -51,6 +51,8 @@ class SessionKeys:
     DROP_EXCESS_COLORS: Final[str] = "drop_excess_colors"
     MATCH_CHILDREN_DISTRIBUTION: Final[str] = "match_children_distribution"
     EXCLUDED_SKUS: Final[str] = "excluded_skus"
+    ORDER_SKU_SUMMARY_CACHE: Final[str] = "order_sku_summary_cache"
+    ORDER_SKU_SUMMARY_HASH: Final[str] = "order_sku_summary_hash"
 
 
 class ColumnNames:
@@ -135,6 +137,7 @@ class Config:
     WEEKLY_LOOKBACK_DAYS: Final[int] = 60
     DEFAULT_OVERSTOCK_THRESHOLD: Final[int] = 20
     HPGL_CHART_HEIGHT: Final[int] = 700
+    ORDER_CREATION_TAB_INDEX: Final[int] = 6
 
 
 class MimeTypes:

@@ -20,13 +20,13 @@ logger = get_logger("internal_forecast")
 MIN_MONTHS_FOR_FORECAST = 12
 MIN_MONTHS_FOR_SEASONAL = 24
 
-SKTIME_AVAILABLE = False
-AutoARIMA = None
+PMDARIMA_AVAILABLE = False
 try:
-    from sktime.forecasting.arima import AutoARIMA
-    SKTIME_AVAILABLE = True
+    import pmdarima as pm
+
+    PMDARIMA_AVAILABLE = True
 except ImportError:
-    AutoARIMA = None
+    pm = None  # type: ignore[assignment]
 
 AVAILABLE_METHODS = [
     "moving_avg",
@@ -35,7 +35,7 @@ AVAILABLE_METHODS = [
     "sarima",
 ]
 
-if SKTIME_AVAILABLE:
+if PMDARIMA_AVAILABLE:
     AVAILABLE_METHODS.append("auto_arima")
 
 
@@ -137,7 +137,7 @@ def generate_forecast_moving_avg(
 
     forecast_value = float(np.dot(recent, weights))
 
-    last_period = cast(pd.Period, series.index[-1])
+    last_period = series.index[-1]
     future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
     return pd.DataFrame({
@@ -174,7 +174,7 @@ def generate_forecast_exp_smoothing(
         fitted = model.fit(optimized=True)
         forecast = fitted.forecast(horizon)
 
-        last_period = cast(pd.Period, series.index[-1])
+        last_period = series.index[-1]
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
         std_resid = float(np.std(fitted.resid)) if hasattr(fitted, "resid") else float(forecast.mean() * 0.2)
@@ -217,7 +217,7 @@ def generate_forecast_holt_winters(
         fitted = model.fit(optimized=True)
         forecast = fitted.forecast(horizon)
 
-        last_period = cast(pd.Period, series.index[-1])
+        last_period = series.index[-1]
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
         std_resid = float(np.std(fitted.resid)) if hasattr(fitted, "resid") else float(forecast.mean() * 0.2)
@@ -254,7 +254,7 @@ def generate_forecast_sarima(
         forecast = forecast_result.predicted_mean
         conf_int = forecast_result.conf_int(alpha=0.05)
 
-        last_period = cast(pd.Period, series.index[-1])
+        last_period = series.index[-1]
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
         return pd.DataFrame({
@@ -275,15 +275,14 @@ def generate_forecast_auto_arima(
         seasonal: bool = True,
         sp: int = 12,
 ) -> pd.DataFrame:
-    if not SKTIME_AVAILABLE or AutoARIMA is None:
-        logger.warning("sktime not available, falling back to SARIMA")
+    if not PMDARIMA_AVAILABLE or pm is None:
+        logger.warning("pmdarima not available, falling back to SARIMA")
         return generate_forecast_sarima(series, horizon)
 
     try:
-        y = pd.Series(series.values, index=pd.PeriodIndex(series.index, freq="M"))
-
-        model = AutoARIMA(
-            sp=sp if seasonal else 1,
+        model = pm.auto_arima(  # type: ignore[union-attr]
+            series.values,
+            m=sp if seasonal else 1,
             seasonal=seasonal,
             suppress_warnings=True,
             error_action="ignore",
@@ -297,30 +296,19 @@ def generate_forecast_auto_arima(
             n_jobs=1,
         )
 
-        model.fit(y)
-        fh = list(range(1, horizon + 1))
-        forecast_series = pd.Series(model.predict(fh=fh))
-        conf_int_df = pd.DataFrame(model.predict_interval(fh=fh, coverage=0.95))
+        forecast_vals, conf_int = model.predict(n_periods=horizon, return_conf_int=True, alpha=0.05)
 
-        last_period = cast(pd.Period, series.index[-1])
+        last_period = series.index[-1]
         future_periods = pd.period_range(start=last_period + 1, periods=horizon, freq="M")
 
-        forecast_vals: NDArray[Any] = np.asarray(forecast_series.values)
-        lower_vals: NDArray[Any]
-        upper_vals: NDArray[Any]
-
-        if len(conf_int_df.columns) >= 2:
-            lower_vals = np.asarray(conf_int_df.iloc[:, 0].values)
-            upper_vals = np.asarray(conf_int_df.iloc[:, 1].values)
-        else:
-            lower_vals = forecast_vals * 0.8
-            upper_vals = forecast_vals * 1.2
+        forecast_arr: NDArray[Any] = np.asarray(forecast_vals)
+        conf_int_arr: NDArray[Any] = np.asarray(conf_int)
 
         return pd.DataFrame({
             "period": future_periods,
-            "forecast": forecast_vals,
-            "lower_ci": lower_vals,
-            "upper_ci": upper_vals,
+            "forecast": forecast_arr,
+            "lower_ci": conf_int_arr[:, 0],
+            "upper_ci": conf_int_arr[:, 1],
         })
 
     except Exception as e:
@@ -338,11 +326,11 @@ FORECAST_GENERATORS: dict[str, Callable] = {
 
 
 def _create_forecast_result(
-    entity_id: str,
-    entity_type: str,
-    method: str | None = None,
-    forecast_df: pd.DataFrame | None = None,
-    error: str | None = None,
+        entity_id: str,
+        entity_type: str,
+        method: str | None = None,
+        forecast_df: pd.DataFrame | None = None,
+        error: str | None = None,
 ) -> dict:
     return {
         "entity_id": entity_id,
@@ -392,7 +380,7 @@ def batch_generate_forecasts(
         method_override: str | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     all_forecasts = []
-    stats = {
+    stats: dict[str, Any] = {
         "total": len(entities),
         "success": 0,
         "failed": 0,

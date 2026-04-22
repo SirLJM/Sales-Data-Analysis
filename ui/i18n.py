@@ -895,6 +895,22 @@ class Keys:
     NLQ_EXAMPLE_QUERIES: Final[str] = "nlq_example_queries"
     NLQ_CLICK_EXAMPLE: Final[str] = "nlq_click_example"
     NLQ_ERROR_IN_TAB: Final[str] = "nlq_error_in_tab"
+    NLQ_QUERY_MODE: Final[str] = "nlq_query_mode"
+    NLQ_MODE_PATTERN: Final[str] = "nlq_mode_pattern"
+    NLQ_MODE_SQL: Final[str] = "nlq_mode_sql"
+    NLQ_MODE_AI: Final[str] = "nlq_mode_ai"
+    NLQ_SQL_INPUT: Final[str] = "nlq_sql_input"
+    NLQ_SQL_PLACEHOLDER: Final[str] = "nlq_sql_placeholder"
+    NLQ_SQL_READ_ONLY_WARNING: Final[str] = "nlq_sql_read_only_warning"
+    NLQ_SQL_REJECTED: Final[str] = "nlq_sql_rejected"
+    NLQ_AI_UNAVAILABLE: Final[str] = "nlq_ai_unavailable"
+    NLQ_AI_PLACEHOLDER: Final[str] = "nlq_ai_placeholder"
+    NLQ_AI_GENERATING: Final[str] = "nlq_ai_generating"
+    NLQ_AI_GENERATED_SQL: Final[str] = "nlq_ai_generated_sql"
+    NLQ_AI_CONFIRM_EXECUTE: Final[str] = "nlq_ai_confirm_execute"
+    NLQ_AI_EXPLANATION: Final[str] = "nlq_ai_explanation"
+    NLQ_AI_CLEAR_HISTORY: Final[str] = "nlq_ai_clear_history"
+    NLQ_AI_ERROR: Final[str] = "nlq_ai_error"
 
     DISPLAY_LAST_YEAR: Final[str] = "display_last_year"
     DISPLAY_CHANGE: Final[str] = "display_change"
@@ -1650,7 +1666,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.FC_EXP_SMOOTHING: "Exponential Smoothing",
         Keys.FC_HOLT_WINTERS: "Holt-Winters",
         Keys.FC_SARIMA: "SARIMA",
-        Keys.FC_AUTO_ARIMA: "AutoARIMA (sktime)",
+        Keys.FC_AUTO_ARIMA: "AutoARIMA (pmdarima)",
         Keys.FC_GENERATE_AS_OF_HELP: "Simulate forecast generation as if it was this date. Only sales data up to this date will be used.",
         Keys.FC_COMPARE_AS_OF_HELP: "Date up to which actual sales are loaded for comparison. Set to future date of generation date to see forecast accuracy.",
         Keys.FC_LOADING_DATA: _EN_LOADING_DATA,
@@ -1850,6 +1866,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.NLQ_EXAMPLE_QUERIES: "Example queries",
         Keys.NLQ_CLICK_EXAMPLE: "Click on any example to copy it to your clipboard:",
         Keys.NLQ_ERROR_IN_TAB: "Error in Natural Language Query: {error}",
+        Keys.NLQ_QUERY_MODE: "Query mode",
+        Keys.NLQ_MODE_PATTERN: "Pattern",
+        Keys.NLQ_MODE_SQL: "SQL",
+        Keys.NLQ_MODE_AI: "AI Assistant",
+        Keys.NLQ_SQL_INPUT: "Enter SQL query",
+        Keys.NLQ_SQL_PLACEHOLDER: "e.g., SELECT * FROM sales LIMIT 10",
+        Keys.NLQ_SQL_READ_ONLY_WARNING: "Only SELECT queries are allowed for safety",
+        Keys.NLQ_SQL_REJECTED: "Query rejected: only SELECT statements are allowed",
+        Keys.NLQ_AI_UNAVAILABLE: "AI mode requires ANTHROPIC_API_KEY in .env file",
+        Keys.NLQ_AI_PLACEHOLDER: "Ask anything about your data...",
+        Keys.NLQ_AI_GENERATING: "Generating SQL with AI...",
+        Keys.NLQ_AI_GENERATED_SQL: "Generated SQL (you can edit before executing)",
+        Keys.NLQ_AI_CONFIRM_EXECUTE: "Execute",
+        Keys.NLQ_AI_EXPLANATION: "AI Explanation",
+        Keys.NLQ_AI_CLEAR_HISTORY: "Clear conversation",
+        Keys.NLQ_AI_ERROR: "AI generation error: {error}",
 
         Keys.DISPLAY_LAST_YEAR: "Last Year",
         Keys.DISPLAY_CHANGE: "Change",
@@ -2597,7 +2629,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.FC_EXP_SMOOTHING: "Wygładzanie Wykładnicze",
         Keys.FC_HOLT_WINTERS: "Holt-Winters",
         Keys.FC_SARIMA: "SARIMA",
-        Keys.FC_AUTO_ARIMA: "AutoARIMA (sktime)",
+        Keys.FC_AUTO_ARIMA: "AutoARIMA (pmdarima)",
         Keys.FC_GENERATE_AS_OF_HELP: "Symuluj generowanie prognozy jakby było to w tej dacie. Tylko dane sprzedaży do tej daty zostaną użyte.",
         Keys.FC_COMPARE_AS_OF_HELP: "Data, do której rzeczywista sprzedaż jest wczytywana do porównania. Ustaw na przyszłą datę względem daty generowania, aby zobaczyć dokładność prognozy.",
         Keys.FC_LOADING_DATA: _PL_LOADING_DATA,
@@ -2797,6 +2829,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         Keys.NLQ_EXAMPLE_QUERIES: "Przykładowe zapytania",
         Keys.NLQ_CLICK_EXAMPLE: "Kliknij na przykład, aby skopiować do schowka:",
         Keys.NLQ_ERROR_IN_TAB: "Błąd w Zapytaniach Języka Naturalnego: {error}",
+        Keys.NLQ_QUERY_MODE: "Tryb zapytania",
+        Keys.NLQ_MODE_PATTERN: "Wzorzec",
+        Keys.NLQ_MODE_SQL: "SQL",
+        Keys.NLQ_MODE_AI: "Asystent AI",
+        Keys.NLQ_SQL_INPUT: "Wprowadź zapytanie SQL",
+        Keys.NLQ_SQL_PLACEHOLDER: "e.g., SELECT * FROM sales LIMIT 10",
+        Keys.NLQ_SQL_READ_ONLY_WARNING: "Dozwolone są tylko zapytania SELECT",
+        Keys.NLQ_SQL_REJECTED: "Zapytanie odrzucone: dozwolone są tylko instrukcje SELECT",
+        Keys.NLQ_AI_UNAVAILABLE: "Tryb AI wymaga ANTHROPIC_API_KEY w pliku .env",
+        Keys.NLQ_AI_PLACEHOLDER: "Zapytaj o cokolwiek dotyczącego danych...",
+        Keys.NLQ_AI_GENERATING: "Generowanie SQL z AI...",
+        Keys.NLQ_AI_GENERATED_SQL: "Wygenerowany SQL (możesz edytować przed wykonaniem)",
+        Keys.NLQ_AI_CONFIRM_EXECUTE: "Wykonaj",
+        Keys.NLQ_AI_EXPLANATION: "Wyjaśnienie AI",
+        Keys.NLQ_AI_CLEAR_HISTORY: "Wyczyść rozmowę",
+        Keys.NLQ_AI_ERROR: "Błąd generowania AI: {error}",
 
         Keys.DISPLAY_LAST_YEAR: "Poprzedni Rok",
         Keys.DISPLAY_CHANGE: "Zmiana",

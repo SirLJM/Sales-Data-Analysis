@@ -69,6 +69,7 @@ class DuckDBExecutor:
     def _get_connection(self) -> duckdb.DuckDBPyConnection:
         if self._conn is None:
             self._conn = duckdb.connect(":memory:")
+        assert self._conn is not None
         return self._conn
 
     def _register_dataframes(self, conn: duckdb.DuckDBPyConnection, entity_type: str | None) -> None:
@@ -121,6 +122,25 @@ class DuckDBExecutor:
                         lambda x: x.tolist() if isinstance(x, np.ndarray) else x
                     )
         return df
+
+    def execute_raw_sql(self, sql: str) -> tuple[pd.DataFrame | None, str, str]:
+        try:
+            conn = self._get_connection()
+            self._register_all_dataframes(conn)
+            result = conn.execute(sql).fetchdf()
+            if result.empty:
+                return None, MSG_NO_DATA_MATCH, sql
+            return result, "", sql
+        except duckdb.Error as e:
+            return None, f"{MSG_SQL_ERROR}: {e}", sql
+
+    def _register_all_dataframes(self, conn: duckdb.DuckDBPyConnection) -> None:
+        if self.sales_df is not None:
+            conn.register(TABLE_SALES, self._prepare_sales_df(self.sales_df))
+        if self.stock_df is not None:
+            conn.register(TABLE_STOCK, self._prepare_stock_df(self.stock_df))
+        if self.forecast_df is not None:
+            conn.register(TABLE_FORECAST, self._prepare_forecast_df(self.forecast_df))
 
     def close(self) -> None:
         if self._conn is not None:

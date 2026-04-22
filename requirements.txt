@@ -12,10 +12,11 @@ alembic
 python-dotenv
 camelot-py[base]
 statsmodels
-sktime
+pmdarima
 lightgbm
 scikit-learn
 duckdb
+anthropic
 
 # Testing
 pytest

@@ -7,6 +7,7 @@ from sales_data import SalesAnalyzer
 from ui.constants import ColumnNames, Config, Icons, MimeTypes, SessionKeys
 from ui.i18n import t, Keys
 from ui.shared.data_loaders import load_color_aliases, load_model_metadata, merge_stock_into_summary
+from ui.shared.navigation import switch_to_tab
 from ui.shared.session_manager import get_data_source, get_excluded_skus, get_session_value, get_settings, set_session_value
 from ui.shared.sku_utils import filter_excluded_skus
 from utils.logging_config import get_logger
@@ -691,7 +692,7 @@ def _render_selected_items_actions() -> None:
     if selected_items:
         st.success(f"✓ {t(Keys.ITEMS_SELECTED).format(count=len(selected_items))}")
         if st.button(t(Keys.BTN_CREATE_ORDER), type="primary"):
-            st.info(t(Keys.NAVIGATE_ORDER_CREATION))
+            switch_to_tab(Config.ORDER_CREATION_TAB_INDEX)
     else:
         st.info(t(Keys.SELECT_ITEMS_TO_ORDER))
 

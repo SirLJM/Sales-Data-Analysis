@@ -56,13 +56,27 @@ class PostgresExecutor:
 
         try:
             with self.engine.connect() as conn:
-                result = conn.execute(text(adapted_sql))
+                result = conn.execute(text(adapted_sql))  # type: ignore[arg-type]
                 df = pd.DataFrame(result.fetchall(), columns=pd.Index(list(result.keys())))
                 if df.empty:
                     return None, MSG_NO_DATA_MATCH, adapted_sql
                 return df, "", adapted_sql
         except Exception as e:
             return None, f"{MSG_SQL_ERROR}: {str(e)}", adapted_sql
+
+    def execute_raw_sql(self, sql: str) -> tuple[pd.DataFrame | None, str, str]:
+        if self.engine is None:
+            return None, MSG_DB_NOT_CONNECTED, sql
+
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(text(sql))  # type: ignore[arg-type]
+                df = pd.DataFrame(result.fetchall(), columns=pd.Index(list(result.keys())))
+                if df.empty:
+                    return None, MSG_NO_DATA_MATCH, sql
+                return df, "", sql
+        except Exception as e:
+            return None, f"{MSG_SQL_ERROR}: {e}", sql
 
     @staticmethod
     def _adapt_sql_for_postgres(sql: str, entity_type: str) -> str:

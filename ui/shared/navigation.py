@@ -1,11 +1,28 @@
 from __future__ import annotations
 
-import streamlit.components.v1 as components
+import streamlit as st
+
+
+def switch_to_tab(tab_index: int) -> None:
+    js = f"""
+<script>
+(function() {{
+    try {{
+        var doc = window.parent.document;
+        var store = window.parent.sessionStorage;
+        store.setItem('stockmonitor_active_tab', {tab_index});
+        var tabs = doc.querySelectorAll('button[data-baseweb="tab"]');
+        if (tabs[{tab_index}]) tabs[{tab_index}].click();
+    }} catch(e) {{}}
+}})();
+</script>
+"""
+    st.iframe(js, height=1)  # type: ignore[attr-defined]
 
 
 def render_navigation_menu(tab_names: list[str]) -> None:
     nav_js = _build_navigation_js(tab_names)
-    components.html(nav_js, height=0)
+    st.iframe(nav_js, height=1)  # type: ignore[attr-defined]
 
 
 def _build_navigation_js(tab_names: list[str]) -> str:

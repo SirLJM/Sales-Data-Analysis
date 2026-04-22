@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
-from nlq import DuckDBExecutor, PostgresExecutor, QueryIntent, QueryParser
+from nlq import (
+    AIQueryGenerator,
+    DuckDBExecutor,
+    PostgresExecutor,
+    QueryParser,
+    is_ai_available,
+    validate_read_only,
+)
+from nlq.intent import QueryIntent
 from ui.constants import Config, Icons, MimeTypes
 from ui.i18n import Keys, t
 from ui.shared.data_loaders import load_data, load_forecast, load_stock
@@ -26,6 +35,10 @@ EXAMPLE_QUERIES = [
     ("stan ponizej rop", "Polish: Stock below ROP"),
     ("top 5 modeli wg sprzedazy", "Polish: Top 5 models by sales"),
 ]
+
+_MODE_PATTERN = "pattern"
+_MODE_SQL = "sql"
+_MODE_AI = "ai"
 
 
 @st.fragment
@@ -50,12 +63,33 @@ def _render_content(context: dict) -> None:
         st.info(t(Keys.NLQ_FILE_MODE))
 
     sales_df, stock_df, forecast_df, sku_summary_df = _load_data(context)
-
-    parser = QueryParser()
     executor = _create_executor(is_database_mode, data_source, sales_df, stock_df, forecast_df, sku_summary_df)
 
-    _render_query_input(parser, executor)
-    _render_examples()
+    mode_labels = {
+        _MODE_PATTERN: t(Keys.NLQ_MODE_PATTERN),
+        _MODE_SQL: t(Keys.NLQ_MODE_SQL),
+        _MODE_AI: t(Keys.NLQ_MODE_AI),
+    }
+    selected_label = st.radio(
+        t(Keys.NLQ_QUERY_MODE),
+        list(mode_labels.values()),
+        horizontal=True,
+        key="nlq_mode",
+    )
+    label_to_mode = {v: k for k, v in mode_labels.items()}
+    mode = label_to_mode.get(str(selected_label), _MODE_PATTERN)
+
+    if mode == _MODE_PATTERN:
+        parser = QueryParser()
+        _render_pattern_mode(parser, executor)
+        _render_examples()
+    elif mode == _MODE_SQL:
+        _render_sql_mode(executor)
+    elif mode == _MODE_AI:
+        if not is_ai_available():
+            st.warning(t(Keys.NLQ_AI_UNAVAILABLE))
+            return
+        _render_ai_mode(executor, is_database_mode)
 
 
 def _load_data(context: dict) -> tuple:
@@ -96,7 +130,11 @@ def _create_executor(
     )
 
 
-def _render_query_input(
+# ---------------------------------------------------------------------------
+# Pattern mode (existing)
+# ---------------------------------------------------------------------------
+
+def _render_pattern_mode(
         parser: QueryParser,
         executor: DuckDBExecutor | PostgresExecutor,
 ) -> None:
@@ -116,22 +154,16 @@ def _render_query_input(
             clear_clicked = st.form_submit_button(t(Keys.NLQ_CLEAR))
 
     if clear_clicked:
-        _clear_session_state()
+        _clear_keys("nlq_last_result", "nlq_last_intent", "nlq_last_sql")
         st.rerun()
 
     if execute_clicked and query:
-        _execute_query(query, parser, executor)
+        _execute_pattern_query(query, parser, executor)
     elif "nlq_last_result" in st.session_state:
-        _display_cached_result()
+        _display_pattern_cached_result()
 
 
-def _clear_session_state() -> None:
-    keys_to_remove = ["nlq_last_result", "nlq_last_intent", "nlq_last_sql"]
-    for key in keys_to_remove:
-        st.session_state.pop(key, None)
-
-
-def _execute_query(
+def _execute_pattern_query(
         query: str,
         parser: QueryParser,
         executor: DuckDBExecutor | PostgresExecutor,
@@ -159,7 +191,7 @@ def _execute_query(
         _display_result(result_df, intent)
 
 
-def _display_cached_result() -> None:
+def _display_pattern_cached_result() -> None:
     intent = st.session_state.get("nlq_last_intent")
     result_df = st.session_state.get("nlq_last_result")
     sql = st.session_state.get("nlq_last_sql")
@@ -182,6 +214,181 @@ def _display_interpretation(intent: QueryIntent, sql: str | None) -> None:
             if sql:
                 st.markdown(f"**{t(Keys.NLQ_GENERATED_SQL)}:**")
                 st.code(sql, language="sql")
+
+
+# ---------------------------------------------------------------------------
+# SQL mode
+# ---------------------------------------------------------------------------
+
+def _render_sql_mode(executor: DuckDBExecutor | PostgresExecutor) -> None:
+    st.caption(t(Keys.NLQ_SQL_READ_ONLY_WARNING))
+
+    with st.form("nlq_sql_form", clear_on_submit=False, border=False):
+        sql_input = st.text_area(
+            t(Keys.NLQ_SQL_INPUT),
+            placeholder=t(Keys.NLQ_SQL_PLACEHOLDER),
+            height=150,
+            key="nlq_sql_input",
+        )
+        col1, col2, _ = st.columns([1, 1, 4])
+        with col1:
+            execute_clicked = st.form_submit_button(t(Keys.NLQ_EXECUTE), type="primary")
+        with col2:
+            clear_clicked = st.form_submit_button(t(Keys.NLQ_CLEAR))
+
+    if clear_clicked:
+        _clear_keys("nlq_sql_last_result", "nlq_sql_last_sql")
+        st.rerun()
+
+    if execute_clicked and sql_input:
+        error = validate_read_only(sql_input)
+        if error:
+            st.error(f"{Icons.ERROR} {t(Keys.NLQ_SQL_REJECTED)}")
+            return
+        _execute_raw(sql_input, executor, "nlq_sql_last_result", "nlq_sql_last_sql")
+    elif "nlq_sql_last_result" in st.session_state:
+        _display_raw_cached("nlq_sql_last_result", "nlq_sql_last_sql")
+
+
+# ---------------------------------------------------------------------------
+# AI mode
+# ---------------------------------------------------------------------------
+
+def _render_ai_mode(
+        executor: DuckDBExecutor | PostgresExecutor,
+        is_database_mode: bool,
+) -> None:
+    _render_ai_history()
+
+    with st.form("nlq_ai_form", clear_on_submit=True, border=False):
+        user_query = st.text_input(
+            t(Keys.NLQ_QUERY),
+            placeholder=t(Keys.NLQ_AI_PLACEHOLDER),
+            label_visibility="collapsed",
+            key="nlq_ai_query_input",
+        )
+        col1, col2, _ = st.columns([1, 1, 4])
+        with col1:
+            generate_clicked = st.form_submit_button(t(Keys.NLQ_EXECUTE), type="primary")
+        with col2:
+            clear_clicked = st.form_submit_button(t(Keys.NLQ_AI_CLEAR_HISTORY))
+
+    if clear_clicked:
+        _clear_keys(
+            "nlq_ai_history", "nlq_ai_pending_sql", "nlq_ai_pending_explanation",
+            "nlq_ai_last_result", "nlq_ai_last_sql",
+        )
+        st.rerun()
+
+    if generate_clicked and user_query:
+        _generate_ai_sql(user_query, is_database_mode)
+
+    if st.session_state.get("nlq_ai_pending_sql"):
+        _render_ai_confirm(executor)
+    elif "nlq_ai_last_result" in st.session_state:
+        _display_raw_cached("nlq_ai_last_result", "nlq_ai_last_sql")
+
+
+def _generate_ai_sql(user_query: str, is_database_mode: bool) -> None:
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+    history: list[dict[str, str]] = st.session_state.get("nlq_ai_history", [])
+
+    generator = AIQueryGenerator(api_key, model, is_database_mode)
+
+    with st.spinner(t(Keys.NLQ_AI_GENERATING)):  # type: ignore[attr-defined]
+        sql, explanation = generator.generate_sql(user_query, history)
+
+    if not sql:
+        st.error(f"{Icons.ERROR} {t(Keys.NLQ_AI_ERROR).format(error=explanation)}")
+        return
+
+    history.append({"role": "user", "content": user_query})
+    history.append({"role": "assistant", "content": sql})
+    st.session_state["nlq_ai_history"] = history
+    st.session_state["nlq_ai_pending_sql"] = sql
+    st.session_state["nlq_ai_pending_explanation"] = explanation
+    st.session_state.pop("nlq_ai_last_result", None)
+    st.rerun()
+
+
+def _render_ai_confirm(executor: DuckDBExecutor | PostgresExecutor) -> None:
+    pending_sql = st.session_state.get("nlq_ai_pending_sql", "")
+    explanation = st.session_state.get("nlq_ai_pending_explanation", "")
+
+    if explanation:
+        with st.expander(t(Keys.NLQ_AI_EXPLANATION), expanded=True):
+            st.markdown(explanation)
+
+    st.markdown(f"**{t(Keys.NLQ_AI_GENERATED_SQL)}:**")
+    edited_sql = st.text_area(
+        t(Keys.NLQ_AI_GENERATED_SQL),
+        value=pending_sql,
+        height=150,
+        key="nlq_ai_edit_sql",
+        label_visibility="collapsed",
+    )
+
+    col1, _, _ = st.columns([1, 1, 4])
+    with col1:
+        if st.button(t(Keys.NLQ_AI_CONFIRM_EXECUTE), type="primary", key="nlq_ai_execute_btn"):
+            final_sql = edited_sql.strip() if edited_sql else pending_sql
+            error = validate_read_only(final_sql)
+            if error:
+                st.error(f"{Icons.ERROR} {t(Keys.NLQ_SQL_REJECTED)}")
+                return
+            st.session_state.pop("nlq_ai_pending_sql", None)
+            st.session_state.pop("nlq_ai_pending_explanation", None)
+            _execute_raw(final_sql, executor, "nlq_ai_last_result", "nlq_ai_last_sql")
+
+
+def _render_ai_history() -> None:
+    history: list[dict[str, str]] = st.session_state.get("nlq_ai_history", [])
+    if not history:
+        return
+
+    for msg in history:
+        if msg["role"] == "user":
+            st.chat_message("user").markdown(msg["content"])
+        else:
+            st.chat_message("assistant").code(msg["content"], language="sql")
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+def _execute_raw(
+        sql: str,
+        executor: DuckDBExecutor | PostgresExecutor,
+        result_key: str,
+        sql_key: str,
+) -> None:
+    with st.spinner(t(Keys.NLQ_PROCESSING)):  # type: ignore[attr-defined]
+        result_df, error, executed_sql = executor.execute_raw_sql(sql)
+        st.session_state[sql_key] = executed_sql
+
+        if executed_sql:
+            with st.expander(t(Keys.NLQ_GENERATED_SQL), expanded=False):
+                st.code(executed_sql, language="sql")
+
+        if error:
+            st.error(f"{Icons.ERROR} {error}")
+            st.session_state.pop(result_key, None)
+            return
+
+        st.session_state[result_key] = result_df
+        _display_result(result_df, None)
+
+
+def _display_raw_cached(result_key: str, sql_key: str) -> None:
+    result_df = st.session_state.get(result_key)
+    sql = st.session_state.get(sql_key)
+    if sql:
+        with st.expander(t(Keys.NLQ_GENERATED_SQL), expanded=False):
+            st.code(sql, language="sql")
+    if result_df is not None:
+        _display_result(result_df, None)
 
 
 def _display_result(result_df: pd.DataFrame | None, intent: QueryIntent | None) -> None:
@@ -218,7 +425,7 @@ def _display_result(result_df: pd.DataFrame | None, intent: QueryIntent | None) 
         csv,
         filename,
         MimeTypes.TEXT_CSV,
-        key="nlq_download_results",
+        key=f"nlq_download_{entity}",
     )
 
 
@@ -234,3 +441,8 @@ def _render_examples() -> None:
                 st.code(query, language=None)
             with col2:
                 st.caption(description)
+
+
+def _clear_keys(*keys: str) -> None:
+    for key in keys:
+        st.session_state.pop(key, None)

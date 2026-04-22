@@ -103,11 +103,6 @@ def _get_stock_cache_key() -> str:
     return f"db_{date.today().isoformat()}"
 
 
-def load_stock() -> tuple[pd.DataFrame | None, str | None]:
-    cache_key = _get_stock_cache_key()
-    return _load_stock_cached(cache_key)
-
-
 @st.cache_data(ttl=Config.CACHE_TTL)
 def _load_stock_cached(_cache_key: str) -> tuple[pd.DataFrame | None, str | None]:
     logger.info("Loading stock data (cache_key=%s)", _cache_key)
@@ -119,6 +114,14 @@ def _load_stock_cached(_cache_key: str) -> tuple[pd.DataFrame | None, str | None
         return stock_dataframe, source
     logger.warning("No stock data available")
     return None, None
+
+
+def load_stock() -> tuple[pd.DataFrame | None, str | None]:
+    cache_key = _get_stock_cache_key()
+    return _load_stock_cached(cache_key)
+
+
+load_stock.clear = _load_stock_cached.clear  # type: ignore[attr-defined]
 
 
 def _parse_forecast_date(forecast_df: pd.DataFrame) -> pd.Timestamp | None:
