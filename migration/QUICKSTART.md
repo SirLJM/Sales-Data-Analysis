@@ -5,7 +5,7 @@ This guide will help you set up the PostgreSQL database for the inventory manage
 ## Prerequisites
 
 1. **PostgreSQL 15+** installed and running
-2. **Python 3.13+** with dependencies: `pip install -r requirements.txt`
+2. **Python 3.13+** with dependencies: `uv sync` (run from `src/`)
 3. **Data files** ready in the `data/` directory:
    - Sales CSV/Excel files
    - Stock snapshots

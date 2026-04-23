@@ -5,7 +5,7 @@ This guide will help you set up and migrate your inventory management system to 
 ## Prerequisites
 
 1. PostgreSQL 15+ installed
-2. Python dependencies installed: `pip install -r requirements.txt`
+2. Python dependencies installed: `uv sync` (from `src/`)
 3. Access to your Excel data files (sales, stock, forecast)
 
 ## Step 1: Install PostgreSQL

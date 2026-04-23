@@ -43,23 +43,20 @@ braków magazynowych i nadmiernych zapasów.
 
 ### Wymagania wstępne
 
-- Python 3.13+
-- Środowisko wirtualne (zalecane)
+- Python 3.13 (zarządzany automatycznie przez uv)
+- Zainstalowane [`uv`](https://docs.astral.sh/uv/)
 
 ### Instalacja
 
 ```bash
 # Sklonuj lub przejdź do katalogu projektu
-cd stockMonitor3
+cd stockMonitor3/src
 
-# Utwórz i aktywuj środowisko wirtualne
-python -m venv src/venv
-src\venv\Scripts\activate  # Windows
-source src/venv/bin/activate  # macOS/Linux
-
-# Zainstaluj zależności
-pip install -r src/requirements.txt
+# Zainstaluj zależności (tworzy .venv i instaluje z uv.lock)
+uv sync
 ```
+
+uv czyta `pyproject.toml` + `uv.lock` i tworzy powtarzalne środowisko. Nie trzeba ręcznie aktywować venv — komendy uruchamiaj z prefiksem `uv run` (np. `uv run streamlit run app.py`).
 
 ### Konfiguracja
 

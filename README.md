@@ -42,23 +42,20 @@ ordering decisions to maximize sales while minimizing stockouts and excess inven
 
 ### Prerequisites
 
-- Python 3.13+
-- Virtual environment (recommended)
+- Python 3.13 (managed automatically by uv)
+- [`uv`](https://docs.astral.sh/uv/) installed
 
 ### Installation
 
 ```bash
 # Clone or navigate to project directory
-cd stockMonitor3
+cd stockMonitor3/src
 
-# Create and activate virtual environment
-python -m venv src/venv
-src\venv\Scripts\activate  # Windows
-source src/venv/bin/activate  # macOS/Linux
-
-# Install dependencies
-pip install -r src/requirements.txt
+# Install dependencies (creates .venv and installs from uv.lock)
+uv sync
 ```
+
+uv reads `pyproject.toml` + `uv.lock` to produce a reproducible environment. No manual venv activation needed — prefix commands with `uv run` (e.g. `uv run streamlit run app.py`).
 
 ### Configuration
 
