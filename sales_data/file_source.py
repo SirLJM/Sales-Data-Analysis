@@ -6,12 +6,12 @@ from pathlib import Path
 import pandas as pd
 
 from utils.logging_config import get_logger
-from utils.parallel_loader import parallel_load
 
 from .analyzer import SalesAnalyzer
 from .data_source import DataSource
 from .dtype_optimizer import optimize_dtypes
 from .loader import SalesDataLoader, load_size_aliases_from_excel
+from .stock_history_cache import StockHistoryCache
 
 logger = get_logger("file_source")
 
@@ -22,6 +22,8 @@ class FileSource(DataSource):
         self.loader = SalesDataLoader(paths_file)
         self._sales_data: pd.DataFrame | None = None
         self._analyzer: SalesAnalyzer | None = None
+        cache_path = Path(__file__).parent.parent / "data" / ".stock_history_cache.parquet"
+        self._stock_cache = StockHistoryCache(cache_path, self.loader)
 
     def load_sales_data(
             self, start_date: datetime | None = None, end_date: datetime | None = None
@@ -49,46 +51,10 @@ class FileSource(DataSource):
 
         return self.loader.load_stock_file(stock_file)
 
-    def _load_stock_with_date(
-        self, file_info: tuple[Path, datetime]
-    ) -> pd.DataFrame | None:
-        file_path, snapshot_date = file_info
-        try:
-            df = self.loader.load_stock_file(file_path)
-            df["snapshot_date"] = snapshot_date
-            return df
-        except Exception as e:
-            logger.warning("Failed to load stock file %s: %s", file_path, e)
-            return None
-
     def load_stock_history(
         self, start_date: datetime | None = None, end_date: datetime | None = None
     ) -> pd.DataFrame:
-        stock_files = self.loader.find_stock_files()
-        if not stock_files:
-            logger.warning("No stock files found")
-            return pd.DataFrame()
-
-        filtered_files = [
-            (path, date) for path, date in stock_files
-            if (start_date is None or date >= start_date)
-            and (end_date is None or date <= end_date)
-        ]
-
-        if not filtered_files:
-            logger.warning("No stock files in date range")
-            return pd.DataFrame()
-
-        all_stock_dfs = parallel_load(
-            filtered_files, self._load_stock_with_date, desc="Loading stock history"
-        )
-
-        if not all_stock_dfs:
-            logger.warning("No stock data loaded from files")
-            return pd.DataFrame()
-
-        result = pd.concat(all_stock_dfs, ignore_index=True)
-        return optimize_dtypes(result)
+        return self._stock_cache.get_history(start_date=start_date, end_date=end_date)
 
     def load_forecast_data(self, generated_date: datetime | None = None) -> pd.DataFrame:
         if generated_date is not None:
