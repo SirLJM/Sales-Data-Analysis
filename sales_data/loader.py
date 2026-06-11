@@ -327,13 +327,14 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.DataFrame(pd.read_csv(file_path, usecols=usecols, dtype=dtype))  # type: ignore[arg-type]
         elif file_path.suffix == XLSX:
-            sheet_name = find_sheet_method(file_path) if find_sheet_method else None
-            result = pd.read_excel(
-                file_path,
-                sheet_name=sheet_name or "Sheet1",
-                usecols=usecols,
-                dtype=dtype,
-            )
+            with pd.ExcelFile(file_path) as excel_file:
+                sheet_name = find_sheet_method(excel_file) if find_sheet_method else None
+                result = pd.read_excel(
+                    excel_file,
+                    sheet_name=sheet_name or "Sheet1",
+                    usecols=usecols,
+                    dtype=dtype,
+                )
             if isinstance(result, dict):
                 raise ValueError(f"Unexpected dict result from read_excel for {file_path}")
             return pd.DataFrame(result)
@@ -472,10 +473,10 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.read_csv(file_path)
         elif file_path.suffix == XLSX:
-            sheet_name = self.validator.find_model_metadata_sheet(file_path)
-            if sheet_name:
-                return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
-            else:
+            with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+                sheet_name = self.validator.find_model_metadata_sheet(excel_file)
+                if sheet_name:
+                    return pd.read_excel(excel_file, sheet_name=sheet_name)
                 logger.warning("Could not find valid sheet with metadata columns")
                 return None
         return None
@@ -528,11 +529,12 @@ class SalesDataLoader:
             return None
 
     def _read_bom_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        sheet_name = self.validator.find_bom_sheet(file_path)
-        if not sheet_name:
-            logger.warning("Could not find BOM sheet in %s", file_path)
-            return None
-        return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
+        with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+            sheet_name = self.validator.find_bom_sheet(excel_file)
+            if not sheet_name:
+                logger.warning("Could not find BOM sheet in %s", file_path)
+                return None
+            return pd.read_excel(excel_file, sheet_name=sheet_name)
 
     @staticmethod
     def _clean_bom_boolean(value) -> bool:
@@ -625,11 +627,12 @@ class SalesDataLoader:
             return None
 
     def _read_material_catalog_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        sheet_name = self.validator.find_material_catalog_sheet(file_path)
-        if not sheet_name:
-            logger.warning("Could not find material catalog sheet in %s", file_path)
-            return None
-        return pd.read_excel(file_path, sheet_name=sheet_name, engine="openpyxl")
+        with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+            sheet_name = self.validator.find_material_catalog_sheet(excel_file)
+            if not sheet_name:
+                logger.warning("Could not find material catalog sheet in %s", file_path)
+                return None
+            return pd.read_excel(excel_file, sheet_name=sheet_name)
 
     def load_material_catalog(self) -> pd.DataFrame | None:
         file_path = self.find_model_metadata_file()

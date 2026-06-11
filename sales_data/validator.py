@@ -149,63 +149,53 @@ class DataValidator:
 
     @staticmethod
     def find_sheet_by_columns(
-            file_path: Path, required_columns: set, required_column: str | None = None
+            excel_file: pd.ExcelFile, required_columns: set, required_column: str | None = None
     ) -> str | None:
-        try:
-            excel_file = pd.ExcelFile(file_path)
-            for sheet_name in excel_file.sheet_names:
-                try:
-                    df = pd.read_excel(excel_file, sheet_name=sheet_name, nrows=5)
-                    if not required_columns.issubset(set(df.columns)):
-                        continue
-                    if required_column is None or required_column in df.columns:
-                        return str(sheet_name)
-                except (ValueError, KeyError):
+        for sheet_name in excel_file.sheet_names:
+            try:
+                df = pd.read_excel(excel_file, sheet_name=sheet_name, nrows=5)
+                if not required_columns.issubset(set(df.columns)):
                     continue
-            return None
-        except FileNotFoundError:
-            raise FileNotFoundError(f"File not found: {file_path}")
-        except pd.errors.EmptyDataError:
-            raise ValueError(f"File is empty: {file_path}")
-        except PermissionError:
-            raise PermissionError(f"Permission denied: {file_path}")
-        except ValueError as e:
-            raise ValueError(f"Error parsing file {file_path}: {e}") from e
+                if required_column is None or required_column in df.columns:
+                    return str(sheet_name)
+            except (ValueError, KeyError):
+                continue
+        return None
 
     @staticmethod
-    def find_sales_sheet(file_path: Path) -> str | None:
+    def find_sales_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.SALES_COLUMNS, "data"
+            excel_file, DataValidator.SALES_COLUMNS, "data"
         )
 
     @staticmethod
-    def find_stock_sheet(file_path: Path) -> str | None:
+    def find_stock_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.STOCK_COLUMNS, "stock"
+            excel_file, DataValidator.STOCK_COLUMNS, "stock"
         )
 
     @staticmethod
-    def find_forecast_sheet(file_path: Path) -> str | None:
+    def find_forecast_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.FORECAST_COLUMNS, "data"
+            excel_file, DataValidator.FORECAST_COLUMNS, "data"
         )
 
     @staticmethod
-    def find_model_metadata_sheet(file_path: Path) -> str | None:
+    def find_model_metadata_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.MODEL_METADATA_COLUMNS, None
+            excel_file, DataValidator.MODEL_METADATA_COLUMNS, None
         )
 
     @staticmethod
-    def find_bom_sheet(file_path: Path) -> str | None:
+    def find_bom_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.BOM_COLUMNS, None
+            excel_file, DataValidator.BOM_COLUMNS, None
         )
 
     @staticmethod
-    def find_material_catalog_sheet(file_path: Path) -> str | None:
+    def find_material_catalog_sheet(excel_file: pd.ExcelFile) -> str | None:
         return DataValidator.find_sheet_by_columns(
-            file_path, DataValidator.MATERIAL_CATALOG_COLUMNS, None
+            excel_file, DataValidator.MATERIAL_CATALOG_COLUMNS, None
         )
 
     @staticmethod
