@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import re
 from datetime import datetime
 from pathlib import Path
@@ -327,7 +328,8 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.DataFrame(pd.read_csv(file_path, usecols=usecols, dtype=dtype))  # type: ignore[arg-type]
         elif file_path.suffix == XLSX:
-            with pd.ExcelFile(file_path) as excel_file:
+            buffer = io.BytesIO(file_path.read_bytes())
+            with pd.ExcelFile(buffer) as excel_file:
                 sheet_name = find_sheet_method(excel_file) if find_sheet_method else None
                 result = pd.read_excel(
                     excel_file,
@@ -473,7 +475,8 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.read_csv(file_path)
         elif file_path.suffix == XLSX:
-            with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+            buffer = io.BytesIO(file_path.read_bytes())
+            with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
                 sheet_name = self.validator.find_model_metadata_sheet(excel_file)
                 if sheet_name:
                     return pd.read_excel(excel_file, sheet_name=sheet_name)
@@ -529,7 +532,8 @@ class SalesDataLoader:
             return None
 
     def _read_bom_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+        buffer = io.BytesIO(file_path.read_bytes())
+        with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
             sheet_name = self.validator.find_bom_sheet(excel_file)
             if not sheet_name:
                 logger.warning("Could not find BOM sheet in %s", file_path)
@@ -627,7 +631,8 @@ class SalesDataLoader:
             return None
 
     def _read_material_catalog_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        with pd.ExcelFile(file_path, engine="openpyxl") as excel_file:
+        buffer = io.BytesIO(file_path.read_bytes())
+        with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
             sheet_name = self.validator.find_material_catalog_sheet(excel_file)
             if not sheet_name:
                 logger.warning("Could not find material catalog sheet in %s", file_path)
