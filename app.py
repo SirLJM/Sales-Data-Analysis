@@ -24,6 +24,7 @@ from ui import tab_sales_analysis
 from ui import tab_task_planner
 from ui import tab_marker_viewer
 from ui import tab_weekly_analysis
+from exceptions import DataLoadError
 from ui.i18n import t, Keys, get_tab_names
 from ui.shared.data_loaders import load_all_data_with_progress
 from ui.shared.navigation import render_navigation_menu
@@ -36,7 +37,13 @@ st.set_page_config(page_title=t(Keys.PAGE_TITLE), page_icon="📊", layout="wide
 st.markdown(RESPONSIVE_TABS_STYLE + INPUT_FIELD_STYLE + NAVIGATION_MENU_STYLE, unsafe_allow_html=True)
 
 initialize_session_state()
-load_all_data_with_progress()
+
+try:
+    load_all_data_with_progress()
+except DataLoadError as exc:
+    logger.exception("Data load failed")
+    st.error(str(exc))
+    st.stop()
 
 TAB_NAMES = get_tab_names()
 render_navigation_menu(TAB_NAMES)

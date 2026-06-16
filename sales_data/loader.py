@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 from pandas import DataFrame
 
+from exceptions import OfflineFileError
 from utils.logging_config import get_logger
 from utils.parallel_loader import parallel_load
 from .dtype_optimizer import (
@@ -31,6 +32,45 @@ ANY_XLSX_RECURSIVE = "**/*.xlsx"
 
 ANY_CSV = "*.csv"
 ANY_CSV_RECURSIVE = "**/*.csv"
+
+
+def _is_icloud_offloaded(file_path: Path) -> bool:
+    sibling_stub = file_path.parent / f".{file_path.name}.icloud"
+    if sibling_stub.exists():
+        return True
+    try:
+        stat_result = file_path.stat()
+    except OSError:
+        return False
+    return stat_result.st_size > 0 and getattr(stat_result, "st_blocks", 1) == 0
+
+
+def _offline_file_error(file_path: Path, cause: OSError | None = None) -> OfflineFileError:
+    message = (
+        f"Cannot read '{file_path.name}': the file lives in iCloud Drive and its contents "
+        f"are not downloaded to this Mac (offloaded placeholder). In Finder, right-click the "
+        f"file and choose 'Download Now', or turn off 'Optimize Mac Storage' for the data "
+        f"folder, then restart the app."
+    )
+    if cause is not None:
+        message = f"{message} (original error: {cause})"
+    return OfflineFileError(message)
+
+
+def _ensure_local_copy(file_path: Path) -> None:
+    raise _offline_file_error(file_path)
+
+
+def read_file_bytes(file_path: Path) -> bytes:
+    if _is_icloud_offloaded(file_path):
+        _ensure_local_copy(file_path)
+    try:
+        return file_path.read_bytes()
+    except OfflineFileError:
+        raise
+    except OSError as exc:
+        logger.exception("Failed to read %s", file_path)
+        raise _offline_file_error(file_path, exc) from exc
 
 
 def load_size_aliases_from_excel(sizes_file_path: Path) -> dict[str, str]:
@@ -328,7 +368,7 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.DataFrame(pd.read_csv(file_path, usecols=usecols, dtype=dtype))  # type: ignore[arg-type]
         elif file_path.suffix == XLSX:
-            buffer = io.BytesIO(file_path.read_bytes())
+            buffer = io.BytesIO(read_file_bytes(file_path))
             with pd.ExcelFile(buffer) as excel_file:
                 sheet_name = find_sheet_method(excel_file) if find_sheet_method else None
                 result = pd.read_excel(
@@ -475,7 +515,7 @@ class SalesDataLoader:
         if file_path.suffix == CSV:
             return pd.read_csv(file_path)
         elif file_path.suffix == XLSX:
-            buffer = io.BytesIO(file_path.read_bytes())
+            buffer = io.BytesIO(read_file_bytes(file_path))
             with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
                 sheet_name = self.validator.find_model_metadata_sheet(excel_file)
                 if sheet_name:
@@ -532,7 +572,7 @@ class SalesDataLoader:
             return None
 
     def _read_bom_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        buffer = io.BytesIO(file_path.read_bytes())
+        buffer = io.BytesIO(read_file_bytes(file_path))
         with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
             sheet_name = self.validator.find_bom_sheet(excel_file)
             if not sheet_name:
@@ -631,7 +671,7 @@ class SalesDataLoader:
             return None
 
     def _read_material_catalog_sheet(self, file_path: Path) -> pd.DataFrame | None:
-        buffer = io.BytesIO(file_path.read_bytes())
+        buffer = io.BytesIO(read_file_bytes(file_path))
         with pd.ExcelFile(buffer, engine="openpyxl") as excel_file:
             sheet_name = self.validator.find_material_catalog_sheet(excel_file)
             if not sheet_name:

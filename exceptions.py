@@ -9,6 +9,10 @@ class DataLoadError(StockMonitorError):
     pass
 
 
+class OfflineFileError(DataLoadError):
+    pass
+
+
 class ConfigurationError(StockMonitorError):
     pass
 
